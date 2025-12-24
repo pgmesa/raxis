@@ -4,13 +4,35 @@ build-backend = "maturin"
 
 [project]
 name = "raxis"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 classifiers = [
+    "Development Status :: 1 - Planning",
+
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+
+    "Operating System :: OS Independent",
+
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dynamic = ["version"]
+dependencies = [
+    "cffi"
+]
 
 [tool.maturin]
 module-name = "raxis._rust"

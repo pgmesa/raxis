@@ -1,2 +1,2 @@
 
-import raxis._rust
+from raxis._rust import *
