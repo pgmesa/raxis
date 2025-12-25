@@ -2,13 +2,16 @@
 use std::ops::Add;
 use std::sync::Arc;
 
-
 #[derive(Debug)]
 pub struct NDArray<Dtype> {
     data: Arc<Vec<Dtype>>,
     strides: Vec<usize>,
     shape: Vec<usize>
 }
+
+// fn broadcast<Dtype>(array: NDArray<Dtype>) -> NDArray<Dtype> {
+    
+// }
 
 impl<Dtype> NDArray<Dtype> {
 
@@ -29,6 +32,10 @@ impl<Dtype> NDArray<Dtype> {
         self.data.len()
     }
 
+    pub fn data(&self) -> &Arc<Vec<Dtype>> {
+        &self.data
+    }
+
     pub fn shape(&self) -> &Vec<usize> {
         &self.shape
     }
@@ -36,6 +43,15 @@ impl<Dtype> NDArray<Dtype> {
     pub fn strides(&self) -> &Vec<usize> {
         &self.strides
     }
+
+    pub fn ndim(&self) -> usize {
+        self.shape.len()
+    }
+
+    pub fn numel(&self) -> usize {
+        self.shape.iter().fold(1, |acc, dim| acc * dim)
+    }
+
 }
 
 impl<Dtype> Add for &NDArray<Dtype>
@@ -46,14 +62,14 @@ where
     
     fn add(self, rhs: &NDArray<Dtype>) -> Self::Output {
         assert_eq!(self.shape, rhs.shape);
-        
-        let data = Arc::new(
-            self.data
-                .iter()
-                .zip(rhs.data.iter())
-                .map(|(a, b)| *a + *b)
-                .collect()
-        );
+
+        let result = self.data
+            .iter()
+            .zip(rhs.data.iter())
+            .map(|(a, b)| *a + *b)
+            .collect();
+
+        let data = Arc::new(result);
         
         NDArray {
             data,

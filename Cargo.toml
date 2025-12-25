@@ -13,6 +13,7 @@ name = "playground"
 path = "examples/playground.rs"
 
 [dependencies]
+numpy = "0.27.1"
 pyo3 = { version = "0.27.0", optional = true }
 
 [features]

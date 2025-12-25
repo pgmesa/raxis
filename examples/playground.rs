@@ -15,10 +15,10 @@ fn test_array() {
 
     let arr3 = &arr1 + &arr2;
 
-    println!("{:?}", arr1);
+    println!("{:?} | {}", arr1, arr1.numel());
     println!("{:?}", arr2);
     println!("=================================");
-    println!("{:?}", arr3);
+    println!("{:?} | {}", arr3, arr3.numel());
 }
 
 
