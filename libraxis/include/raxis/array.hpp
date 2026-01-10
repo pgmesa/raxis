@@ -1,18 +1,17 @@
-#ifndef ARRAY_HPP
-#define ARRAY_HPP
+#pragma once
 
 #include <memory>
 #include <vector>
 #include <stdexcept>
 #include <cstdint>
+#include <format>
 
 #include <raxis/dtype.hpp>
+#include <raxis/array_types.hpp>
 
 
 namespace raxis {
-
-    using IntArray = std::vector<int64_t>;
-
+    
     class NDArray {
     public:
         NDArray(void* data, const IntArray& shape, const Dtype& dtype);
@@ -48,6 +47,8 @@ namespace raxis {
             return static_cast<const T*>(data());
         }
 
+        std::string to_string() const;
+
         // Operators
         NDArray operator+(const NDArray& other) const;
 
@@ -67,4 +68,13 @@ namespace raxis {
 
 } // namespace
 
-#endif
+
+template <>
+struct std::formatter<raxis::NDArray> : std::formatter<std::string_view>
+{
+    auto format(const raxis::NDArray& a, format_context& ctx) const
+    {
+        auto s = a.to_string();
+        return std::formatter<std::string_view>::format(s, ctx);
+    }
+};

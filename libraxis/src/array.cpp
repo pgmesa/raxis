@@ -4,6 +4,9 @@
 
 #include <vector>
 #include <memory>
+#include <format>
+
+#include <iostream>
 
 
 namespace raxis {
@@ -17,7 +20,8 @@ namespace raxis {
     };
 
     NDArray::NDArray(void* data, const IntArray& shape, const Dtype& dtype)
-        : impl_(std::make_shared<Impl>()) {
+        : impl_(std::make_shared<Impl>()) 
+    {
         impl_->data = data;
         impl_->shape = shape;
         impl_->dtype = dtype;
@@ -25,9 +29,12 @@ namespace raxis {
         impl_->strides = compute_strides(shape);
     }
 
-    void NDArray::init_from_buffer(const void* data, size_t count,
-                               const IntArray& shape, const Dtype& dtype)
-    {
+    void NDArray::init_from_buffer(
+        const void* data, 
+        size_t count,
+        const IntArray& shape,
+        const Dtype& dtype
+    ) {
         // auto array = NDArray(const_cast<void*>(data), shape, dtype);
 
         // impl_->owns_data = true;
@@ -57,9 +64,24 @@ namespace raxis {
     const Dtype& NDArray::dtype() const { return impl_->dtype; }
     void* NDArray::data() const { return impl_->data; }
 
+    std::string NDArray::to_string() const {
+        return std::format(
+            "ndarray(shape={}, strides={})", 
+            impl_->shape, impl_->strides
+        );
+    }
+
     // Operators
     NDArray NDArray::operator+(const NDArray& other) const {
-        return zeros(other.shape(), other.dtype());
+        IntArray result_shape = broadcast_shapes(impl_->shape, other.shape());
+        IntArray strides_a = broadcast_strides(impl_->shape, impl_->strides, result_shape);
+        IntArray strides_b = broadcast_strides(other.shape(), other.strides(), result_shape);
+        IntArray strides_out = compute_strides(result_shape);
+
+        std::cout << std::format("strides_a: {}\n", strides_a);
+        std::cout << std::format("strides_b: {}\n", strides_b);
+
+        return zeros(result_shape, other.dtype());
     }
 
 

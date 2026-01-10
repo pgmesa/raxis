@@ -1,7 +1,7 @@
-#ifndef DTYPE_HPP
-#define DTYPE_HPP
+#pragma once
 
 #include <string>
+#include <sstream>
 #include <typeindex>
 #include <typeinfo>
 
@@ -66,7 +66,8 @@ namespace raxis
             else if constexpr (std::is_same_v<T, bool>) return Bool;
             else throw std::runtime_error("Unsupported type");
         }
-
+        
+        std::string to_string(const void* data) const;
         void fill(void* data, size_t n, double value) const;
 
     private:
@@ -123,6 +124,22 @@ namespace raxis
             std::fill(ptr, ptr + n, static_cast<T>(value));
         });
     }
-}
 
-#endif
+    inline std::string Dtype::to_string(const void* data) const {
+        return DtypeDispatcher::dispatch(*this, [&](auto type_tag) -> std::string {
+            using T = typename decltype(type_tag)::type;
+            const T* ptr = static_cast<const T*>(data);
+
+            if constexpr (std::is_same_v<T, bool>) {
+                return (*ptr) ? "true" : "false";
+            } else if constexpr (std::is_floating_point_v<T>) {
+                // nicer float formatting than std::to_string
+                std::ostringstream oss;
+                oss << *ptr;
+                return oss.str();
+            } else {
+                return std::to_string(*ptr);
+            }
+        });
+    }
+}
