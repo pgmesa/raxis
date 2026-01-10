@@ -1,3 +1,3 @@
 # Raxis
 
-Rust-powered ND arrays and tensor operations for Python.
+ND arrays and tensor operations for Python.
