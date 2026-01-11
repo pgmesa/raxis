@@ -5,9 +5,11 @@
 #include <typeindex>
 #include <typeinfo>
 
+#include <raxis/array_types.hpp>
 
-namespace raxis
-{
+
+namespace raxis {
+    
     // Dtype descriptor - runtime type information
     enum class DtypeKind {
         Float32,
@@ -58,11 +60,11 @@ namespace raxis
         // Template helper to get dtype from C++ type
         template<typename T>
         static Dtype from_type() {
-            if constexpr (std::is_same_v<T, float>) return Float32;
-            else if constexpr (std::is_same_v<T, double>) return Float64;
-            else if constexpr (std::is_same_v<T, int32_t>) return Int32;
-            else if constexpr (std::is_same_v<T, int64_t>) return Int64;
-            else if constexpr (std::is_same_v<T, uint8_t>) return Uint8;
+            if constexpr (std::is_same_v<T, f32>) return Float32;
+            else if constexpr (std::is_same_v<T, f64>) return Float64;
+            else if constexpr (std::is_same_v<T, i32>) return Int32;
+            else if constexpr (std::is_same_v<T, i64>) return Int64;
+            else if constexpr (std::is_same_v<T, u8>) return Uint8;
             else if constexpr (std::is_same_v<T, bool>) return Bool;
             else throw std::runtime_error("Unsupported type");
         }
@@ -77,19 +79,19 @@ namespace raxis
 
     // Define static dtypes
     inline const Dtype Dtype::Float32 {DtypeDescriptor(
-        DtypeKind::Float32, sizeof(float), "float32", typeid(float)
+        DtypeKind::Float32, sizeof(f32), "float32", typeid(f32)
     )};
     inline const Dtype Dtype::Float64{DtypeDescriptor(
-        DtypeKind::Float64, sizeof(double), "float64", typeid(double)
+        DtypeKind::Float64, sizeof(f64), "float64", typeid(f64)
     )};
     inline const Dtype Dtype::Int32{DtypeDescriptor(
-        DtypeKind::Int32, sizeof(int32_t), "int32", typeid(int32_t)
+        DtypeKind::Int32, sizeof(i32), "int32", typeid(i32)
     )};
     inline const Dtype Dtype::Int64{DtypeDescriptor(
-        DtypeKind::Int64, sizeof(int64_t), "int64", typeid(int64_t)
+        DtypeKind::Int64, sizeof(i64), "int64", typeid(i64)
     )};
     inline const Dtype Dtype::Uint8{DtypeDescriptor(
-        DtypeKind::Uint8, sizeof(uint8_t), "uint8", typeid(uint8_t)
+        DtypeKind::Uint8, sizeof(u8), "uint8", typeid(u8)
     )};
     inline const Dtype Dtype::Bool{DtypeDescriptor(
         DtypeKind::Bool, sizeof(bool), "bool", typeid(bool)
@@ -101,13 +103,13 @@ namespace raxis
         static auto dispatch(const Dtype& dtype, Func&& func) {
             switch (dtype.kind()) {
                 case DtypeKind::Float32:
-                    return func(std::type_identity<float>{});
+                    return func(std::type_identity<f32>{});
                 case DtypeKind::Float64:
-                    return func(std::type_identity<double>{});
+                    return func(std::type_identity<f64>{});
                 case DtypeKind::Int32:
-                    return func(std::type_identity<int32_t>{});
+                    return func(std::type_identity<i32>{});
                 case DtypeKind::Int64:
-                    return func(std::type_identity<int64_t>{});
+                    return func(std::type_identity<i64>{});
                 default:
                     throw std::runtime_error("Unsupported");
             }

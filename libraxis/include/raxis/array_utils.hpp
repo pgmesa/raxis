@@ -2,7 +2,7 @@
 
 #include <vector>
 
-#include <raxis/array.hpp>
+#include <raxis/array_types.hpp>
 
 
 namespace raxis{
@@ -17,6 +17,5 @@ namespace raxis{
         const IntArray& target_shape
     );
 
-    // bool can_collapse_stride(int s_prev, int s_cur, size_t dim);
-    // void collapse_dim(const IntArray& shape, IntArray& sa, IntArray& sb, IntArray& so);
+    void collapse_dim(IntArray& shape, IntArray& sa, IntArray& sb, IntArray& so);
 }

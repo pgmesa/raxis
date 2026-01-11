@@ -13,8 +13,8 @@ using raxis::NDArray;
 
 
 int main() {
-    NDArray arr1 = raxis::full({400, 400}, 3, Dtype::Float64);
-    NDArray arr2 = raxis::full({1, 400}, 5, Dtype::Float64);
+    NDArray arr1 = raxis::full({3, 1, 5}, 3, Dtype::Float64);
+    NDArray arr2 = raxis::full({1, 4, 5}, 5, Dtype::Float64);
 
     std::cout << std::format("arr1: {}\n", arr1);
     std::cout << std::format("arr2: {}\n", arr2);
