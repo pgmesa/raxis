@@ -1,12 +1,12 @@
 
 #include <raxis/array.hpp>
-#include <raxis/array_utils.hpp>
 
 #include <vector>
 #include <memory>
 #include <format>
 
-#include <iostream>
+#include <raxis/array_ops.hpp>
+#include <raxis/array_utils.hpp>
 
 
 namespace raxis {
@@ -73,26 +73,7 @@ namespace raxis {
 
     // Operators
     NDArray NDArray::operator+(const NDArray& other) const {
-        IntArray result_shape = broadcast_shapes(impl_->shape, other.shape());
-        IntArray strides_a = broadcast_strides(impl_->shape, impl_->strides, result_shape);
-        IntArray strides_b = broadcast_strides(other.shape(), other.strides(), result_shape);
-        IntArray strides_out = compute_strides(result_shape);
-        
-        std::cout << "After Broadcasting\n";
-        std::cout << std::format("result_shape: {}\n", result_shape);
-        std::cout << std::format("strides_a: {}\n", strides_a);
-        std::cout << std::format("strides_b: {}\n", strides_b);
-        std::cout << std::format("strides_out: {}\n", strides_out);
-
-        collapse_dim(result_shape, strides_a, strides_b, strides_out);
-
-        std::cout << "After Collapsing\n";
-        std::cout << std::format("result_shape: {}\n", result_shape);
-        std::cout << std::format("strides_a: {}\n", strides_a);
-        std::cout << std::format("strides_b: {}\n", strides_b);
-        std::cout << std::format("strides_out: {}\n", strides_out);
-
-        return zeros(result_shape, other.dtype());
+        return add(*this, other);
     }
 
 

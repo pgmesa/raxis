@@ -6,13 +6,14 @@
 #include <cstdint>
 #include <format>
 
+#include <raxis/api.hpp>
 #include <raxis/dtype.hpp>
 #include <raxis/array_types.hpp>
 
 
 namespace raxis {
     
-    class NDArray {
+    class RAXIS_API NDArray {
     public:
         NDArray(void* data, const IntArray& shape, const Dtype& dtype);
         
@@ -61,9 +62,9 @@ namespace raxis {
     };
 
     // Factory functions with explicit dtype
-    NDArray ones(const IntArray& shape, const Dtype& dtype = Dtype::Float32);
-    NDArray zeros(const IntArray& shape, const Dtype& dtype = Dtype::Float32);
-    NDArray full(const IntArray& shape, double value, 
+    RAXIS_API NDArray ones(const IntArray& shape, const Dtype& dtype = Dtype::Float32);
+    RAXIS_API NDArray zeros(const IntArray& shape, const Dtype& dtype = Dtype::Float32);
+    RAXIS_API NDArray full(const IntArray& shape, double value, 
                 const Dtype& dtype = Dtype::Float32);
 
 } // namespace

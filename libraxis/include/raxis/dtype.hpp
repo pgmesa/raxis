@@ -5,6 +5,7 @@
 #include <typeindex>
 #include <typeinfo>
 
+#include <raxis/api.hpp>
 #include <raxis/array_types.hpp>
 
 
@@ -32,7 +33,7 @@ namespace raxis {
     };
 
     // Static dtype registry
-    class Dtype {
+    class RAXIS_API Dtype {
     public:
         // Predefined dtypes
         static const Dtype Float32;
@@ -110,6 +111,8 @@ namespace raxis {
                     return func(std::type_identity<i32>{});
                 case DtypeKind::Int64:
                     return func(std::type_identity<i64>{});
+                case DtypeKind::Uint8:
+                    return func(std::type_identity<u8>{});
                 default:
                     throw std::runtime_error("Unsupported");
             }
@@ -135,7 +138,6 @@ namespace raxis {
             if constexpr (std::is_same_v<T, bool>) {
                 return (*ptr) ? "true" : "false";
             } else if constexpr (std::is_floating_point_v<T>) {
-                // nicer float formatting than std::to_string
                 std::ostringstream oss;
                 oss << *ptr;
                 return oss.str();
