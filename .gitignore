@@ -1,6 +1,7 @@
 target/
 vscode/
 debug/
+CMakeUserPresets.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
