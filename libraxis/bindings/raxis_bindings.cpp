@@ -9,6 +9,7 @@
 #include <raxis/raxis.hpp>
 
 #include "casters.hpp"
+#include "parsers.hpp"
 
 
 namespace py = pybind11;
@@ -61,46 +62,17 @@ PYBIND11_MODULE(_C, c) {
         .def_property_readonly("dtype", &raxis::NDArray::dtype, "Data type")
         .def("numel", &raxis::NDArray::numel)
         .def("dim", &raxis::NDArray::ndim)
-        // .def("numpy", [](const raxis::NDArray& self) -> py::array {
-        //     return torch_to_numpy(self.data());
-        // })
-
+        .def("numpy", [](py::object self) {
+            auto& a = self.cast<raxis::NDArray&>();
+            return ndarray_to_numpy(self, a);
+        })
+        .def("__array__", [](py::object self) {
+            auto& a = self.cast<raxis::NDArray&>();
+            return ndarray_to_numpy(self, a);
+        })
         .def("__repr__", [](const raxis::NDArray& self) -> std::string {
             return self.to_string();
         })
-
-        // .def("__repr__", [](const raxis::NDArray& self) -> std::string {
-        //     py::gil_scoped_acquire gil;
-        //     py::object py_t = py::cast(self.data());
-        //     py::object py_repr = py::repr(py_t);
-        //     std::string repr_str = py_repr.cast<std::string>();
-
-        //     const std::string from = "NDArray(";
-        //     const std::string to = "raxis(";
-
-        //     size_t pos = repr_str.find(from);
-        //     if (pos != std::string::npos) {
-        //         repr_str.replace(pos, from.length(), to);
-        //     }
-            
-        //     if (self.grad_fn()) {
-        //         std::string NDArray_info = fmt::format(", grad_fn=<{}>)", self.grad_fn()->name());
-        //         const std::string end = ")";
-        //         size_t end_pos = repr_str.find(end);
-        //         if (end_pos != std::string::npos) {
-        //             repr_str.replace(end_pos, end.length(), NDArray_info);
-        //         }
-        //     } else if (self.requires_grad()) {
-        //         std::string NDArray_info = ", requires_grad=True)";
-        //         const std::string end = ")";
-        //         size_t end_pos = repr_str.find(end);
-        //         if (end_pos != std::string::npos) {
-        //             repr_str.replace(end_pos, end.length(), NDArray_info);
-        //         }
-        //     }
-
-        //     return repr_str;
-        // })
 
         .def("__len__", [](const raxis::NDArray& self) {
             return self.shape()[0];
