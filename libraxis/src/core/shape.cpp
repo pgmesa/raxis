@@ -1,5 +1,5 @@
 
-#include <raxis/array_utils.hpp>
+#include <raxis/core/shape.hpp>
 
 #include <vector>
 #include <string>
@@ -11,17 +11,19 @@
 
 namespace raxis {
 
-    /**
-     * @brief Calculate strides (row-major)
-     * 
-     * @param shape 
-     * @return IntArray 
-     */
+    size_t compute_numel(const IntArray& shape) noexcept {
+        size_t n = 1;
+        for (Int d: shape) 
+            n *=static_cast<size_t>(d);
+        return n;
+    }
+
     IntArray compute_strides(const IntArray& shape) {
         IntArray strides(shape.size());
         
         Int s = 1;
-        for (Int i = shape.size() - 1; i >= 0; --i) {
+        Int ndim = static_cast<Int>(shape.size());
+        for (Int i = ndim - 1; i >= 0; --i) {
             strides[i] = s;
             s *= shape[i];
         }
@@ -83,7 +85,7 @@ namespace raxis {
         return b_strides;
     }
 
-    bool can_collapse_stride(Int s_prev, Int s_cur, Int size_cur) {
+    bool can_collapse_stride(Int s_prev, Int s_cur, Int size_cur) noexcept {
         return (s_prev == (s_cur * size_cur)) || (s_prev == 0 && s_cur == 0);
     }
 

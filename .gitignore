@@ -2,6 +2,9 @@ target/
 vscode/
 debug/
 CMakeUserPresets.json
+raxis/include
+raxis/share
+raxis/_C.pyi
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

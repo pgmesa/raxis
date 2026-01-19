@@ -9,44 +9,53 @@
 #include <raxis/api.hpp>
 #include <raxis/dtype.hpp>
 #include <raxis/array_types.hpp>
+#include <raxis/core/array_impl.hpp>
 
 
 namespace raxis {
     
     class RAXIS_API NDArray {
     public:
-        NDArray(void* data, const IntArray& shape, const Dtype& dtype);
+        NDArray() = default;
+        explicit NDArray(std::shared_ptr<ArrayImpl> impl):  impl_(std::move(impl)) {};
         
-        template<typename T>
-        NDArray(const std::vector<T>& data, const IntArray& shape) {
-            init_from_buffer(data.data(), data.size(), shape, Dtype::from_type<T>());
-        }
+        // TODO
+        // NDArray& operator=(double v) && {
+        //     return fill_(v);
+        // }
 
-        ~NDArray();
+        // NDArray& operator=(const NDArray& rhs) && {
+        //     return copy_(rhs);
+        // }
 
-        size_t numel() const;
-        size_t len() const;
-        IntArray shape() const;
-        IntArray strides() const;
-        const Dtype& dtype() const;
-        void* data() const;
+        // NDArray& operator=(NDArray&& rhs) && {
+        //     return copy_(rhs);
+        // }
 
-        // Type-safe accessors
-        template<typename T>
-        T* data_ptr() {
-            if (Dtype::from_type<T>() != dtype()) {
-                throw std::runtime_error("Type mismatch");
-            }
-            return static_cast<T*>(data());
-        }
+        const void* data_ptr() const;
+        void* mutable_data_ptr();
 
         template<typename T>
         const T* data_ptr() const {
             if (Dtype::from_type<T>() != dtype()) {
                 throw std::runtime_error("Type mismatch");
             }
-            return static_cast<const T*>(data());
+            return static_cast<const T*>(data_ptr());
         }
+
+        template<typename T>
+        T* mutable_data_ptr() {
+            if (Dtype::from_type<T>() != dtype()) {
+                throw std::runtime_error("Type mismatch");
+            }
+            return static_cast<T*>(mutable_data_ptr());
+        }
+
+        size_t numel() const;
+        size_t ndim() const;
+        const IntArray& shape() const;
+        const IntArray& strides() const;
+        Dtype dtype() const;
 
         std::string to_string() const;
 
@@ -54,18 +63,8 @@ namespace raxis {
         NDArray operator+(const NDArray& other) const;
 
     private:
-        struct Impl;
-        std::shared_ptr<Impl> impl_;
-
-        void init_from_buffer(const void* data, size_t count,
-                          const IntArray& shape, const Dtype& dtype);
+        std::shared_ptr<ArrayImpl> impl_;
     };
-
-    // Factory functions with explicit dtype
-    RAXIS_API NDArray ones(const IntArray& shape, const Dtype& dtype = Dtype::Float32);
-    RAXIS_API NDArray zeros(const IntArray& shape, const Dtype& dtype = Dtype::Float32);
-    RAXIS_API NDArray full(const IntArray& shape, double value, 
-                const Dtype& dtype = Dtype::Float32);
 
 } // namespace
 

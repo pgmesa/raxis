@@ -1,10 +1,20 @@
 [build-system]
-requires = ["maturin>=1.10,<2.0"]
-build-backend = "maturin"
+requires = ["setuptools>=64.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "raxis"
-requires-python = ">=3.10"
+dynamic = ["version"]
+description = ""
+readme = "README.md"
+requires-python = ">=3.10, <3.13"
+license = "MIT"
+urls = {Homepage = "https://github.com/pgmesa/raxis"}
+keywords = ["NDArray", "C++", "Python"]
+authors = [
+    {name = "Pablo García Mesa", email = "pgmesa.sm@gmail.com"}
+]
+
 classifiers = [
     "Development Status :: 1 - Planning",
 
@@ -12,13 +22,11 @@ classifiers = [
     "Intended Audience :: Education",
     "Intended Audience :: Science/Research",
 
-    "Operating System :: OS Independent",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
 
-    "Programming Language :: Rust",
-    "Programming Language :: Python :: Implementation :: CPython",
-    "Programming Language :: Python :: Implementation :: PyPy",
+    "Programming Language :: C++",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -29,10 +37,19 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-dynamic = ["version"]
-dependencies = [
-    "cffi"
+
+[project.optional-dependencies]
+build = [    
+    "pybind11>=2.6.0,<3.0.0",
+    "pybind11-stubgen>=2.0.0,<3.0.0"
 ]
 
-[tool.maturin]
-module-name = "raxis._rust"
+[tool.setuptools]
+packages = { find = { where = ["."], include = ["raxis", "raxis.*"]} }
+package-data = { "raxis.lib" = ["**/*"], "raxis" = ["include/**/*", "share/**/*"] }
+
+[tool.setuptools.dynamic]
+version = {attr = "raxis.__version__"}
+
+[tool.test]
+framework = "pytest"

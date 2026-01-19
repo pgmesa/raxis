@@ -10,6 +10,10 @@
 
 
 namespace raxis {
+
+    class Dtype;
+    RAXIS_API const Dtype& default_dtype();
+    RAXIS_API void set_default_dtype(const Dtype& dtype);
     
     // Dtype descriptor - runtime type information
     enum class DtypeKind {
@@ -120,7 +124,7 @@ namespace raxis {
     };
 
     // Implement Dtype functions
-    inline Dtype::Dtype() : desc_(Float32.desc_) {};
+    inline Dtype::Dtype() : desc_(default_dtype().desc_) {};
 
     inline void Dtype::fill(void* data, size_t n, double value) const {
         DtypeDispatcher::dispatch(*this, [&](auto type_tag) {
