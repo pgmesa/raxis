@@ -11,6 +11,8 @@
       "hidden": true,
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_INSTALLED_DIR": "${sourceDir}/vcpkg_installed/",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/../raxis",
         "BUILD_PYTHON_BINDINGS": "ON",
         "BUILD_EXAMPLES": "ON"

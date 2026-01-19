@@ -4,7 +4,6 @@
 #include <vector>
 #include <stdexcept>
 #include <cstdint>
-#include <format>
 
 #include <raxis/api.hpp>
 #include <raxis/dtype.hpp>
@@ -67,14 +66,3 @@ namespace raxis {
     };
 
 } // namespace
-
-
-template <>
-struct std::formatter<raxis::NDArray> : std::formatter<std::string_view>
-{
-    auto format(const raxis::NDArray& a, format_context& ctx) const
-    {
-        auto s = a.to_string();
-        return std::formatter<std::string_view>::format(s, ctx);
-    }
-};

@@ -57,6 +57,8 @@ endif()
 # ─────────────────────────────────────────────────────────────────────────────
 message(STATUS "CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
 
+find_package(spdlog CONFIG REQUIRED)
+
 # Define project structure
 set(RAXIS_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/include)
 set(RAXIS_SRC_DIR ${PROJECT_SOURCE_DIR}/src)
@@ -72,6 +74,9 @@ add_library(raxis SHARED ${RAXIS_SOURCES})
 target_compile_definitions(raxis
     PRIVATE
         RAXIS_EXPORTS
+    PUBLIC
+        SPDLOG_HEADER_ONLY
+        SPDLOG_FMT_EXTERNAL
 )
 
 # Set symbol visibility to hidden by default
@@ -87,10 +92,10 @@ target_include_directories(raxis
 )
 
 # Link dependencies
-# target_link_libraries(raxis
-#     PUBLIC
-#         ...
-# )
+target_link_libraries(raxis
+    PUBLIC
+        spdlog::spdlog_header_only
+)
 
 add_library(raxis::raxis ALIAS raxis)
 # ─────────────────────────────────────────────────────────────────────────────

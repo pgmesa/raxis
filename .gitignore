@@ -5,6 +5,7 @@ CMakeUserPresets.json
 raxis/include
 raxis/share
 raxis/_C.pyi
+vcpkg_installed/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
