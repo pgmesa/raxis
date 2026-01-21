@@ -17,6 +17,8 @@ raxis_lib_dirs = package_path / 'lib'
 # Platform-specific shared library loading
 if platform.system() == 'Windows':
     os.add_dll_directory(str(raxis_lib_dirs))
+    core_lib_path = raxis_lib_dirs / "raxis.dll"
+    ctypes.WinDLL(str(core_lib_path))
     extension = '.pyd'
 else:
     # Load core library first
