@@ -2,7 +2,7 @@
 
 #include <vector>
 #include <functional>
-#include <exception>
+#include <stdexcept>
 
 #include <raxis/api.hpp>
 #include <raxis/array.hpp>
@@ -44,7 +44,7 @@ namespace raxis {
     NDArray array(
         const std::vector<T>& data,
         const IntArray& shape,
-        const Dtype& dtype = = default_dtype()
+        const Dtype& dtype = default_dtype()
     ) {
         size_t n = compute_numel(shape);
         if (data.size() != n) {

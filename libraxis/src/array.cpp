@@ -3,11 +3,12 @@
 
 #include <vector>
 #include <memory>
-#include <format>
 
+#include <fmt/format.h>
 #include <raxis/array_ops.hpp>
 #include <raxis/core/shape.hpp>
 #include <raxis/core/array_impl.hpp>
+#include <raxis/format/array_fmt.hpp>
 
 
 namespace raxis {
@@ -27,7 +28,7 @@ namespace raxis {
     size_t NDArray::ndim() const { return impl_->ndim(); }
 
     std::string NDArray::to_string() const {
-        return std::format(
+        return fmt::format(
             "ndarray(shape={}, strides={}, dtype={})", 
             impl_->shape(), impl_->strides(), impl_->dtype().name()
         );

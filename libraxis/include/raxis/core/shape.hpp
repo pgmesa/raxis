@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <cstddef>
 
 #include <raxis/api.hpp>
 #include <raxis/array_types.hpp>

@@ -3,10 +3,12 @@
 
 #include <vector>
 #include <string>
-#include <format>
-#include <exception>
+#include <stdexcept>
+
+#include <fmt/format.h>
 
 #include <raxis/array_types.hpp>
+#include <raxis/format/array_fmt.hpp>
 
 
 namespace raxis {
@@ -45,7 +47,7 @@ namespace raxis {
             Int dim2 = i < ndim2? shape2[ndim2 - ridx] : 1;
             
             if (dim1 != 1 && dim2 != 1 && dim1 != dim2) {
-                std::string msg = std::format(
+                std::string msg = fmt::format(
                     "Shapes {} and {} are not broadcastable at dimension {}",
                     shape1, shape2, i
                 );

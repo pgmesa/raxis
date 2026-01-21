@@ -3,10 +3,12 @@
 
 #include <iostream>
 
+#include <fmt/format.h>
 #include <raxis/array.hpp>
 #include <raxis/factories.hpp>
 #include <raxis/core/shape.hpp>
 #include <raxis/kernels/elementwise.hpp>
+#include <raxis/format/array_fmt.hpp>
 
 
 namespace raxis {
@@ -18,18 +20,18 @@ namespace raxis {
         IntArray sout = compute_strides(result_shape);
         
         std::cout << "After Broadcasting\n";
-        std::cout << std::format("result_shape: {}\n", result_shape);
-        std::cout << std::format("strides_a: {}\n", sa);
-        std::cout << std::format("strides_b: {}\n", sb);
-        std::cout << std::format("strides_out: {}\n", sout);
+        std::cout << fmt::format("result_shape: {}\n", result_shape);
+        std::cout << fmt::format("strides_a: {}\n", sa);
+        std::cout << fmt::format("strides_b: {}\n", sb);
+        std::cout << fmt::format("strides_out: {}\n", sout);
 
         collapse_dim(result_shape, sa, sb, sout);
 
         std::cout << "After Collapsing\n";
-        std::cout << std::format("result_shape: {}\n", result_shape);
-        std::cout << std::format("strides_a: {}\n", sa);
-        std::cout << std::format("strides_b: {}\n", sb);
-        std::cout << std::format("strides_out: {}\n", sout);
+        std::cout << fmt::format("result_shape: {}\n", result_shape);
+        std::cout << fmt::format("strides_a: {}\n", sa);
+        std::cout << fmt::format("strides_b: {}\n", sb);
+        std::cout << fmt::format("strides_out: {}\n", sout);
 
         // Execute add
         NDArray out = empty(result_shape, a.dtype());

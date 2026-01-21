@@ -3,7 +3,6 @@
 #include <cstdint>
 #include <iostream>
 #include <chrono>
-#include <format>
 
 #include <raxis/raxis.hpp>
 
