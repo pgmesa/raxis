@@ -75,8 +75,8 @@ target_compile_definitions(raxis
     PRIVATE
         RAXIS_EXPORTS
     PUBLIC
+        FMT_HEADER_ONLY
         SPDLOG_HEADER_ONLY
-        SPDLOG_FMT_EXTERNAL
 )
 
 # Set symbol visibility to hidden by default
@@ -95,6 +95,7 @@ target_include_directories(raxis
 target_link_libraries(raxis
     PUBLIC
         spdlog::spdlog_header_only
+        
 )
 
 add_library(raxis::raxis ALIAS raxis)
