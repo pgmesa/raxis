@@ -6,7 +6,7 @@ raxis/include
 raxis/share
 raxis/_C.pyi
 vcpkg_installed/
-build_package.sh
+build_package.*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -1,5 +1,8 @@
 #pragma once
 
+#include <ostream>
+#include <iostream>
+
 #include <raxis/array.hpp>
 #include <raxis/array_types.hpp>
 
@@ -7,9 +10,30 @@
 namespace raxis {
 
     struct Operand {
-        void* data;
-        Int* stride_bytes;
-        bool is_output;
+
+        IntArray stride_bytes;
+        bool is_output = false;
+        bool is_read_write = false;
+        bool will_resize = false;
+        // std::optional<Device>
+        // Dtype target_dtype;
+        // Dtype current_dtype;
+
+        explicit Operand(const NDArray* arr) {
+            // if (arr->defined()) {
+            //     // TODO
+            // }
+            array_ = arr;
+            //target_dtype = arr->dtype();
+            //current_dtype = target_dtype;
+        }
+
+        const NDArray& array() const {
+            return *array_;
+        }
+
+    private:
+        const NDArray* array_;
     };
     
     
@@ -23,14 +47,15 @@ namespace raxis {
         
         ArrayIteratorConfig& add_output(const NDArray& output);
         ArrayIteratorConfig& add_input(const NDArray& input);
+        ArrayIteratorConfig& is_reduction(bool is_reduction);
 
         ArrayIterator build();
 
     private:
-        std::vector<const NDArray*> inputs_;
-        std::vector<const NDArray*> outputs_;
-        int num_inputs_ = 0;
+        std::vector<const NDArray*> arrays_;
         int num_outputs_ = 0;
+        int num_inputs_ = 0;
+        bool is_reduction_ = false;
     };
 
 
@@ -44,7 +69,8 @@ namespace raxis {
         int num_operands() const;
 
         void build(const ArrayIteratorConfig& config);
-
+        void print_state(std::ostream& os = std::cout) const;
+        
         // template <typename Fn>
         // void ArrayIterator::for_each(Fn&& fn) {
         //     const int64_t N = numel_;
@@ -58,10 +84,29 @@ namespace raxis {
 
     private:
         std::vector<Operand> operands_;
-        IntArray shape_;
         int num_outputs_ = 0;
+        
+        IntArray shape_;
+        // IntArray perm_;
+
+        bool all_ops_same_shape_ = false;
+        bool all_ops_are_scalars_ = false;
+        bool has_coalesced_dimensions_ = false;
+
+        // Dtype common_dtype_ = Dtype::Undefined;
+        // common_device_
+
+        bool is_reduction_ = false;
 
         // void compute_ptrs(int op_idx, ptrs);
+
+        void populate_operands(const ArrayIteratorConfig&);
+        void compute_shape();
+        void compute_types();
+        void compute_strides();
+        void reorder_dimensions();
+        void allocate_or_resize_outputs();
+        void coalesce_dimensions();
     };
 
 }
