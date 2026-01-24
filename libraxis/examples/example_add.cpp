@@ -24,7 +24,7 @@ int main() {
     spdlog::info("arr1: {}\n", arr1);
     spdlog::info("arr2: {}\n", arr2);
 
-    NDArray arr_from_vec = raxis::array<raxis::u8>({1, 2, 3, 4}, {2,2}, Dtype::Uint8);
+    NDArray arr_from_vec = raxis::array<uint8_t>({1, 2, 3, 4}, {2,2}, Dtype::Uint8);
     spdlog::info("arr_from_vec: {}\n", arr_from_vec);
 
     auto t0 = std::chrono::high_resolution_clock::now();

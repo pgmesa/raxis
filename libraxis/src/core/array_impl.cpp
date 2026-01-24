@@ -42,12 +42,12 @@ namespace raxis {
         return dtype_;
     }
 
-    size_t ArrayImpl::numel() const noexcept {
+    int64_t ArrayImpl::numel() const noexcept {
         return numel_;
     }
 
-    size_t ArrayImpl::ndim() const noexcept {
-        return shape_.size();
+    int ArrayImpl::ndim() const noexcept {
+        return static_cast<int>(shape_.size());
     }
 
 

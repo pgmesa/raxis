@@ -24,8 +24,8 @@ namespace raxis {
     const IntArray& NDArray::shape() const { return impl_->shape(); }
     const IntArray& NDArray::strides() const { return impl_->strides(); }
     Dtype NDArray::dtype() const { return impl_->dtype(); }
-    size_t NDArray::numel() const { return impl_->numel(); }
-    size_t NDArray::ndim() const { return impl_->ndim(); }
+    int64_t NDArray::numel() const { return impl_->numel(); }
+    int NDArray::ndim() const { return impl_->ndim(); }
 
     std::string NDArray::to_string() const {
         return fmt::format(

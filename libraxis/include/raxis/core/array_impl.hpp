@@ -34,8 +34,8 @@ namespace raxis {
         const IntArray& shape() const noexcept;
         const IntArray& strides() const noexcept;
         Dtype dtype() const noexcept;
-        size_t numel() const noexcept;
-        size_t ndim() const noexcept;
+        int ndim() const noexcept;
+        int64_t numel() const noexcept;
 
     private:
         detail::UniqueVoidPtr data_;
@@ -43,7 +43,7 @@ namespace raxis {
         Dtype dtype_;
         IntArray strides_;
 
-        size_t numel_;
+        int64_t numel_;
     };
 
 }

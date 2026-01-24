@@ -61,8 +61,8 @@ namespace raxis {
 
     struct ArrayIterator {
     public:
-        size_t ndim() const;
-        size_t numel() const;
+        int ndim() const;
+        int64_t numel() const;
         IntArray& shape() const;
         int num_inputs() const;
         int num_outputs() const;

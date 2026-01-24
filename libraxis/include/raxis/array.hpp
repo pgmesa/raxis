@@ -50,8 +50,8 @@ namespace raxis {
             return static_cast<T*>(mutable_data_ptr());
         }
 
-        size_t numel() const;
-        size_t ndim() const;
+        int64_t numel() const;
+        int ndim() const;
         const IntArray& shape() const;
         const IntArray& strides() const;
         Dtype dtype() const;

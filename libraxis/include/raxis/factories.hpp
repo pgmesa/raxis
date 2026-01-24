@@ -46,7 +46,7 @@ namespace raxis {
         const IntArray& shape,
         const Dtype& dtype = default_dtype()
     ) {
-        size_t n = compute_numel(shape);
+        int64_t n = compute_numel(shape);
         if (data.size() != n) {
             throw std::runtime_error("data size mismatch");
         }

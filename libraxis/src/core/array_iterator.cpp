@@ -33,11 +33,11 @@ namespace raxis {
     }
 
     // ========================== Array Iterator ==========================
-    size_t ArrayIterator::ndim() const {
-        return shape_.size();
+    int ArrayIterator::ndim() const {
+        return static_cast<int>(shape_.size());
     }
 
-    size_t ArrayIterator::numel() const {
+    int64_t ArrayIterator::numel() const {
         return compute_numel(shape_);
     }
 
@@ -75,7 +75,7 @@ namespace raxis {
         num_outputs_ = config.num_outputs_;
         size_t num_operands = config.arrays_.size();
         
-        for (int idx = 0; idx < num_operands; idx++) {
+        for (size_t idx = 0; idx < num_operands; idx++) {
             const NDArray* arr = config.arrays_[idx];
             operands_.emplace_back(arr);
             
@@ -146,19 +146,19 @@ namespace raxis {
 
             const IntArray& original_shape = op.array().shape();
             const IntArray& original_stride = op.array().strides();
-            size_t itemsize = op.array().dtype().itemsize();
+            int64_t itemsize = static_cast<int64_t>(op.array().dtype().itemsize());
             
-            size_t original_ndim = original_shape.size();
-            size_t target_ndim = ndim();
-            size_t offset = target_ndim - original_ndim;
+            int original_ndim = static_cast<int>(original_shape.size());
+            int target_ndim = ndim();
+            int offset = target_ndim - original_ndim;
             
             if (offset > 0)
                 op.stride_bytes.resize(target_ndim, 0);
             else
                 op.stride_bytes.resize(target_ndim);
 
-            for (size_t i = 0; i < original_ndim; ++i) {
-                size_t ti = offset + i;
+            for (int i = 0; i < original_ndim; ++i) {
+                int ti = offset + i;
                 if (original_shape[i] == 1 && shape_[ti] != 1) {
                     op.stride_bytes[ti] = 0;
                 } else {
@@ -176,12 +176,12 @@ namespace raxis {
         if (ndim() <= 1) return;
 
         auto can_coalesce = [&](int dim0, int dim1) {
-            Int size0 = shape_[dim0];
-            Int size1 = shape_[dim1];
+            int64_t size0 = shape_[dim0];
+            int64_t size1 = shape_[dim1];
             if (size0 == 1 || size1 == 1) {
                 return true;
             }
-            for (size_t i = 0; i < num_operands(); i++) {
+            for (int i = 0; i < num_operands(); i++) {
                 IntArray& stride = operands_[i].stride_bytes;
                 if (size0 * stride[dim0] != stride[dim1]) {
                     return false;
@@ -191,7 +191,7 @@ namespace raxis {
         };
 
         auto replace_stride = [&](int dim0, int dim1) {
-            for (size_t i = 0; i < num_operands(); i++) {
+            for (int i = 0; i < num_operands(); i++) {
                 auto& stride = operands_[i].stride_bytes;
                 stride[dim0] = stride[dim1];
             }

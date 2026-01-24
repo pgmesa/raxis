@@ -31,7 +31,7 @@ namespace raxis {
     }
 
     NDArray empty(const IntArray& shape, const Dtype& dtype) {
-        size_t n = compute_numel(shape);
+        size_t n = static_cast<size_t>(compute_numel(shape)); //returns int64_t
         
         detail::UniqueVoidPtr ptr;
 
@@ -49,7 +49,7 @@ namespace raxis {
 
     NDArray full(const IntArray& shape, double value, const Dtype& dtype) {  
         NDArray out = empty(shape, dtype);
-        size_t n = out.numel();
+        size_t n = static_cast<size_t>(out.numel());
         if (n > 0) dtype.fill(out.mutable_data_ptr(), n, value);
         return out;
     }
