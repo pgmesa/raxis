@@ -168,7 +168,14 @@ namespace raxis {
         }
     }
 
-    void ArrayIterator::reorder_dimensions() {}
+    void ArrayIterator::reorder_dimensions() {
+        std::reverse(shape_.begin(), shape_.end());
+
+        for (Operand& op: operands_) {
+            if (op.stride_bytes.empty()) continue;
+            std::reverse(op.stride_bytes.begin(), op.stride_bytes.end());
+        }
+    }
 
     void ArrayIterator::allocate_or_resize_outputs() {}
 
@@ -217,26 +224,18 @@ namespace raxis {
         for (int i = 0; i < num_operands(); i++) {
             operands_[i].stride_bytes.resize(ndim());
         }
-        has_coalesced_dimensions_ = true;
     }
 
     void ArrayIterator::print_state(std::ostream& os) const {
         os << "=== ArrayIterator state ===\n";
         os << "ndim: " << ndim() << "\n";
         os << "numel: " << numel() << "\n";
-        os << "computed shape: [";
-        for (size_t i = 0; i < shape_.size(); ++i) {
-            os << shape_[i];
-            if (i + 1 < shape_.size()) os << ", ";
-        }
-        os << "]\n";
         os << "num_operands: " << num_operands() << "\n";
         os << "num_outputs: " << num_outputs_ << "\n";
         os << "all_ops_same_shape: " << (all_ops_same_shape_? "true": "false") << "\n";
         os << "all_ops_are_scalars: " << (all_ops_are_scalars_? "true": "false") << "\n";
-        os << "has_coalesced_dimensions: " << (has_coalesced_dimensions_? "true": "false") << "\n";
 
-        os << "shape: [";
+        os << "computational shape: [";
         for (size_t i = 0; i < shape_.size(); ++i) {
             os << shape_[i];
             if (i + 1 < shape_.size()) os << ", ";
@@ -258,7 +257,15 @@ namespace raxis {
             }
             os << "]\n";
 
-            os << "  stride_bytes: [";
+            os << "  original strides: [";
+            const auto& strides = operand.array().strides();
+            for (size_t i = 0; i < strides.size(); ++i) {
+                os << strides[i];
+                if (i + 1 < strides.size()) os << ", ";
+            }
+            os << "]\n";
+
+            os << "  computational stride_bytes: [";
             for (size_t i = 0; i < operand.stride_bytes.size(); ++i) {
                 os << operand.stride_bytes[i];
                 if (i + 1 < operand.stride_bytes.size()) os << ", ";

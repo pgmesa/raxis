@@ -91,7 +91,6 @@ namespace raxis {
 
         bool all_ops_same_shape_ = false;
         bool all_ops_are_scalars_ = false;
-        bool has_coalesced_dimensions_ = false;
 
         // Dtype common_dtype_ = Dtype::Undefined;
         // common_device_
