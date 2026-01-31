@@ -17,6 +17,7 @@ namespace raxis {
     
     // Dtype descriptor - runtime type information
     enum class DtypeKind {
+        Undefined,
         Float32,
         Float64,
         Int32,
@@ -40,6 +41,7 @@ namespace raxis {
     class RAXIS_API Dtype {
     public:
         // Predefined dtypes
+        static const Dtype Undefined;
         static const Dtype Float32;
         static const Dtype Float64;
         static const Dtype Int32;
@@ -53,6 +55,16 @@ namespace raxis {
         size_t itemsize() const { return desc_.itemsize; }
         const std::string& name() const { return desc_.name; }
         std::type_index type_index() const { return desc_.type_index; }
+
+        bool defined() const { return kind() != DtypeKind::Undefined; }
+    
+        // For assertions
+        void check_defined(const std::string& context = "") const {
+            if (!defined()) {
+                throw std::runtime_error("Undefined dtype" + 
+                    (context.empty() ? "" : " in " + context));
+            }
+        }
 
         bool operator==(const Dtype& other) const {
             return desc_.kind == other.desc_.kind;
@@ -83,6 +95,9 @@ namespace raxis {
     };
 
     // Define static dtypes
+    inline const Dtype Dtype::Undefined {DtypeDescriptor(
+        DtypeKind::Undefined, 0, "undefined", typeid(void)
+    )};
     inline const Dtype Dtype::Float32 {DtypeDescriptor(
         DtypeKind::Float32, sizeof(float32), "float32", typeid(float32)
     )};
@@ -117,8 +132,10 @@ namespace raxis {
                     return func(std::type_identity<int64_t>{});
                 case DtypeKind::Uint8:
                     return func(std::type_identity<uint8_t>{});
+                case DtypeKind::Bool:
+                    return func(std::type_identity<bool>{});
                 default:
-                    throw std::runtime_error("Unsupported");
+                    throw std::runtime_error("Unsupported Dtype: " + dtype.name());
             }
         }
     };

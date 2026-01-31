@@ -26,13 +26,13 @@ public:
         }
 
         if (pybind11::isinstance<pybind11::int_>(src)) {
-            value.push_back(pybind11::cast<raxis::Int>(src));
+            value.push_back(pybind11::cast<int64_t>(src));
             return true;
         }
 
         if (pybind11::isinstance<pybind11::sequence>(src)) {
             for (auto item : pybind11::reinterpret_borrow<pybind11::sequence>(src)) {
-                value.push_back(pybind11::cast<raxis::Int>(item));
+                value.push_back(pybind11::cast<int64_t>(item));
             }
             return true;
         }

@@ -14,36 +14,22 @@
 
 namespace raxis {
 
-    NDArray add(const NDArray& a, const NDArray& b) {
-        IntArray result_shape = broadcast_shapes(a.shape(), b.shape());
+NDArray add(const NDArray& a, const NDArray& b) {
 
-        // Execute add
-        NDArray out = empty(result_shape, a.dtype());
+    // TODO: Let ArrayIterator allocate the output tensor, initialize
+    // it as undefined. NDArray out;
+    IntArray result_shape = broadcast_shapes(a.shape(), b.shape());
+    NDArray out = empty(result_shape, a.dtype());
 
-        auto iter = ArrayIteratorConfig()
-            .add_output(out)
-            .add_input(a)
-            .add_input(b)
-            .build();
+    auto iter = ArrayIteratorConfig()
+        .add_output(out)
+        .add_input(a)
+        .add_input(b)
+        .build();
 
-        iter.print_state();
-        //kernels::cpu::add_kernel(iter);
-        
-        // const void* a_data = a.data_ptr();
-        // const void* b_data = b.data_ptr();
-        // void* out_data = out.mutable_data_ptr();
-
-        // if (collapsed_shape.size() == 1) {
-        //     kernels::add(a_data, b_data, out_data, out.numel(), out.dtype());
-        // } else {
-            
-            
-        //     // cpu_kernel(iter, [](float a, float b) {
-        //     //     return a + b;
-        //     // });
-        // }
-
-        return out;
-    }
+    iter.print_state();
+    kernels::cpu::add_kernel(iter);
+    return out;
+}
     
 }

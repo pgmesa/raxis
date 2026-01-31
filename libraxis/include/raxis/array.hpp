@@ -32,7 +32,7 @@ namespace raxis {
         // }
 
         const void* data_ptr() const;
-        void* mutable_data_ptr();
+        void* mutable_data_ptr() const;
 
         template<typename T>
         const T* data_ptr() const {
@@ -43,7 +43,7 @@ namespace raxis {
         }
 
         template<typename T>
-        T* mutable_data_ptr() {
+        T* mutable_data_ptr() const {
             if (Dtype::from_type<T>() != dtype()) {
                 throw std::runtime_error("Type mismatch");
             }

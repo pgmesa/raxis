@@ -17,7 +17,7 @@ namespace raxis {
         return impl_->data();
     }
 
-    void* NDArray::mutable_data_ptr() {
+    void* NDArray::mutable_data_ptr() const {
         return impl_->mutable_data();
     }
         
