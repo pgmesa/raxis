@@ -27,7 +27,7 @@ NDArray add(const NDArray& a, const NDArray& b) {
         .add_input(b)
         .build();
 
-    iter.print_state();
+    // iter.print_state();
     kernels::cpu::add_kernel(iter);
     return out;
 }

@@ -136,15 +136,15 @@ private:
     void coalesce_dimensions();
 
     template <typename loop1d_t>
-    loop2d_t loop_2d_from_1d(const loop1d_t& loop) const {
+    auto loop_2d_from_1d(const loop1d_t& loop) const {
         // Convert 1D kernel to 2D
         return
             [loop, noperands = num_operands()](
                 char** base, const int64_t* strides, int64_t size0, int64_t size1
             ) {
                 // Adapt 1D signature to 2D
-                std::vector<char*> data(base, base + noperands);
                 const int64_t* outer_strides = &strides[noperands];
+                std::vector<char*> data(base, base + noperands);
                 for (int outer = 0; outer < size1; outer++) {
                     if (outer > 0) {
                         for (int idx = 0; idx < noperands; idx++) {

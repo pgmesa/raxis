@@ -264,7 +264,7 @@ void get_strides(int64_t* strides, const std::vector<Operand>& operands, int ndi
     int noperands = static_cast<int>(operands.size());
     for (int dim = 0; dim < ndim; dim++) {
         for (int idx = 0; idx < noperands; idx++) {
-            strides[idx] = operands[idx].stride_bytes[dim];
+            *strides++ = operands[idx].stride_bytes[dim];
         }
     }
 
