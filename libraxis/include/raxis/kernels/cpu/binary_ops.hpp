@@ -5,7 +5,7 @@
 
 namespace raxis::kernels::cpu {
 
-    void add_kernel(const ArrayIterator& iter);
-    void mul_kernel(const ArrayIterator& iter);
+void add_kernel(const ArrayIterator& iter);
+void mul_kernel(const ArrayIterator& iter);
 
 }

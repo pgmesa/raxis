@@ -6,6 +6,6 @@
 
 namespace raxis {
 
-    RAXIS_API NDArray add(const NDArray& a, const NDArray& b);
+RAXIS_API NDArray add(const NDArray& a, const NDArray& b);
 
 }

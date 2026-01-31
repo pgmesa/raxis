@@ -8,42 +8,42 @@
 
 namespace raxis {
 
-    struct ArrayImpl {
-    public:
-        ArrayImpl(
-            detail::UniqueVoidPtr data,
-            const IntArray& shape,
-            const Dtype& dtype,
-            const IntArray& strides);
+struct ArrayImpl {
+public:
+    ArrayImpl(
+        detail::UniqueVoidPtr data,
+        const IntArray& shape,
+        const Dtype& dtype,
+        const IntArray& strides);
 
-        ArrayImpl(
-            detail::UniqueVoidPtr data,
-            const IntArray& shape,
-            const Dtype& dtype);
+    ArrayImpl(
+        detail::UniqueVoidPtr data,
+        const IntArray& shape,
+        const Dtype& dtype);
 
-        ArrayImpl() = delete;
-        ~ArrayImpl() = default;
-        ArrayImpl(const ArrayImpl&) = delete;
-        ArrayImpl& operator=(const ArrayImpl&) = delete;
-        ArrayImpl(ArrayImpl&&) = delete;
-        ArrayImpl& operator=(ArrayImpl&&) = delete;
-        
-        const void* data() const noexcept;
-        void* mutable_data() noexcept;
+    ArrayImpl() = delete;
+    ~ArrayImpl() = default;
+    ArrayImpl(const ArrayImpl&) = delete;
+    ArrayImpl& operator=(const ArrayImpl&) = delete;
+    ArrayImpl(ArrayImpl&&) = delete;
+    ArrayImpl& operator=(ArrayImpl&&) = delete;
+    
+    const void* data() const noexcept;
+    void* mutable_data() noexcept;
 
-        const IntArray& shape() const noexcept;
-        const IntArray& strides() const noexcept;
-        Dtype dtype() const noexcept;
-        int ndim() const noexcept;
-        int64_t numel() const noexcept;
+    const IntArray& shape() const noexcept;
+    const IntArray& strides() const noexcept;
+    Dtype dtype() const noexcept;
+    int ndim() const noexcept;
+    int64_t numel() const noexcept;
 
-    private:
-        detail::UniqueVoidPtr data_;
-        IntArray shape_;
-        Dtype dtype_;
-        IntArray strides_;
+private:
+    detail::UniqueVoidPtr data_;
+    IntArray shape_;
+    Dtype dtype_;
+    IntArray strides_;
 
-        int64_t numel_;
-    };
+    int64_t numel_;
+};
 
 }

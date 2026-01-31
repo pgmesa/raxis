@@ -13,51 +13,51 @@
 
 namespace raxis {
 
-    int64_t compute_numel(const IntArray& shape) noexcept {
-        int64_t n = 1;
-        for (int64_t d: shape) 
-            n *= d;
-        return n;
-    }
+int64_t compute_numel(const IntArray& shape) noexcept {
+    int64_t n = 1;
+    for (int64_t d: shape) 
+        n *= d;
+    return n;
+}
 
-    IntArray compute_strides(const IntArray& shape) {
-        IntArray strides(shape.size());
+IntArray compute_strides(const IntArray& shape) {
+    IntArray strides(shape.size());
+    
+    int64_t s = 1;
+    int ndim = static_cast<int>(shape.size());
+    for (int i = ndim - 1; i >= 0; --i) {
+        strides[i] = s;
+        s *= shape[i];
+    }
+    return strides;
+}
+
+IntArray broadcast_shapes(const IntArray& shape1, const IntArray& shape2) {
+    if (shape1 == shape2) return shape1;
+
+    size_t ndim1 = shape1.size();
+    size_t ndim2 = shape2.size();
+    size_t target_ndim = std::max(ndim1, ndim2);
+    
+    IntArray result_shape(target_ndim);
+
+    for (size_t i = 0; i < target_ndim; i++) {
+        size_t ridx = 1 + i;
+        int64_t size1 = i < ndim1? shape1[ndim1 - ridx] : 1;
+        int64_t size2 = i < ndim2? shape2[ndim2 - ridx] : 1;
         
-        int64_t s = 1;
-        int ndim = static_cast<int>(shape.size());
-        for (int i = ndim - 1; i >= 0; --i) {
-            strides[i] = s;
-            s *= shape[i];
-        }
-        return strides;
+        if (size1 != 1 && size2 != 1 && size1 != size2) {
+            std::string msg = fmt::format(
+                "Shapes {} and {} are not broadcastable at dimension {}",
+                shape1, shape2, i
+            );
+            throw std::runtime_error(msg);
+        } 
+
+        result_shape[target_ndim - ridx] = std::max(size1, size2);
     }
 
-    IntArray broadcast_shapes(const IntArray& shape1, const IntArray& shape2) {
-        if (shape1 == shape2) return shape1;
-
-        size_t ndim1 = shape1.size();
-        size_t ndim2 = shape2.size();
-        size_t target_ndim = std::max(ndim1, ndim2);
-        
-        IntArray result_shape(target_ndim);
-
-        for (size_t i = 0; i < target_ndim; i++) {
-            size_t ridx = 1 + i;
-            int64_t size1 = i < ndim1? shape1[ndim1 - ridx] : 1;
-            int64_t size2 = i < ndim2? shape2[ndim2 - ridx] : 1;
-            
-            if (size1 != 1 && size2 != 1 && size1 != size2) {
-                std::string msg = fmt::format(
-                    "Shapes {} and {} are not broadcastable at dimension {}",
-                    shape1, shape2, i
-                );
-                throw std::runtime_error(msg);
-            } 
-
-            result_shape[target_ndim - ridx] = std::max(size1, size2);
-        }
-
-        return result_shape;
-    }
+    return result_shape;
+}
 
 }
