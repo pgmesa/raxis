@@ -1,171 +1,256 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+#include <stdexcept>
 #include <string>
-#include <sstream>
-#include <typeindex>
-#include <typeinfo>
+#include <type_traits>
+#include <algorithm>
+#include <array>
 
 #include <raxis/api.hpp>
-#include <raxis/array_types.hpp>
 
 
 namespace raxis {
 
-class Dtype;
-RAXIS_API const Dtype& default_dtype();
-RAXIS_API void set_default_dtype(const Dtype& dtype);
+using float32 = float;
+using float64 = double;
 
-// Dtype descriptor - runtime type information
-enum class DtypeKind {
-    Undefined,
-    Float32,
-    Float64,
+// Lightweight enum (1 byte, trivially copyable)
+enum class DtypeKind : uint8_t {
+    Undefined = 0,
+    Bool,
+    Uint8,
+    Uint16,
     Int32,
     Int64,
-    Uint8,
-    Bool
+    Float32,
+    Float64,
+    NumTypes // get the count of enum values (always at the end)
 };
 
-struct DtypeDescriptor {
-    DtypeKind kind;
-    size_t itemsize;
-    std::string name;
-    std::type_index type_index;
+// ============================================================================
+// Metadata functions
+// ============================================================================
 
-    DtypeDescriptor(DtypeKind k, size_t size, const std::string& n, 
-                    std::type_index ti)
-        : kind(k), itemsize(size), name(n), type_index(ti) {}
-};
+constexpr size_t dtype_itemsize(DtypeKind kind) {
+    switch (kind) {
+        case DtypeKind::Bool:    return sizeof(bool);
+        case DtypeKind::Uint8:   return sizeof(uint8_t);
+        case DtypeKind::Uint16:  return sizeof(uint16_t);
+        case DtypeKind::Int32:   return sizeof(int32_t);
+        case DtypeKind::Int64:   return sizeof(int64_t);
+        case DtypeKind::Float32: return sizeof(float32);
+        case DtypeKind::Float64: return sizeof(float64);
+        default: return 0;
+    }
+}
 
-// Static dtype registry
+constexpr const char* dtype_name(DtypeKind kind) {
+    switch (kind) {
+        case DtypeKind::Bool:    return "bool";
+        case DtypeKind::Uint8:   return "uint8";
+        case DtypeKind::Uint16:  return "uint16";
+        case DtypeKind::Int32:   return "int32";
+        case DtypeKind::Int64:   return "int64";
+        case DtypeKind::Float32: return "float32";
+        case DtypeKind::Float64: return "float64";
+        default: return "undefined";
+    }
+}
+
+constexpr bool dtype_is_floating(DtypeKind kind) {
+    return kind == DtypeKind::Float32 || kind == DtypeKind::Float64;
+}
+
+constexpr bool dtype_is_integral(DtypeKind kind, bool include_bool = false) {
+    if (include_bool && kind == DtypeKind::Bool) return true;
+    return kind == DtypeKind::Uint8 || 
+           kind == DtypeKind::Uint16 ||
+           kind == DtypeKind::Int32 || 
+           kind == DtypeKind::Int64;
+}
+
+constexpr bool dtype_is_signed(DtypeKind kind) {
+    return kind == DtypeKind::Int32 || 
+           kind == DtypeKind::Int64 ||
+           kind == DtypeKind::Float32 ||
+           kind == DtypeKind::Float64;
+}
+
+// ============================================================================
+// Dtype wrapper class
+// ============================================================================
+
 class RAXIS_API Dtype {
-public:
-    // Predefined dtypes
-    static const Dtype Undefined;
-    static const Dtype Float32;
-    static const Dtype Float64;
-    static const Dtype Int32;
-    static const Dtype Int64;
-    static const Dtype Uint8;
-    static const Dtype Bool;
-
-    Dtype();
-
-    DtypeKind kind() const { return desc_.kind; }
-    size_t itemsize() const { return desc_.itemsize; }
-    const std::string& name() const { return desc_.name; }
-    std::type_index type_index() const { return desc_.type_index; }
-
-    bool defined() const { return kind() != DtypeKind::Undefined; }
-
-    // For assertions
+    DtypeKind kind_;
+    
+public: 
+    constexpr Dtype() : kind_(DtypeKind::Undefined) {}
+    constexpr explicit Dtype(DtypeKind kind) : kind_(kind) {}
+    
+    constexpr DtypeKind kind() const { return kind_; }
+    constexpr size_t itemsize() const { return dtype_itemsize(kind_); }
+    constexpr const char* name() const { return dtype_name(kind_); }
+    constexpr bool defined() const { return kind_ != DtypeKind::Undefined; }
+    
+    constexpr bool is_floating() const { return dtype_is_floating(kind_); }
+    constexpr bool is_integral(bool include_bool = false) const {
+        return dtype_is_integral(kind_, include_bool);
+    }
+    constexpr bool is_signed() const { return dtype_is_signed(kind_); }
+    
+    constexpr bool operator==(Dtype other) const { return kind_ == other.kind_; }
+    constexpr bool operator!=(Dtype other) const { return kind_ != other.kind_; }
+    
     void check_defined(const std::string& context = "") const {
         if (!defined()) {
-            throw std::runtime_error("Undefined dtype" + 
-                (context.empty() ? "" : " in " + context));
+            throw std::runtime_error(
+                "Undefined dtype" + (context.empty() ? "" : " in " + context)
+            );
         }
     }
-
-    bool operator==(const Dtype& other) const {
-        return desc_.kind == other.desc_.kind;
-    }
-
-    bool operator!=(const Dtype& other) const {
-        return !(*this == other);
-    }
-
-    // Template helper to get dtype from C++ type
+    
     template<typename T>
-    static Dtype from_type() {
-        if constexpr (std::is_same_v<T, float32>) return Float32;
-        else if constexpr (std::is_same_v<T, float64>) return Float64;
-        else if constexpr (std::is_same_v<T, int32_t>) return Int32;
-        else if constexpr (std::is_same_v<T, int64_t>) return Int64;
-        else if constexpr (std::is_same_v<T, uint8_t>) return Uint8;
-        else if constexpr (std::is_same_v<T, bool>) return Bool;
-        else throw std::runtime_error("Unsupported type");
+    static constexpr Dtype from_type() {
+        if constexpr (std::is_same_v<T, bool>)          return Dtype(DtypeKind::Bool);
+        else if constexpr (std::is_same_v<T, uint8_t>)  return Dtype(DtypeKind::Uint8);
+        else if constexpr (std::is_same_v<T, uint16_t>) return Dtype(DtypeKind::Uint16);
+        else if constexpr (std::is_same_v<T, int32_t>)  return Dtype(DtypeKind::Int32);
+        else if constexpr (std::is_same_v<T, int64_t>)  return Dtype(DtypeKind::Int64);
+        else if constexpr (std::is_same_v<T, float32>)  return Dtype(DtypeKind::Float32);
+        else if constexpr (std::is_same_v<T, float64>)  return Dtype(DtypeKind::Float64);
+        else static_assert(sizeof(T) == 0, "Unsupported type for Dtype::from_type");
     }
     
-    std::string to_string(const void* data) const;
-    void fill(void* data, size_t n, double value) const;
-
-private:
-    explicit Dtype(const DtypeDescriptor& desc) : desc_(desc) {}
-    DtypeDescriptor desc_;
-};
-
-// Define static dtypes
-inline const Dtype Dtype::Undefined {DtypeDescriptor(
-    DtypeKind::Undefined, 0, "undefined", typeid(void)
-)};
-inline const Dtype Dtype::Float32 {DtypeDescriptor(
-    DtypeKind::Float32, sizeof(float32), "float32", typeid(float32)
-)};
-inline const Dtype Dtype::Float64{DtypeDescriptor(
-    DtypeKind::Float64, sizeof(float64), "float64", typeid(float64)
-)};
-inline const Dtype Dtype::Int32{DtypeDescriptor(
-    DtypeKind::Int32, sizeof(int32_t), "int32", typeid(int32_t)
-)};
-inline const Dtype Dtype::Int64{DtypeDescriptor(
-    DtypeKind::Int64, sizeof(int64_t), "int64", typeid(int64_t)
-)};
-inline const Dtype Dtype::Uint8{DtypeDescriptor(
-    DtypeKind::Uint8, sizeof(uint8_t), "uint8", typeid(uint8_t)
-)};
-inline const Dtype Dtype::Bool{DtypeDescriptor(
-    DtypeKind::Bool, sizeof(bool), "bool", typeid(bool)
-)};    
-
-class DtypeDispatcher {
-public:
+    // Runtime type dispatch
     template<typename Func>
-    static auto dispatch(const Dtype& dtype, Func&& func) {
-        switch (dtype.kind()) {
-            case DtypeKind::Float32:
-                return func(std::type_identity<float32>{});
-            case DtypeKind::Float64:
-                return func(std::type_identity<float64>{});
+    auto dispatch(Func&& func) const {
+        switch (kind_) {
+            case DtypeKind::Bool:
+                return func(std::type_identity<bool>{});
+            case DtypeKind::Uint8:
+                return func(std::type_identity<uint8_t>{});
+            case DtypeKind::Uint16:
+                return func(std::type_identity<uint16_t>{});
             case DtypeKind::Int32:
                 return func(std::type_identity<int32_t>{});
             case DtypeKind::Int64:
                 return func(std::type_identity<int64_t>{});
-            case DtypeKind::Uint8:
-                return func(std::type_identity<uint8_t>{});
-            case DtypeKind::Bool:
-                return func(std::type_identity<bool>{});
+            case DtypeKind::Float32:
+                return func(std::type_identity<float32>{});
+            case DtypeKind::Float64:
+                return func(std::type_identity<float64>{});
             default:
-                throw std::runtime_error("Unsupported Dtype: " + dtype.name());
+                throw std::runtime_error("Cannot dispatch undefined dtype");
         }
     }
+    
+    // Utility: fill buffer with value
+    void fill(void* data, size_t n, double value) const;
+    
+    // Utility: convert single element to string
+    std::string to_string(const void* data) const;
 };
 
-// Implement Dtype functions
-inline Dtype::Dtype() : desc_(default_dtype().desc_) {};
-
-inline void Dtype::fill(void* data, size_t n, double value) const {
-    DtypeDispatcher::dispatch(*this, [&](auto type_tag) {
-        using T = typename decltype(type_tag)::type;
-        auto* ptr = static_cast<T*>(data);
-        std::fill(ptr, ptr + n, static_cast<T>(value));
-    });
+namespace dtypes {
+inline static constexpr Dtype Undefined = Dtype(DtypeKind::Undefined);
+inline static constexpr Dtype Bool      = Dtype(DtypeKind::Bool);
+inline static constexpr Dtype Uint8     = Dtype(DtypeKind::Uint8);
+inline static constexpr Dtype Uint16    = Dtype(DtypeKind::Uint16);
+inline static constexpr Dtype Int32     = Dtype(DtypeKind::Int32);
+inline static constexpr Dtype Int64     = Dtype(DtypeKind::Int64);
+inline static constexpr Dtype Float32   = Dtype(DtypeKind::Float32);
+inline static constexpr Dtype Float64   = Dtype(DtypeKind::Float64);
 }
 
-inline std::string Dtype::to_string(const void* data) const {
-    return DtypeDispatcher::dispatch(*this, [&](auto type_tag) -> std::string {
-        using T = typename decltype(type_tag)::type;
-        const T* ptr = static_cast<const T*>(data);
 
-        if constexpr (std::is_same_v<T, bool>) {
-            return (*ptr) ? "true" : "false";
-        } else if constexpr (std::is_floating_point_v<T>) {
-            std::ostringstream oss;
-            oss << *ptr;
-            return oss.str();
-        } else {
-            return std::to_string(*ptr);
-        }
-    });
+// Ensure it's tiny and efficient
+static_assert(sizeof(Dtype) == 1, "Dtype must be 1 byte");
+static_assert(std::is_trivially_copyable_v<Dtype>, "Dtype must be trivially copyable");
+
+// ============================================================================
+// Type promotion (NumPy-style rules)
+// ============================================================================
+
+namespace detail {
+    // Short aliases for the promotion table
+    constexpr auto b1 = DtypeKind::Bool;
+    constexpr auto u1 = DtypeKind::Uint8;
+    constexpr auto u2 = DtypeKind::Uint16;
+    constexpr auto i4 = DtypeKind::Int32;
+    constexpr auto i8 = DtypeKind::Int64;
+    constexpr auto f4 = DtypeKind::Float32;
+    constexpr auto f8 = DtypeKind::Float64;
+    constexpr auto ud = DtypeKind::Undefined;
+    
+    // Map dtype to index in promotion table
+    constexpr size_t dtype_to_index(DtypeKind kind) {
+        return static_cast<size_t>(kind) - 1;  // Skip Undefined
+    }
+    
+    constexpr size_t NUM_DTYPES = static_cast<size_t>(DtypeKind::NumTypes) - 1;
+    
+    // Type promotion lookup table
+    constexpr std::array<std::array<DtypeKind, NUM_DTYPES>, NUM_DTYPES>
+        promotion_table = {{
+        /*        b1  u1  u2  i4  i8  f4  f8*/
+        /* b1 */ {b1, u1, u2, i4, i8, f4, f8},
+        /* u1 */ {u1, u1, u2, i4, i8, f4, f8},
+        /* u2 */ {u2, u2, u2, i4, i8, f4, f8},
+        /* i4 */ {i4, i4, i4, i4, i8, f4, f8},
+        /* i8 */ {i8, i8, i8, i8, i8, f4, f8},
+        /* f4 */ {f4, f4, f4, f4, f4, f4, f8},
+        /* f8 */ {f8, f8, f8, f8, f8, f8, f8},
+    }};
+} // namespace detail
+
+constexpr Dtype promote_types(Dtype a, Dtype b) {
+    if (!a.defined() || !b.defined()) {
+        return dtypes::Undefined;
+    }
+    
+    if (a == b) return a;
+    
+    // Lookup in table
+    size_t idx_a = detail::dtype_to_index(a.kind());
+    size_t idx_b = detail::dtype_to_index(b.kind());
+    
+    DtypeKind result = detail::promotion_table[idx_a][idx_b];
+    return Dtype(result);
 }
+
+// Check if cast is safe (no precision/range loss)
+constexpr bool can_cast(Dtype from, Dtype to) {
+    if (from == to) return true;
+
+    if (!from.defined()) return false;
+    
+    // Promotion is always safe
+    return promote_types(from, to) == to;
+}
+
+
+namespace raxis::test {
+    // Verify promotion rules at compile-time
+    static_assert(promote_types(dtypes::Bool, dtypes::Bool) == dtypes::Bool);
+    static_assert(promote_types(dtypes::Bool, dtypes::Uint8) == dtypes::Uint8);
+    static_assert(promote_types(dtypes::Uint8, dtypes::Int32) == dtypes::Int32);
+    static_assert(promote_types(dtypes::Uint16, dtypes::Int32) == dtypes::Int32);
+    static_assert(promote_types(dtypes::Int32, dtypes::Int64) == dtypes::Int64);
+    static_assert(promote_types(dtypes::Int64, dtypes::Float32) == dtypes::Float32);
+    static_assert(promote_types(dtypes::Float32, dtypes::Float64) == dtypes::Float64);
+    
+    // Verify symmetry
+    static_assert(promote_types(dtypes::Uint8, dtypes::Int32) == 
+                  promote_types(dtypes::Int32, dtypes::Uint8));
+}
+
+// ============================================================================
+// Default dtype management
+// ============================================================================
+
+RAXIS_API Dtype default_dtype();
+RAXIS_API void set_default_dtype(Dtype dtype);
 
 } // namespace raxis

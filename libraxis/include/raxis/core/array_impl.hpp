@@ -13,13 +13,13 @@ public:
     ArrayImpl(
         detail::UniqueVoidPtr data,
         const IntArray& shape,
-        const Dtype& dtype,
+        Dtype dtype,
         const IntArray& strides);
 
     ArrayImpl(
         detail::UniqueVoidPtr data,
         const IntArray& shape,
-        const Dtype& dtype);
+        Dtype dtype);
 
     ArrayImpl() = delete;
     ~ArrayImpl() = default;

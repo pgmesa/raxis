@@ -58,7 +58,7 @@ int ArrayIterator::num_operands() const {
     return static_cast<int>(operands_.size());
 }
 
-const Dtype& ArrayIterator::common_dtype() const {
+Dtype ArrayIterator::common_dtype() const {
     return common_dtype_;
 }
 
@@ -134,9 +134,9 @@ void ArrayIterator::compute_shape() {
 
 void ArrayIterator::compute_types() {
     for (Operand& op: operands_) {
-        if (common_dtype_ != Dtype::Undefined && common_dtype_ != op.target_dtype) {
+        if (common_dtype_ != dtypes::Undefined && common_dtype_ != op.target_dtype) {
             throw std::runtime_error("Arrays must have the same dtype");
-        } else if (common_dtype_ == Dtype::Undefined) {
+        } else if (common_dtype_ == dtypes::Undefined) {
             common_dtype_ = op.target_dtype;
         }
     }

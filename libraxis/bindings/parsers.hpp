@@ -20,6 +20,7 @@ py::dtype numpy_dtype(const raxis::Dtype& dt) {
         case raxis::DtypeKind::Int32:   return py::dtype::of<int32_t>();
         case raxis::DtypeKind::Int64:   return py::dtype::of<int64_t>();
         case raxis::DtypeKind::Uint8:   return py::dtype::of<uint8_t>();
+        case raxis::DtypeKind::Uint16:   return py::dtype::of<uint16_t>();
         case raxis::DtypeKind::Bool:    return py::dtype::of<bool>();
         default:
             throw std::runtime_error("Unsupported dtype for numpy()");

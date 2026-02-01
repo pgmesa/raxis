@@ -9,7 +9,7 @@ namespace raxis {
 ArrayImpl::ArrayImpl(
     detail::UniqueVoidPtr data,
     const IntArray& shape,
-    const Dtype& dtype,
+    Dtype dtype,
     const IntArray& strides
 ): data_(std::move(data)), shape_(shape), dtype_(dtype), strides_(strides), 
     numel_(compute_numel(shape)) {}
@@ -17,7 +17,7 @@ ArrayImpl::ArrayImpl(
 ArrayImpl::ArrayImpl(
     detail::UniqueVoidPtr data,
     const IntArray& shape,
-    const Dtype& dtype
+    Dtype dtype
 ): data_(std::move(data)), shape_(shape), dtype_(dtype), strides_(compute_strides(shape)),
     numel_(compute_numel(shape)) {}
 

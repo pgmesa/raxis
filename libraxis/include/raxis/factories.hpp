@@ -16,35 +16,35 @@ using Deleter = std::function<void(void*)>;
 RAXIS_API NDArray from_blob(
     void* data, 
     const IntArray& shape, 
-    const Dtype& dtype = default_dtype()
+    Dtype dtype = default_dtype()
 );
 
 RAXIS_API NDArray from_blob(
     void* data,
     const IntArray& shape,          
-    const Dtype& dtype,
+    Dtype dtype,
     detail::DeleterFnPtr deleter
 );
 
 RAXIS_API NDArray empty(
     const IntArray& shape, 
-    const Dtype& dtype = default_dtype()
+    Dtype dtype = default_dtype()
 );
 
 RAXIS_API NDArray full(
     const IntArray& shape, 
     double value, 
-    const Dtype& dtype = default_dtype()
+    Dtype dtype = default_dtype()
 );
 
-RAXIS_API NDArray ones(const IntArray& shape, const Dtype& dtype = default_dtype());
-RAXIS_API NDArray zeros(const IntArray& shape, const Dtype& dtype = default_dtype());
+RAXIS_API NDArray ones(const IntArray& shape, Dtype dtype = default_dtype());
+RAXIS_API NDArray zeros(const IntArray& shape, Dtype dtype = default_dtype());
 
 template<typename T>
 NDArray array(
     const std::vector<T>& data,
     const IntArray& shape,
-    const Dtype& dtype = default_dtype()
+    Dtype dtype = default_dtype()
 ) {
     int64_t n = compute_numel(shape);
     if (data.size() != n) {

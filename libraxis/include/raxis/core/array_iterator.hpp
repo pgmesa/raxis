@@ -29,8 +29,8 @@ struct Operand {
     bool is_output = false;
     bool is_read_write = false;
     bool will_resize = false;
-    Dtype target_dtype = Dtype::Undefined;
-    Dtype current_dtype = Dtype::Undefined;
+    Dtype target_dtype = dtypes::Undefined;
+    Dtype current_dtype = dtypes::Undefined;
     // std::optional<Device>
 
     explicit Operand(const NDArray* arr) {
@@ -81,7 +81,7 @@ public:
     int num_inputs() const;
     int num_outputs() const;
     int num_operands() const;
-    const Dtype& common_dtype() const;
+    Dtype common_dtype() const;
 
     void build(const ArrayIteratorConfig& config);
     void print_state(std::ostream& os = std::cout) const;
@@ -122,7 +122,7 @@ private:
     bool all_ops_same_shape_ = false;
     bool all_ops_are_scalars_ = false;
 
-    Dtype common_dtype_ = Dtype::Undefined;
+    Dtype common_dtype_ = dtypes::Undefined;
     // common_device_
 
     bool is_reduction_ = false;
