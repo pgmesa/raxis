@@ -192,6 +192,7 @@ namespace detail {
     constexpr size_t NUM_DTYPES = static_cast<size_t>(DtypeKind::NumTypes) - 1;
     
     // Type promotion lookup table
+    // clang-format off
     constexpr std::array<std::array<DtypeKind, NUM_DTYPES>, NUM_DTYPES>
         promotion_table = {{
         /*        b1  u1  u2  i4  i8  f4  f8*/
@@ -203,6 +204,8 @@ namespace detail {
         /* f4 */ {f4, f4, f4, f4, f4, f4, f8},
         /* f8 */ {f8, f8, f8, f8, f8, f8, f8},
     }};
+    // clang-format on
+    
 } // namespace detail
 
 constexpr Dtype promote_types(Dtype a, Dtype b) {

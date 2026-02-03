@@ -3,12 +3,14 @@
 #include <ostream>
 #include <iostream>
 #include <type_traits>
+#include <optional>
 
 #include <raxis/array.hpp>
 #include <raxis/dtype.hpp>
 #include <raxis/array_types.hpp>
 #include <raxis/core/utils/range.hpp>
 #include <raxis/core/utils/function_ref.hpp>
+#include <raxis/core/utils/maybe_owned.hpp>
 
 
 namespace raxis {
@@ -24,30 +26,33 @@ constexpr int64_t GRAIN_SIZE = 32768;
 }
 
 struct Operand {
-
     IntArray stride_bytes;
     bool is_output = false;
     bool is_read_write = false;
     bool will_resize = false;
-    Dtype target_dtype = dtypes::Undefined;
-    Dtype current_dtype = dtypes::Undefined;
+    Dtype target_dtype;
+    Dtype current_dtype;
     // std::optional<Device>
 
-    explicit Operand(const NDArray* arr) {
-        // if (arr->defined()) {
-        //     // TODO
-        // }
-        array_ = arr;
-        target_dtype = arr->dtype();
-        current_dtype = target_dtype;
+    explicit Operand(detail::MaybeOwned<NDArray>&& arr) {
+        if (arr->defined()) {
+            target_dtype = arr->dtype();
+            current_dtype = target_dtype;
+        }
+        array_ = std::move(arr);
     }
 
     const NDArray& array() const {
         return *array_;
     }
 
+    void exchange_array(detail::MaybeOwned<NDArray>&& new_array);
+    void restore_original_array();
+    bool has_exchanged() const;
+    
 private:
-    const NDArray* array_;
+    detail::MaybeOwned<NDArray> array_;
+    std::optional<detail::MaybeOwned<NDArray>> original_array_; // Original array (if swapped)
 };
 
 
@@ -59,14 +64,33 @@ class ArrayIteratorConfig {
 public:
     friend struct ArrayIterator;
     
-    ArrayIteratorConfig& add_output(const NDArray& output);
-    ArrayIteratorConfig& add_input(const NDArray& input);
+    ArrayIteratorConfig& add_output(const NDArray& output) {
+        return add_borrowed_output(output);
+    }
+    ArrayIteratorConfig& add_input(const NDArray& input) {
+        return add_borrowed_input(input);
+    }
+    // Don't allow borrowing from temporaries
+    ArrayIteratorConfig& add_output(NDArray&& output) = delete;
+    ArrayIteratorConfig& add_input(NDArray&& input) = delete;
+
+    ArrayIteratorConfig& add_owned_output(const NDArray& output);
+    ArrayIteratorConfig& add_owned_input(const NDArray& input);
+    ArrayIteratorConfig& add_owned_output(NDArray&& output);
+    ArrayIteratorConfig& add_owned_input(NDArray&& input);
+
+    ArrayIteratorConfig& add_borrowed_output(const NDArray& output);
+    ArrayIteratorConfig& add_borrowed_input(const NDArray& input);
+    // Don't allow borrowing from temporaries
+    ArrayIteratorConfig& add_borrowed_output(NDArray&& output) = delete;
+    ArrayIteratorConfig& add_borrowed_input(NDArray&& input) = delete;
+
     ArrayIteratorConfig& is_reduction(bool is_reduction);
 
     ArrayIterator build();
 
 private:
-    std::vector<const NDArray*> arrays_;
+    std::vector<detail::MaybeOwned<NDArray>> arrays_;
     int num_outputs_ = 0;
     int num_inputs_ = 0;
     bool is_reduction_ = false;
@@ -83,11 +107,11 @@ public:
     int num_operands() const;
     Dtype common_dtype() const;
 
-    void build(const ArrayIteratorConfig& config);
+    void build(ArrayIteratorConfig& config);
     void print_state(std::ostream& os = std::cout) const;
 
     // Type-erased 2D loop
-    using loop2d_t = function_ref<void(char** data, const int64_t* strides, int64_t size0, int64_t size1)>;
+    using loop2d_t = detail::function_ref<void(char** data, const int64_t* strides, int64_t size0, int64_t size1)>;
     
     // Templated 1D loop (inlined, optimizable)
     template <typename loop1d_t,
@@ -122,12 +146,12 @@ private:
     bool all_ops_same_shape_ = false;
     bool all_ops_are_scalars_ = false;
 
-    Dtype common_dtype_ = dtypes::Undefined;
+    Dtype common_dtype_;
     // common_device_
 
     bool is_reduction_ = false;
 
-    void populate_operands(const ArrayIteratorConfig&);
+    void populate_operands(ArrayIteratorConfig&);
     void compute_shape();
     void compute_types();
     void compute_strides();

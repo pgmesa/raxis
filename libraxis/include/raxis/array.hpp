@@ -31,6 +31,9 @@ public:
     //     return copy_(rhs);
     // }
 
+    bool defined() const noexcept;
+    bool is_same(const NDArray& other) const noexcept;
+
     const void* data_ptr() const;
     void* mutable_data_ptr() const;
 
@@ -55,6 +58,8 @@ public:
     const IntArray& shape() const;
     const IntArray& strides() const;
     Dtype dtype() const;
+
+    NDArray to(Dtype dtype) const;
 
     std::string to_string() const;
 

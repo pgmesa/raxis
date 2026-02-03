@@ -4,25 +4,75 @@
 #include <ostream>
 #include <stdexcept>
 #include <type_traits>
+#include <cassert>
 
 #include <raxis/array.hpp>
 #include <raxis/core/shape.hpp>
 #include <raxis/core/utils/range.hpp>
 #include <raxis/core/utils/dim_counter.hpp>
 #include <raxis/core/utils/function_ref.hpp>
+#include <raxis/core/utils/maybe_owned.hpp>
 
 
 namespace raxis {
 
-ArrayIteratorConfig& ArrayIteratorConfig::add_input(const NDArray& input) {
-    arrays_.push_back(&input);
+void Operand::exchange_array(detail::MaybeOwned<NDArray>&& new_array) {
+    if (original_array_) {
+        throw std::runtime_error("Array already exchanged");
+    }
+    original_array_ = std::move(array_);
+    array_ = std::move(new_array);
+    current_dtype = array_->dtype();
+}
+
+void Operand::restore_original_array() {
+    if (!original_array_) {
+        throw std::runtime_error("No original array to restore");
+    }
+    array_ = std::move(*original_array_);
+    original_array_.reset();
+    current_dtype = array_->dtype();
+}
+
+bool Operand::has_exchanged() const {
+    return original_array_.has_value();
+}
+
+
+// ======================= Array Iterator Config =======================
+ArrayIteratorConfig& ArrayIteratorConfig::add_borrowed_output(const NDArray& output) {
+    arrays_.push_back(detail::MaybeOwned<NDArray>::borrowed(output));
+    num_outputs_++;
+    return *this;
+}
+
+ArrayIteratorConfig& ArrayIteratorConfig::add_borrowed_input(const NDArray& input) {
+    arrays_.push_back(detail::MaybeOwned<NDArray>::borrowed(input));
     num_inputs_++;
     return *this;
 }
 
-ArrayIteratorConfig& ArrayIteratorConfig::add_output(const NDArray& output) {
-    arrays_.push_back(&output);
+ArrayIteratorConfig& ArrayIteratorConfig::add_owned_output(const NDArray& output) {
+    arrays_.push_back(detail::MaybeOwned<NDArray>::owned(output));
     num_outputs_++;
+    return *this;
+}
+
+ArrayIteratorConfig& ArrayIteratorConfig::add_owned_input(const NDArray& input) {
+    arrays_.push_back(detail::MaybeOwned<NDArray>::owned(input));
+    num_inputs_++;
+    return *this;
+}
+
+ArrayIteratorConfig& ArrayIteratorConfig::add_owned_output(NDArray&& output) {
+    arrays_.push_back(detail::MaybeOwned<NDArray>::owned(std::move(output)));
+    num_outputs_++;
+    return *this;
+}
+
+ArrayIteratorConfig& ArrayIteratorConfig::add_owned_input(NDArray&& input) {
+    arrays_.push_back(detail::MaybeOwned<NDArray>::owned(std::move(input)));
+    num_inputs_++;
     return *this;
 }
 
@@ -62,7 +112,7 @@ Dtype ArrayIterator::common_dtype() const {
     return common_dtype_;
 }
 
-void ArrayIterator::build(const ArrayIteratorConfig& config) {
+void ArrayIterator::build(ArrayIteratorConfig& config) {
     // Fill in operands_ based on configuration
     populate_operands(config);
     // Compute the broadcasted shape
@@ -80,29 +130,30 @@ void ArrayIterator::build(const ArrayIteratorConfig& config) {
     coalesce_dimensions();
 }
 
-void ArrayIterator::populate_operands(const ArrayIteratorConfig& config) {
+void ArrayIterator::populate_operands(ArrayIteratorConfig& config) {
     num_outputs_ = config.num_outputs_;
     size_t num_operands = config.arrays_.size();
     
     for (size_t idx = 0; idx < num_operands; idx++) {
-        const NDArray* arr = config.arrays_[idx];
-        operands_.emplace_back(arr);
+        auto& arr = config.arrays_[idx];
+        operands_.emplace_back(std::move(arr));
         
         // check if tensor is an output
         if (idx >= num_outputs_) continue;
         
         // mark tensor as output
         operands_[idx].is_output = true;
-        // const auto& output = arr(idx);
-        // if (!output.defined()) continue;
+        const NDArray& output = operands_[idx].array();
+        if (!output.defined()) continue;
 
-        // for (int inp_idx = num_outputs_; inp_idx < num_operands; inp_idx++)) {
-        //     const auto& input = arr(inp_idx);
-        //     if (output.is_same(input)) {
-        //         operands_[idx].is_read_write = true;
-        //         break;
-        //     }
-        // }
+        // check if output is also an input
+        for (size_t inp_idx = num_outputs_; inp_idx < num_operands; inp_idx++) {
+            const NDArray& input = *config.arrays_[inp_idx];
+            if (output.is_same(input)) {
+                operands_[idx].is_read_write = true;
+                break;
+            }
+        }
     }
 }
 
@@ -111,7 +162,7 @@ void ArrayIterator::compute_shape() {
     bool has_scalars = false;
     bool has_arrays = false;
     for (Operand& op: operands_) {
-        //if (!op.array().defined()) continue;
+        if (!op.array().defined()) continue;
         
         if (op.is_output) continue;
         
@@ -133,31 +184,65 @@ void ArrayIterator::compute_shape() {
 }
 
 void ArrayIterator::compute_types() {
-    for (Operand& op: operands_) {
-        if (common_dtype_ != dtypes::Undefined && common_dtype_ != op.target_dtype) {
-            throw std::runtime_error("Arrays must have the same dtype");
-        } else if (common_dtype_ == dtypes::Undefined) {
-            common_dtype_ = op.target_dtype;
+    bool has_different_input_dtypes = false;
+    bool has_undefined_outputs = false;
+    Dtype first_input_dtype = dtypes::Undefined;
+    
+    for (const auto& op : operands_) {
+        // Validate inputs are defined
+        if (!op.is_output) {
+            if (!op.array().defined()) {
+                throw std::runtime_error("Found undefined input array");
+            }
+            
+            if (first_input_dtype == dtypes::Undefined) {
+                first_input_dtype = op.current_dtype;
+            } else if (op.current_dtype != first_input_dtype) {
+                has_different_input_dtypes = true;
+            }
+        }
+        
+        // Check for undefined outputs
+        if (op.is_output && !op.array().defined()) {
+            has_undefined_outputs = true;
         }
     }
-
-    // Reviews operands (1/2)
-    //   - validates that all input tensors are defined
-    //   - computes common device
-    //   - determines if there are undefined outputs
-    //   - determines if there are different dtypes and attempts
-    //       to quickly acquire a common dtype
-
-    // Reviews operands (2/2)
-    //   - sets metadata for undefined outputs
-    //   - checks that all tensors are on the same device, if requested
-    //   - checks that the common dtype can safely cast to each output, if requested
-    //   - creates temporaries for CPU operations, if needed and requested
+    
+    // 1. Compute common dtype from inputs
+    Dtype common_dtype = dtypes::Undefined;
+    
+    for (auto& op : operands_) {
+        if (op.is_output) continue;
+        
+        if (common_dtype == dtypes::Undefined) {
+            common_dtype = op.current_dtype;
+        } else if (op.current_dtype != common_dtype) {
+            common_dtype = promote_types(common_dtype, op.current_dtype);
+        }
+    }
+    
+    common_dtype_ = common_dtype;
+    
+    // 2. Promote inputs (creates temporary copies)
+    for (auto& op : operands_) {
+        if (!op.is_output && op.current_dtype != common_dtype_) {
+            op.exchange_array(
+                detail::MaybeOwned<NDArray>::owned(op.array().to(common_dtype_))
+            );
+        }
+    }
+    
+    // 3. Set output dtype if undefined
+    for (auto& op : operands_) {
+        if (op.is_output && !op.array().defined()) {
+            op.target_dtype = common_dtype_;
+        }
+    }
 }
 
 void ArrayIterator::compute_strides() {
     for (Operand& op: operands_) {
-        // if (!op.array().defined()) continue;
+        if (!op.array().defined()) continue;
 
         const IntArray& original_shape = op.array().shape();
         const IntArray& original_stride = op.array().strides();
@@ -362,6 +447,9 @@ void ArrayIterator::print_state(std::ostream& os) const {
         os << "operand " << op;
         if (operand.is_output) os << " (output)";
         else os << " (input)";
+        os << "\n";
+
+        os << "  is_read_write=" << operand.is_read_write? "true": "false";
         os << "\n";
 
         os << "  original shape: [";

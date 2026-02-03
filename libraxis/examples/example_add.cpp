@@ -16,9 +16,9 @@ namespace dtypes = raxis::dtypes;
 int main() {
     spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
 
-    raxis::set_default_dtype(dtypes::Float32);
+    raxis::set_default_dtype(dtypes::Int64);
     NDArray arr1 = raxis::full({400, 400}, 3);
-    NDArray arr2 = raxis::full({400, 400}, 5);
+    NDArray arr2 = raxis::full({400, 400}, 5, dtypes::Float32);
 
     spdlog::info("arr1: {}\n", arr1);
     spdlog::info("arr2: {}\n", arr2);
