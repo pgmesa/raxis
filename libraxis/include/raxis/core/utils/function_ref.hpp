@@ -1,6 +1,6 @@
 #pragma once
 
-namespace raxis {
+namespace raxis::detail {
 
 // Simple function_ref implementation
 template <typename Signature>
