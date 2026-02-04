@@ -65,6 +65,9 @@ public:
 
     // Operators
     NDArray operator+(const NDArray& other) const;
+    NDArray operator-(const NDArray& other) const;
+    NDArray operator*(const NDArray& other) const;
+    NDArray operator/(const NDArray& other) const;
 
 private:
     std::shared_ptr<ArrayImpl> impl_;

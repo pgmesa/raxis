@@ -93,6 +93,19 @@ PYBIND11_MODULE(_C, c) {
         // Reverse operations
         //.def("__radd__", py::overload_cast<const raxis::NDArray&>(&raxis::add, py::const_), py::arg("other"))
         // .def("__radd__", py::overload_cast<double>(&raxis::NDArray::add, py::const_), py::arg("other"))
+        
+        .def("__sub__", [](const raxis::NDArray& self, const raxis::NDArray& other) {
+            return raxis::sub(self, other);
+        }, py::arg("other"))
+
+        .def("__mul__", [](const raxis::NDArray& self, const raxis::NDArray& other) {
+            return raxis::mul(self, other);
+        }, py::arg("other"))
+
+        .def("__truediv__", [](const raxis::NDArray& self, const raxis::NDArray& other) {
+            return raxis::div(self, other);
+        }, py::arg("other"))
+
         ;
     
     // Initializers

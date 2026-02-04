@@ -71,6 +71,10 @@ constexpr bool dtype_is_integral(DtypeKind kind, bool include_bool = false) {
            kind == DtypeKind::Int64;
 }
 
+constexpr bool dtype_is_bool(DtypeKind kind) {
+    return kind == DtypeKind::Bool;
+}
+
 constexpr bool dtype_is_signed(DtypeKind kind) {
     return kind == DtypeKind::Int32 || 
            kind == DtypeKind::Int64 ||
@@ -98,6 +102,7 @@ public:
     constexpr bool is_integral(bool include_bool = false) const {
         return dtype_is_integral(kind_, include_bool);
     }
+    constexpr bool is_bool() const { return dtype_is_bool(kind_); }
     constexpr bool is_signed() const { return dtype_is_signed(kind_); }
     
     constexpr bool operator==(Dtype other) const { return kind_ == other.kind_; }
@@ -125,7 +130,7 @@ public:
     
     // Runtime type dispatch
     template<typename Func>
-    auto dispatch(Func&& func) const {
+    auto dispatch_all_types(Func&& func) const {
         switch (kind_) {
             case DtypeKind::Bool:
                 return func(std::type_identity<bool>{});
@@ -145,7 +150,19 @@ public:
                 throw std::runtime_error("Cannot dispatch undefined dtype");
         }
     }
-    
+
+    template<typename Func>
+    auto dispatch_floating_types(Func&& func) const {
+        switch (kind_) {
+            case DtypeKind::Float32:
+                return func(std::type_identity<float32>{});
+            case DtypeKind::Float64:
+                return func(std::type_identity<float64>{});
+            default:
+                throw std::runtime_error("Cannot dispatch '" + dtype_name(kind_) + "' dtype");
+        }
+    }
+
     // Utility: fill buffer with value
     void fill(void* data, size_t n, double value) const;
     
@@ -223,16 +240,19 @@ constexpr Dtype promote_types(Dtype a, Dtype b) {
     return Dtype(result);
 }
 
-// Check if cast is safe (no precision/range loss)
 constexpr bool can_cast(Dtype from, Dtype to) {
-    if (from == to) return true;
+    // Disallow float -> integral, e.g., int_array *= float is disallowed.
+    if (from.is_floating() && to.is_integral(false)) {
+        return false;
+    }
 
-    if (!from.defined()) return false;
-    
-    // Promotion is always safe
-    return promote_types(from, to) == to;
+    // Disallow `bool_array += 5`
+    if (!from.is_bool() && to.is_bool()) {
+        return false;
+    }
+
+    return true;
 }
-
 
 namespace raxis::test {
     // Verify promotion rules at compile-time
@@ -252,6 +272,10 @@ namespace raxis::test {
 // ============================================================================
 // Default dtype management
 // ============================================================================
+
+constexpr Dtype default_float_dtype() {
+    return dtypes::Float32;
+}
 
 RAXIS_API Dtype default_dtype();
 RAXIS_API void set_default_dtype(Dtype dtype);

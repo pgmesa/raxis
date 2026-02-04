@@ -58,10 +58,10 @@ NDArray NDArray::to(Dtype new_dtype) const {
     NDArray result = empty(impl_->shape(), new_dtype);
     
     // Dispatch on source and dest types to do conversion
-    curr_dtype.dispatch([&]<typename src_T>(std::type_identity<src_T>) {
+    curr_dtype.dispatch_all_types([&]<typename src_T>(std::type_identity<src_T>) {
         const src_T* src_ptr = data_ptr<src_T>();
         
-        new_dtype.dispatch([&]<typename dest_T>(std::type_identity<dest_T>) {
+        new_dtype.dispatch_all_types([&]<typename dest_T>(std::type_identity<dest_T>) {
             dest_T* dst_ptr = result.mutable_data_ptr<dest_T>();
             
             // Simple element-wise conversion
@@ -77,6 +77,18 @@ NDArray NDArray::to(Dtype new_dtype) const {
 // Operators
 NDArray NDArray::operator+(const NDArray& other) const {
     return add(*this, other);
+}
+
+NDArray NDArray::operator-(const NDArray& other) const {
+    return sub(*this, other);
+}
+
+NDArray NDArray::operator*(const NDArray& other) const {
+    return mul(*this, other);
+}
+
+NDArray NDArray::operator/(const NDArray& other) const {
+    return div(*this, other);
 }
 
 }
