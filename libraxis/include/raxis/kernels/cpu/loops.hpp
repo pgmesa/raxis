@@ -1,22 +1,95 @@
 #pragma once
 
-#include <raxis/core/array_iterator.hpp>
+#include <stdexcept>
+#include <type_traits>
 
+#include <raxis/core/array_iterator.hpp>
+#include <raxis/core/utils/function_traits.hpp>
 
 namespace raxis::kernels::cpu {
 
-// For now, cpu_kernel is aware of the type directly and only 2 inputs and 1 output supported
-template <typename scalar_t, typename func_t>
-void cpu_kernel(const ArrayIterator& iter, func_t&& op) {
+template <typename T>
+inline T load(const void* ptr) {
+    return *reinterpret_cast<const T*>(ptr);
+}
+
+// Dereference implementation
+template <typename traits, std::size_t... INDEX>
+typename traits::ArgsTuple
+dereference_impl(
+    char* const* data,
+    const int64_t* strides,
+    int64_t i,
+    std::index_sequence<INDEX...>
+) {
+    return std::make_tuple(
+        load<typename traits::template arg<INDEX>::type>(
+            data[INDEX] + i * strides[INDEX]
+        )...
+    );
+}
+
+// Dereference: loads all function arguments from memory
+template <typename traits>
+typename traits::ArgsTuple
+dereference(
+    char* const* data,
+    const int64_t* strides,
+    int64_t i
+) {
+    using Indices = std::make_index_sequence<traits::arity>;
+    return dereference_impl<traits>(data, strides, i, Indices{});
+}
+
+// Execute operation: version with return value
+template <typename func_t,
+    std::enable_if_t<!std::is_void_v<typename function_traits<func_t>::result_type>>* = nullptr>
+inline void execute_op(
+    char** data,
+    const int64_t* strides,
+    int64_t i,
+    int64_t n,
+    func_t&& op
+) {
+    using traits = function_traits<func_t>;
+    using result_type = typename traits::result_type;
+    
+    for (; i < n; i++) {
+        result_type* out_ptr = reinterpret_cast<result_type*>(data[0] + i * strides[0]);
+        *out_ptr = std::apply(op, dereference<traits>(&data[1], &strides[1], i));
+    }
+}
+
+// Execute operation: version for void
+template <typename func_t,
+    std::enable_if_t<std::is_void_v<typename function_traits<func_t>::result_type>>* = nullptr>
+inline void execute_op(
+    char** data,
+    const int64_t* strides,
+    int64_t i,
+    int64_t n,
+    func_t&& op
+) {
+    using traits = function_traits<func_t>;
+    
+    for (; i < n; i++) {
+        std::apply(op, dereference<traits>(&data[0], &strides[0], i));
+    }
+}
+
+template <typename func_t>
+void cpu_kernel(ArrayIterator& iter, func_t&& op, int64_t grain_size = internal::GRAIN_SIZE) {
+    using traits = function_traits<func_t>;
+
+    if (iter.num_outputs() != 1) {
+        throw std::runtime_error("cpu_kernel needs num_outputs == 1");
+    }
+    
     iter.for_each([&](char** data, const int64_t* strides, int64_t size) {
-        for (int64_t i = 0; i < size; i++) {
-            scalar_t* out_ptr = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
-            scalar_t* in1_ptr = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
-            scalar_t* in2_ptr = reinterpret_cast<scalar_t*>(data[2] + i * strides[2]);
-            
-            *out_ptr = op(*in1_ptr, *in2_ptr);
-        }
-    });
+        // Process 1D slices. This is all that iter.for_each is ever sending to the loop lambda
+        execute_op(data, strides, 0, size, op);
+    }, grain_size);
+    iter.cast_outputs();
 }
 
 }

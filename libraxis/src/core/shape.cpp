@@ -20,6 +20,21 @@ int64_t compute_numel(const IntArray& shape) noexcept {
     return n;
 }
 
+// Shape: (3, 4), Strides: (8, 2)
+// Memory needed: max element offset + 1
+// = (3-1)*8 + (4-1)*2 + 1 = 16 + 6 + 1 = 23 elements
+int64_t compute_numel_from_strides(const IntArray& shape, const IntArray& strides) {
+    if (shape.empty()) return 0;
+    
+    int64_t max_offset = 0;
+    for (size_t i = 0; i < shape.size(); ++i) {
+        if (shape[i] > 1) {  // size 1 dimensions don't contribute
+            max_offset += (shape[i] - 1) * strides[i];
+        }
+    }
+    return max_offset + 1;
+}
+
 IntArray compute_strides(const IntArray& shape) {
     IntArray strides(shape.size());
     

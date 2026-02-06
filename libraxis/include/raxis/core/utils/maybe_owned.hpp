@@ -8,7 +8,16 @@ namespace raxis::detail {
 template<typename T>
 class MaybeOwned {
 public:
+    MaybeOwned() : ptr_(nullptr), owned_(false) {}
+    ~MaybeOwned() = default;
 
+    /// Don't use this; use borrowed() instead
+    /// Creates a shallow copy - both point to same data
+    MaybeOwned(const MaybeOwned& other) 
+        : ptr_(other.ptr_), owned_(false) {  // Always borrowed after copy!
+    }
+
+    /// Don't use this; use owned() instead.
     MaybeOwned(MaybeOwned&& other) noexcept
         : storage_(std::move(other.storage_)), owned_(other.owned_) {
         if (owned_) {
@@ -17,6 +26,15 @@ public:
             ptr_ = other.ptr_;
         }
         other.ptr_ = nullptr;
+    }
+
+    MaybeOwned& operator=(const MaybeOwned& other) {
+        if (this != &other) {
+            storage_.reset();  // Drop our owned storage if any
+            ptr_ = other.ptr_;
+            owned_ = false;  // Copy becomes a borrow
+        }
+        return *this;
     }
     
     MaybeOwned& operator=(MaybeOwned&& other) noexcept {
@@ -33,9 +51,6 @@ public:
         }
         return *this;
     }
-    
-    MaybeOwned() : ptr_(nullptr), owned_(false) {}
-    ~MaybeOwned() = default;
 
     // Borrowed - doesn't increment ref count
     static MaybeOwned borrowed(const T& ref) {

@@ -31,6 +31,12 @@ RAXIS_API NDArray empty(
     Dtype dtype = default_dtype()
 );
 
+RAXIS_API NDArray empty_strided(
+    const IntArray& shape,
+    const IntArray& strides,
+    Dtype dtype = default_dtype()
+);
+
 RAXIS_API NDArray full(
     const IntArray& shape, 
     double value, 

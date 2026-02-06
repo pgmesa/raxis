@@ -159,7 +159,10 @@ public:
             case DtypeKind::Float64:
                 return func(std::type_identity<float64>{});
             default:
-                throw std::runtime_error("Cannot dispatch '" + dtype_name(kind_) + "' dtype");
+                std::string msg = "Cannot float dispatch '";
+                msg += dtype_name(kind_);
+                msg += "' dtype";
+                throw std::runtime_error(msg);
         }
     }
 
@@ -181,10 +184,27 @@ inline static constexpr Dtype Float32   = Dtype(DtypeKind::Float32);
 inline static constexpr Dtype Float64   = Dtype(DtypeKind::Float64);
 }
 
-
 // Ensure it's tiny and efficient
 static_assert(sizeof(Dtype) == 1, "Dtype must be 1 byte");
 static_assert(std::is_trivially_copyable_v<Dtype>, "Dtype must be trivially copyable");
+
+inline Dtype parse_dtype(const std::string& name) {
+    // Normalize: trim + lowercase
+    std::string normalized = name;
+    std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    
+    // Simple lookup
+    if (normalized == "bool")                          return dtypes::Bool;
+    if (normalized == "uint8" || normalized == "u1")   return dtypes::Uint8;
+    if (normalized == "uint16" || normalized == "u2")  return dtypes::Uint16;
+    if (normalized == "int32" || normalized == "i4")   return dtypes::Int32;
+    if (normalized == "int64" || normalized == "i8")   return dtypes::Int64;
+    if (normalized == "float32" || normalized == "f4") return dtypes::Float32;
+    if (normalized == "float64" || normalized == "f8") return dtypes::Float64;
+    
+    throw std::invalid_argument("Unknown dtype: '" + name + "'");
+}
 
 // ============================================================================
 // Type promotion (NumPy-style rules)

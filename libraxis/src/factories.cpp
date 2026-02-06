@@ -47,6 +47,30 @@ NDArray empty(const IntArray& shape, Dtype dtype) {
     return NDArray(std::move(impl));
 }
 
+NDArray empty_strided(const IntArray& shape, const IntArray& strides, Dtype dtype) {
+    // Validate shapes and strides match
+    if (shape.size() != strides.size()) {
+        throw std::invalid_argument(
+            "Shape and strides must have the same number of dimensions"
+        );
+    }
+    
+    // Compute required memory based on shape and strides
+    size_t n = compute_numel_from_strides(shape, strides);
+    
+    detail::UniqueVoidPtr ptr;
+    if (n > 0) {
+        void* data = std::malloc(n * dtype.itemsize());
+        if (!data) {
+            throw std::bad_alloc();
+        }
+        ptr = detail::UniqueVoidPtr(data, data, &std::free);
+    }
+    
+    auto impl = std::make_shared<ArrayImpl>(std::move(ptr), shape, dtype, strides);
+    return NDArray(std::move(impl));
+}
+
 NDArray full(const IntArray& shape, double value, Dtype dtype) {  
     NDArray out = empty(shape, dtype);
     size_t n = static_cast<size_t>(out.numel());

@@ -4,9 +4,12 @@
 #include <ostream>
 #include <stdexcept>
 #include <type_traits>
-#include <cassert>
+#include <numeric>
+
+#include <fmt/format.h>
 
 #include <raxis/array.hpp>
+#include <raxis/factories.hpp>
 #include <raxis/core/shape.hpp>
 #include <raxis/core/utils/range.hpp>
 #include <raxis/core/utils/dim_counter.hpp>
@@ -16,13 +19,20 @@
 
 namespace raxis {
 
+void Operand::set_array(detail::MaybeOwned<NDArray>&& new_array) {
+    if (original_array_) {
+        throw std::runtime_error("Cannot set array on an exchanged array");
+    }
+
+    array_ = std::move(new_array);
+}
+
 void Operand::exchange_array(detail::MaybeOwned<NDArray>&& new_array) {
     if (original_array_) {
         throw std::runtime_error("Array already exchanged");
-    }
+    } 
     original_array_ = std::move(array_);
     array_ = std::move(new_array);
-    current_dtype = array_->dtype();
 }
 
 void Operand::restore_original_array() {
@@ -31,11 +41,14 @@ void Operand::restore_original_array() {
     }
     array_ = std::move(*original_array_);
     original_array_.reset();
-    current_dtype = array_->dtype();
 }
 
 bool Operand::has_exchanged() const {
     return original_array_.has_value();
+}
+
+bool Operand::is_type_defined() const {
+    return target_dtype != dtypes::Undefined;
 }
 
 
@@ -76,11 +89,6 @@ ArrayIteratorConfig& ArrayIteratorConfig::add_owned_input(NDArray&& input) {
     return *this;
 }
 
-ArrayIteratorConfig& ArrayIteratorConfig::is_reduction(bool is_reduction) {
-    is_reduction_ = is_reduction;
-    return *this;
-}
-
 ArrayIterator ArrayIteratorConfig::build() {
     ArrayIterator iter;
     iter.build(*this);
@@ -88,44 +96,37 @@ ArrayIterator ArrayIteratorConfig::build() {
 }
 
 // ========================== Array Iterator ==========================
-int ArrayIterator::ndim() const {
-    return static_cast<int>(shape_.size());
-}
+void ArrayIterator::cast_outputs() {
+    for (int out_idx = 0; out_idx < num_outputs_; out_idx++) {
+        Operand& op = operands_[out_idx];
+        if (!op.has_exchanged()) continue;
+        
+        const NDArray& original_array = op.original_array();
+        const NDArray& array = op.array();
 
-int64_t ArrayIterator::numel() const {
-    return compute_numel(shape_);
-}
-
-int ArrayIterator::num_inputs() const {
-    return num_operands() - num_outputs_;
-}
-
-int ArrayIterator::num_outputs() const {
-    return num_outputs_;
-}
-
-int ArrayIterator::num_operands() const {
-    return static_cast<int>(operands_.size());
-}
-
-Dtype ArrayIterator::common_dtype() const {
-    return common_dtype_;
+        original_array.copy_(array);
+        op.restore_original_array();
+    }
 }
 
 void ArrayIterator::build(ArrayIteratorConfig& config) {
+    // Populate some persistent configuration fields
+    is_reduction_ = config.is_reduction_;
+    enforce_linear_iteration_ = config.enforce_linear_iteration_;
+
     // Fill in operands_ based on configuration
     populate_operands(config);
     // Compute the broadcasted shape
-    compute_shape();
+    compute_shape(config);
     // Compute the result dtype and device
-    compute_types();
+    compute_types(config);
     // Compute each array's stride after broadcasting
-    compute_strides();
+    compute_strides(config);
 
     // Re-order dimensions to improve coalescing
     reorder_dimensions();
     // Allocate the output array if it's not provided
-    allocate_or_resize_outputs();
+    allocate_outputs();
     // Coalesce adjacent dimensions when possible
     coalesce_dimensions();
 }
@@ -157,13 +158,19 @@ void ArrayIterator::populate_operands(ArrayIteratorConfig& config) {
     }
 }
 
-void ArrayIterator::compute_shape() {
+void ArrayIterator::compute_shape(const ArrayIteratorConfig& config) {
+    if (config.static_shape_.has_value()) {
+        shape_ = config.static_shape_.value();
+        return;
+    }
+
     all_ops_same_shape_ = true;
     bool has_scalars = false;
     bool has_arrays = false;
     for (Operand& op: operands_) {
         if (!op.array().defined()) continue;
         
+        // Outputs don't participate in shape computation
         if (op.is_output) continue;
         
         IntArray shape = op.array().shape();
@@ -181,70 +188,21 @@ void ArrayIterator::compute_shape() {
         }
     }
     all_ops_are_scalars_ = !has_arrays;
-}
 
-void ArrayIterator::compute_types() {
-    bool has_different_input_dtypes = false;
-    bool has_undefined_outputs = false;
-    Dtype first_input_dtype = dtypes::Undefined;
-    
-    for (const auto& op : operands_) {
-        // Validate inputs are defined
-        if (!op.is_output) {
-            if (!op.array().defined()) {
-                throw std::runtime_error("Found undefined input array");
-            }
-            
-            if (first_input_dtype == dtypes::Undefined) {
-                first_input_dtype = op.current_dtype;
-            } else if (op.current_dtype != first_input_dtype) {
-                has_different_input_dtypes = true;
-            }
-        }
-        
-        // Check for undefined outputs
-        if (op.is_output && !op.array().defined()) {
-            has_undefined_outputs = true;
-        }
-    }
-    
-    // 1. Compute common dtype from inputs
-    Dtype common_dtype = dtypes::Undefined;
-    
-    for (auto& op : operands_) {
-        if (op.is_output) continue;
-        
-        if (common_dtype == dtypes::Undefined) {
-            common_dtype = op.current_dtype;
-        } else if (op.current_dtype != common_dtype) {
-            common_dtype = promote_types(common_dtype, op.current_dtype);
-        }
-    }
-    
-    common_dtype_ = common_dtype;
-    
-    // 2. Promote inputs (creates temporary copies)
-    for (auto& op : operands_) {
-        if (!op.is_output && op.current_dtype != common_dtype_) {
-            op.exchange_array(
-                detail::MaybeOwned<NDArray>::owned(op.array().to(common_dtype_))
-            );
-        }
-    }
-    
-    // 3. Set output dtype if undefined
-    for (auto& op : operands_) {
-        if (op.is_output && !op.array().defined()) {
-            op.target_dtype = common_dtype_;
+    // Ensure defined outputs have the correct shape
+    for (size_t i = 0; i < num_outputs_; i++) {
+        const NDArray& output = operands_[i].array();
+        if (output.defined() && (output.shape() != shape_) && !is_reduction_) {
+            throw std::runtime_error("Invalid shape encountered in output");
         }
     }
 }
 
-void ArrayIterator::compute_strides() {
+void ArrayIterator::compute_strides(const ArrayIteratorConfig& config) {
     for (Operand& op: operands_) {
         if (!op.array().defined()) continue;
 
-        const IntArray& original_shape = op.array().shape();
+        const IntArray& original_shape = config.static_shape_? shape_ : op.array().shape();
         const IntArray& original_stride = op.array().strides();
         int64_t itemsize = static_cast<int64_t>(op.array().dtype().itemsize());
         
@@ -268,16 +226,326 @@ void ArrayIterator::compute_strides() {
     }
 }
 
-void ArrayIterator::reorder_dimensions() {
-    std::reverse(shape_.begin(), shape_.end());
+void ArrayIterator::compute_types(const ArrayIteratorConfig& config) {
+    // Reviews operands (1/2)
+    //   - validates that all input arrays are defined
+    //   - computes common device
+    //   - determines if there are undefined outputs
+    //   - determines if there are different dtypes and attempts
+    //       to quickly acquire a common dtype
+    common_dtype_ = dtypes::Undefined;
+    Dtype output_dtype = dtypes::Undefined;
+    bool has_different_input_dtypes = false;
+    bool has_different_output_dtypes = false;
+    bool has_undefined_outputs = false;
+    
+    for (auto& op : operands_) {
+        if (!op.is_type_defined()) {
+            if (!op.is_output) {
+                throw std::runtime_error("Found type undefined input array");
+            }
 
-    for (Operand& op: operands_) {
-        if (op.stride_bytes.empty()) continue;
-        std::reverse(op.stride_bytes.begin(), op.stride_bytes.end());
+            if (config.static_dtype_.has_value()) {
+                op.target_dtype = config.static_dtype_.value();
+            } else {
+                has_undefined_outputs = true;
+            }
+
+            if (has_undefined_outputs) {
+                continue;
+            }
+        }
+
+        // Validate type defined arrays are defined
+        if (!op.array().defined()) {
+            throw std::runtime_error("Found undefined input array");
+        }
+
+        if (!op.is_output) {
+            // Determines if there are varying input dtypes
+            // NOTE: the common dtype is set to the first defined input dtype observed
+            if (op.target_dtype != common_dtype_) {
+                if (common_dtype_ == dtypes::Undefined) {
+                    common_dtype_ = op.target_dtype;
+                } else {
+                    has_different_input_dtypes = true;
+                }
+            }
+        } else { // op.is_output = true
+            // Determines if there are varying output dtypes
+            // NOTE: the output dtype is set to the first defined output dtype observed
+            if (op.target_dtype != output_dtype) {
+                if (output_dtype == dtypes::Undefined) {
+                    output_dtype = op.target_dtype;
+                } else {
+                    has_different_output_dtypes = true;
+                }
+            }
+        }
+    }
+
+    // Checks that all inputs and defined outputs are the same dtype, if requested
+    if (config.check_all_same_dtype_ &&
+        (has_different_input_dtypes || has_different_output_dtypes ||
+        (common_dtype_ != output_dtype && output_dtype != dtypes::Undefined))) {
+        // Throws an informative error message
+        for (auto& op : operands_) {
+            if (!op.array().defined()) {
+                continue;
+            }
+            if (op.target_dtype != common_dtype_) {
+                std::string msg = fmt::format(
+                    "Found dtype {} but expected {}", 
+                    op.target_dtype.name(), common_dtype_.name()
+                );
+                throw std::runtime_error(msg);
+            }
+        }
+    }
+
+    // Short-circuits if no additional work required
+    if (!has_undefined_outputs &&
+        !config.promote_inputs_to_common_dtype_ && !config.cast_common_dtype_to_outputs_ &&
+        !config.enforce_safe_casting_to_output_) {
+        // Invalidates common_dtype_ if it could not be inferred
+        common_dtype_ = has_different_input_dtypes ? dtypes::Undefined : common_dtype_;
+        return;
+    }
+    
+    // Computes a common dtype, if needed
+    if ((has_different_input_dtypes || all_ops_are_scalars_) && config.promote_inputs_to_common_dtype_) {
+        common_dtype_ = compute_common_dtype(common_dtype_);
+    }
+
+    // Promotes common dtype to the default float scalar type, if needed
+    if (config.promote_integer_inputs_to_float_ && common_dtype_.is_integral(/*include_bool=*/true)) {
+        common_dtype_ = default_float_dtype();
+    }
+    
+    // Reviews operands (2/2)
+    //   - sets metadata for undefined outputs
+    //   - checks that all arrays are on the same device, if requested
+    //   - checks that the common dtype can safely cast to each output, if requested
+    //   - creates temporaries for CPU operations, if needed and requested
+    for (auto& op : operands_) {
+        bool is_type_defined = op.is_type_defined();
+
+        if (!is_type_defined) {
+            op.target_dtype = common_dtype_;
+        }
+
+        // Skips undefined arrays
+        if (!op.array().defined()) continue;
+
+        // Checks safe casting, if requested
+        if (config.enforce_safe_casting_to_output_ && op.is_output && op.current_dtype != common_dtype_) {
+            if (!can_cast(common_dtype_, op.current_dtype)) {
+                std::string msg = fmt::format(
+                    "result type {} can't be cast to the {} desired output type ", 
+                    common_dtype_.name(), op.current_dtype.name()
+                );
+                throw std::runtime_error(msg);
+            }
+        }
+
+        // Creates temporaries for CPU operations, if needed and requested
+        // TODO: if (common_device == CPU) {
+        if (config.cast_common_dtype_to_outputs_ && op.is_output && op.current_dtype != common_dtype_) {
+            op.exchange_array(detail::MaybeOwned<NDArray>::owned(
+                empty(op.array().shape(), common_dtype_)
+            ));
+            op.current_dtype = common_dtype_;
+            op.target_dtype = common_dtype_;
+        }
+        // }
+
+        // Promotes inputs by creating temporaries of the correct dtype
+        if (config.promote_inputs_to_common_dtype_ && !op.is_output && op.current_dtype != common_dtype_) {
+            op.exchange_array(detail::MaybeOwned<NDArray>::owned(op.array().to(common_dtype_)));
+            op.current_dtype = common_dtype_;
+            op.target_dtype = common_dtype_;
+        }
     }
 }
 
-void ArrayIterator::allocate_or_resize_outputs() {}
+Dtype ArrayIterator::compute_common_dtype(Dtype base_dtype) {
+    Dtype common_dtype = base_dtype;
+    for (auto& op : operands_) {
+        if (op.is_output) continue;
+        
+        if (op.current_dtype != common_dtype) {
+            common_dtype = promote_types(common_dtype, op.current_dtype);
+        }
+    }
+    return common_dtype;
+}
+
+void ArrayIterator::permute_dimensions(const IntArray& perm) {
+    auto reorder = [perm](const IntArray& data) {
+        IntArray res(data.size(), 0);
+        for (size_t dim = 0; dim < perm.size(); dim++) {
+            res[dim] = data[perm[dim]];
+        }
+        return res;
+    };
+
+    // Update shape and strides
+    shape_ = reorder(shape_);
+    for (auto& op : operands_) {
+        if (!op.stride_bytes.empty()) {
+            op.stride_bytes = reorder(op.stride_bytes);
+        }
+    }
+}
+
+void ArrayIterator::reorder_dimensions() {
+    perm_.resize(ndim());
+    if (ndim() == 1) {
+        perm_[0] = 0;
+        return;
+    }
+
+    // initialize perm with n-1, n-2, ..., 1, 0
+    std::iota(perm_.rbegin(), perm_.rend(), 0);
+
+    if (enforce_linear_iteration_) {
+        permute_dimensions(perm_);
+        return;
+    }
+
+    // Returns 1 if the dim0 should come after dim1, -1 if dim0 should come
+    // before dim1, and 0 if the comparison is ambiguous.
+    auto should_swap = [&](size_t dim0, size_t dim1) {
+        for (size_t idx = 0; idx < num_operands(); idx++) {
+            // Ignore undefined
+            if (operands_[idx].stride_bytes.empty()) {
+                continue;
+            }
+            int64_t stride0 = operands_[idx].stride_bytes[dim0];
+            int64_t stride1 = operands_[idx].stride_bytes[dim1];
+            if (is_reduction_ && operands_[idx].is_output) {
+                // move reduced dimensions to the front
+                // strides of reduced dimensions are always set to 0 by review_reduce_result
+                if ((stride0 == 0) != (stride1 == 0)) {
+                    return stride1 == 0 ? 1 : -1;
+                }
+            }
+            // move on to the next input if one of the dimensions is broadcasted
+            if (stride0 == 0 || stride1 == 0) {
+                continue;
+            // it is important to return here only with strict comparisons, for equal strides we try to break the tie later
+            // by comparing corresponding dimensions or if that does not work, moving on to the next tensor
+            } else if (stride0 < stride1) {
+                return -1;
+            } else  if (stride0 > stride1) {
+                return 1;
+            } else { //equal strides, use dimensions themselves as the tie-breaker.
+                //at this point, with zero strides out of the way, we are guaranteed that operand dimensions are equal to shape_
+                auto t_dim0 = shape_[dim0];
+                auto t_dim1 = shape_[dim1];
+                //return only if dimensions should be swapped, otherwise move on to the next tensor
+                if (t_dim0 > t_dim1) {
+                    return 1;
+                }
+            }
+        }
+        return 0;
+    };
+
+    // Insertion sort with support for ambiguous comparisons
+    for (int i = 1; i < ndim(); i++) {
+        int dim1 = i;
+        for (int dim0 = i - 1; dim0 >= 0; dim0--) {
+            int comparison = should_swap(perm_[dim0], perm_[dim1]);
+            if (comparison > 0) {
+                std::swap(perm_[dim0], perm_[dim1]);
+                dim1 = dim0;
+            } else if (comparison < 0) {
+                break;
+            }
+        }
+    }
+
+    // Perform re-ordering of shape and strides
+    permute_dimensions(perm_);
+}
+
+IntArray ArrayIterator::compatible_stride(int64_t element_size) const {
+    IntArray stride;
+    int64_t next_stride = element_size;
+    for (size_t dim = 0; dim < ndim(); dim++) {
+        stride.push_back(next_stride);
+        next_stride *= shape_[dim];
+    }
+    return stride;
+}
+
+IntArray ArrayIterator::invert_perm(const IntArray& input) const {
+    // Invert the permutation caused by reorder_dimensions. This is not valid
+    // after coalesce_dimensions is called.
+    if (has_coalesced_dimensions_) {
+        throw std::runtime_error("coalesce_dimensions() has already been called");
+    }
+
+    if (input.size() != perm_.size()) {
+        throw std::runtime_error("Input size is different from perm_ size");
+    }
+
+    IntArray res(input.size());
+    for (size_t dim = 0; dim < ndim(); dim++) {
+        res[perm_[dim]] = input[dim];
+    }
+    return res;
+}
+
+void ArrayIterator::set_output(int64_t output_idx, const IntArray& shape, const IntArray& strides) {
+    Operand& op = operands_[output_idx];
+    if (op.array().defined()) return;
+    
+    if (strides.empty()) {
+        op.set_array(detail::MaybeOwned<NDArray>::owned(empty(shape, op.target_dtype)));
+    } else {
+        op.set_array(detail::MaybeOwned<NDArray>::owned(empty_strided(shape, strides, op.target_dtype)));
+    }
+
+}
+
+void ArrayIterator::allocate_outputs() {
+    for (int out_idx = 0; out_idx < num_outputs_; out_idx++) {
+        Operand& op = operands_[out_idx];
+        if (op.array().defined()) continue;
+        
+        if (!op.is_type_defined()) {
+            throw std::runtime_error("No type for operand " + out_idx);
+        }
+
+        size_t element_size = op.target_dtype.itemsize();
+        op.stride_bytes = compatible_stride(static_cast<int64_t>(element_size));
+        // check if permutation is just an inverted order
+        bool inverted = true;
+        for (int j = 0; j < ndim(); j++) {
+            if (perm_[j] != ndim() - j - 1) {
+                inverted = false;
+                break;
+            }
+        }
+        auto array_shape = invert_perm(shape_);
+        if (inverted) {
+            // can just return contiguous output
+            // it is faster because it avoids allocating 0 size tensor and
+            // resizing and restriding it
+            set_output(out_idx, array_shape, {});
+        } else {
+            auto array_stride = invert_perm(op.stride_bytes);
+            for (size_t dim = 0; dim < ndim(); dim++) {
+                array_stride[dim] /= static_cast<int64_t>(element_size);
+            }
+            set_output(out_idx, array_shape, array_stride);
+        }
+        
+        op.current_dtype = op.target_dtype;
+    }
+}
 
 void ArrayIterator::coalesce_dimensions() {
     if (ndim() <= 1) return;
@@ -324,6 +592,8 @@ void ArrayIterator::coalesce_dimensions() {
     for (int i = 0; i < num_operands(); i++) {
         operands_[i].stride_bytes.resize(ndim());
     }
+
+    has_coalesced_dimensions_ = true;
 }
 
 void ArrayIterator::for_each(loop2d_t loop, int64_t grain_size) const {
@@ -432,13 +702,23 @@ void ArrayIterator::print_state(std::ostream& os) const {
     os << "numel: " << numel() << "\n";
     os << "num_operands: " << num_operands() << "\n";
     os << "num_outputs: " << num_outputs_ << "\n";
+    os << "common_dtype: " << common_dtype_.name() << "\n";
+    os << "is_reduction: " << (all_ops_same_shape_? "true": "false") << "\n";
+    os << "enforce_linear_iteration: " << (enforce_linear_iteration_? "true": "false") << "\n";
     os << "all_ops_same_shape: " << (all_ops_same_shape_? "true": "false") << "\n";
     os << "all_ops_are_scalars: " << (all_ops_are_scalars_? "true": "false") << "\n";
-
+    
     os << "computational shape: [";
     for (size_t i = 0; i < shape_.size(); ++i) {
         os << shape_[i];
         if (i + 1 < shape_.size()) os << ", ";
+    }
+    os << "]\n";
+
+    os << "permutations: [";
+    for (size_t i = 0; i < perm_.size(); ++i) {
+        os << perm_[i];
+        if (i + 1 < perm_.size()) os << ", ";
     }
     os << "]\n";
 
@@ -467,6 +747,11 @@ void ArrayIterator::print_state(std::ostream& os) const {
             if (i + 1 < strides.size()) os << ", ";
         }
         os << "]\n";
+
+        os << "  current_dtype: " << operand.current_dtype.name();
+        os << "\n";
+        os << "  target_dtype: " << operand.target_dtype.name();
+        os << "\n";
 
         os << "  computational stride_bytes: [";
         for (size_t i = 0; i < operand.stride_bytes.size(); ++i) {
