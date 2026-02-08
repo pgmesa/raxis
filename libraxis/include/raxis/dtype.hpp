@@ -297,6 +297,10 @@ constexpr Dtype default_float_dtype() {
     return dtypes::Float32;
 }
 
+constexpr Dtype default_int_dtype() {
+    return dtypes::Int32;
+}
+
 RAXIS_API Dtype default_dtype();
 RAXIS_API void set_default_dtype(Dtype dtype);
 
