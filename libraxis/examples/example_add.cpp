@@ -4,12 +4,12 @@
 #include <iostream>
 #include <chrono>
 
-#include <raxis/raxis.hpp>
+#include <raxis/raxis.h>
+#include <raxis/format.h>
 
 #include <spdlog/spdlog.h>
-#include <raxis/format/array_fmt.hpp>
 
-using raxis::NDArray;
+using raxis::Tensor;
 namespace dtypes = raxis::dtypes;
 
 
@@ -53,24 +53,24 @@ int main(int argc, char** argv) {
 
     auto cfg = parse_args(argc, argv);
     
-    NDArray arr1 = raxis::full({400, 400}, 3, cfg.dtype1);
-    NDArray arr2 = raxis::full({400, 400}, 5, cfg.dtype2);
+    Tensor t1 = raxis::full({400, 400}, 3, cfg.dtype1);
+    Tensor t2 = raxis::full({400, 400}, 5, cfg.dtype2);
 
-    spdlog::info("arr1: {}\n", arr1);
-    spdlog::info("arr2: {}\n", arr2);
+    spdlog::info("t1: {}\n", t1);
+    spdlog::info("t2: {}\n", t2);
 
-    NDArray arr_from_vec = raxis::array<uint8_t>({1, 2, 3, 4}, {2,2}, dtypes::Uint8);
-    spdlog::info("arr_from_vec: {}\n", arr_from_vec);
+    Tensor tensor_from_vec = raxis::tensor<uint8_t>({1, 2, 3, 4}, {2,2}, dtypes::Uint8);
+    spdlog::info("tensor_from_vec: {}\n", tensor_from_vec);
 
     auto t0 = std::chrono::high_resolution_clock::now();
     
-    NDArray arr3 = arr1 + arr2;
+    Tensor t3 = t1 + t2;
 
     auto tf = std::chrono::high_resolution_clock::now();
     auto elapsed = std::chrono::duration<double, std::milli>(tf - t0);
 
     spdlog::info("Elapsed: {:.2f} ms\n", elapsed.count());
-    spdlog::info("result: {}\n", arr3);
+    spdlog::info("result: {}\n", t3);
 
     return 0;
 }

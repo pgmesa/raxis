@@ -60,13 +60,12 @@ message(STATUS "CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
 find_package(spdlog CONFIG REQUIRED)
 
 # Define project structure
-set(RAXIS_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/include)
-set(RAXIS_SRC_DIR ${PROJECT_SOURCE_DIR}/src)
+set(RAXIS_LIB_DIR ${PROJECT_SOURCE_DIR}/raxis)
 set(RAXIS_BINDINGS_DIR ${PROJECT_SOURCE_DIR}/bindings)
 set(RAXIS_EXAMPLES_DIR ${PROJECT_SOURCE_DIR}/examples)
 
 # Collect source files (excluding bindings)
-file(GLOB_RECURSE RAXIS_SOURCES "${RAXIS_SRC_DIR}/*.cpp")
+file(GLOB_RECURSE RAXIS_SOURCES "${RAXIS_LIB_DIR}/*.cpp")
 
 # Create the core library
 add_library(raxis SHARED ${RAXIS_SOURCES})
@@ -87,7 +86,7 @@ endif()
 # Set include directories
 target_include_directories(raxis
     PUBLIC
-        $<BUILD_INTERFACE:${RAXIS_INCLUDE_DIR}>
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
@@ -132,9 +131,11 @@ if(BUILD_PYTHON_BINDINGS)
         ARCHIVE     DESTINATION ${RAXIS_INSTALL_LIBDIR}   # .lib on Windows, .a on UNIX
     )
 
-    install(DIRECTORY ${RAXIS_INCLUDE_DIR}/
-        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-        FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
+    install(DIRECTORY ${RAXIS_LIB_DIR}/
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/raxis
+        FILES_MATCHING 
+            PATTERN "*.h"
+            PATTERN "detail" EXCLUDE
     )
     # ─────────────────────────────────────────────────────────────────────────────
 
