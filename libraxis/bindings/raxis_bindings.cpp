@@ -28,7 +28,7 @@ PYBIND11_MODULE(_C, c) {
         }
     });
 
-    // Dtype
+    // Dtype binding
     py::class_<raxis::Dtype>(c, "dtype", py::module_local())
         .def_property_readonly("name", &raxis::Dtype::name)
         .def_property_readonly("itemsize", &raxis::Dtype::itemsize)
@@ -52,6 +52,20 @@ PYBIND11_MODULE(_C, c) {
     
     c.def("set_default_dtype", &raxis::set_default_dtype, py::arg("dtype"));
 
+    // Device binding
+    py::class_<raxis::Device>(c, "device", py::module_local())
+        .def(py::init<const std::string&>())
+        .def_property_readonly("type", [](const raxis::Device& d) {
+            return raxis::device_type_name(d.type(), true);
+        })
+        .def_property_readonly("index", &raxis::Device::index)
+        .def("__repr__", &raxis::Device::str)
+        .def("__eq__", &raxis::Device::operator==)
+        .def("__hash__", [](const raxis::Device& d) { });
+
+    // Implicit conversion from str → Device (so device="cuda:0" works)
+    py::implicitly_convertible<std::string, raxis::Device>();
+
     // Tensor
     py::class_<raxis::Tensor>(c, "Tensor")
         .def_property_readonly("shape", [](const raxis::Tensor& self) -> py::tuple {
@@ -67,6 +81,7 @@ PYBIND11_MODULE(_C, c) {
             return py_byte_strides;
         })
         .def_property_readonly("dtype", &raxis::Tensor::dtype, "Data type")
+        .def_property_readonly("device", &raxis::Tensor::device, "Device")
         .def("numel", &raxis::Tensor::numel)
         .def("dim", &raxis::Tensor::ndim)
         .def("numpy", [](py::object self) {
@@ -100,182 +115,188 @@ PYBIND11_MODULE(_C, c) {
         .def("__add__",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::add, py::const_),
             py::arg("other"))
-        // .def("__add__",
-        //     py::overload_cast<double>(&raxis::Tensor::add, py::const_),
-        //     py::arg("other"))
+        .def("__add__",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::add, py::const_),
+            py::arg("other"))
 
         .def("__sub__",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::sub, py::const_),
             py::arg("other"))
-        // .def("__sub__",
-        //     py::overload_cast<double>(&raxis::Tensor::sub, py::const_),
-        //     py::arg("other"))
+        .def("__sub__",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::sub, py::const_),
+            py::arg("other"))
 
         .def("__mul__",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::mul, py::const_),
             py::arg("other"))
-        // .def("__mul__",
-        //     py::overload_cast<double>(&raxis::Tensor::mul, py::const_),
-        //     py::arg("other"))
+        .def("__mul__",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::mul, py::const_),
+            py::arg("other"))
 
         .def("__truediv__",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::div, py::const_),
             py::arg("other"))
-        // .def("__truediv__",
-        //     py::overload_cast<double>(&raxis::Tensor::div, py::const_),
-        //     py::arg("other"))
+        .def("__truediv__",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::div, py::const_),
+            py::arg("other"))
 
-        // In-place ops (must return Tensor&)
+        // In-place ops
         .def("__iadd__",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::add_, py::const_),
             py::arg("other"))
-        // .def("__iadd__",
-        //     py::overload_cast<double>(&raxis::Tensor::add_),
-        //     py::arg("other"))
+        .def("__iadd__",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::add_, py::const_),
+            py::arg("other"))
 
         .def("__isub__",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::sub_, py::const_),
             py::arg("other"))
-        // .def("__isub__",
-        //     py::overload_cast<double>(&raxis::Tensor::sub_),
-        //     py::arg("other"))
+        .def("__isub__",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::sub_, py::const_),
+            py::arg("other"))
 
         .def("__imul__",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::mul_, py::const_),
             py::arg("other"))
-        // .def("__imul__",
-        //     py::overload_cast<double>(&raxis::Tensor::mul_),
-        //     py::arg("other"))
+        .def("__imul__",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::mul_, py::const_),
+            py::arg("other"))
 
         .def("__itruediv__",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::div_, py::const_),
             py::arg("other"))
-        // .def("__itruediv__",
-        //     py::overload_cast<double>(&raxis::Tensor::div_),
-        //     py::arg("other"))
+        .def("__itruediv__",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::div_, py::const_),
+            py::arg("other"))
 
         // Reverse ops
         .def("__radd__",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::add, py::const_),
             py::arg("other"))
-        // .def("__radd__",
-        //     py::overload_cast<double>(&raxis::Tensor::add, py::const_),
-        //     py::arg("other"))
+        .def("__radd__",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::add, py::const_),
+            py::arg("other"))
 
         .def("__rsub__",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::rsub, py::const_),
             py::arg("other"))
-        // .def("__rsub__",
-        //     py::overload_cast<double>(&raxis::Tensor::rsub, py::const_),
-        //     py::arg("other"))
+        .def("__rsub__",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::rsub, py::const_),
+            py::arg("other"))
 
         .def("__rmul__",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::mul, py::const_),
             py::arg("other"))
-        // .def("__rmul__",
-        //     py::overload_cast<double>(&raxis::Tensor::mul, py::const_),
-        //     py::arg("other"))
+        .def("__rmul__",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::mul, py::const_),
+            py::arg("other"))
 
         .def("__rtruediv__",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::rdiv, py::const_),
             py::arg("other"))
-        // .def("__rtruediv__",
-        //     py::overload_cast<double>(&raxis::Tensor::rdiv, py::const_),
-        //     py::arg("other"))
+        .def("__rtruediv__",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::rdiv, py::const_),
+            py::arg("other"))
         
         // Functions to access operations
+        .def("clone",
+            py::overload_cast<>(&raxis::Tensor::clone, py::const_))
         .def("copy_",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::copy_, py::const_),
             py::arg("other"))
         .def("to",
             py::overload_cast<raxis::Dtype>(&raxis::Tensor::to, py::const_),
             py::arg("dtype"))
-        
+
+        .def("zero_", 
+            py::overload_cast<>(&raxis::Tensor::zero_, py::const_))
+        .def("fill_", 
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::fill_, py::const_))
 
         .def("add",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::add, py::const_),
             py::arg("other"))
-        // .def("add",
-        //     py::overload_cast<double>(&raxis::Tensor::add, py::const_),
-        //     py::arg("other"))
+        .def("add",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::add, py::const_),
+            py::arg("other"))
 
         .def("sub",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::sub, py::const_),
             py::arg("other"))
-        // .def("sub",
-        //     py::overload_cast<double>(&raxis::Tensor::sub, py::const_),
-        //     py::arg("other"))
+        .def("sub",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::sub, py::const_),
+            py::arg("other"))
 
         .def("mul",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::mul, py::const_),
             py::arg("other"))
-        // .def("mul",
-        //     py::overload_cast<double>(&raxis::Tensor::mul, py::const_),
-        //     py::arg("other"))
+        .def("mul",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::mul, py::const_),
+            py::arg("other"))
 
         .def("div",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::div, py::const_),
             py::arg("other"))
-        // .def("div",
-        //     py::overload_cast<double>(&raxis::Tensor::div, py::const_),
-        //     py::arg("other"))
+        .def("div",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::div, py::const_),
+            py::arg("other"))
 
         .def("add_",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::add_, py::const_),
             py::arg("other"))
-        // .def("add_",
-        //     py::overload_cast<double>(&raxis::Tensor::add_, py::const_),
-        //     py::arg("other"))
+        .def("add_",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::add_, py::const_),
+            py::arg("other"))
 
         .def("sub_",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::sub_, py::const_),
             py::arg("other"))
-        // .def("sub_",
-        //     py::overload_cast<double>(&raxis::Tensor::sub_, py::const_),
-        //     py::arg("other"))
+        .def("sub_",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::sub_, py::const_),
+            py::arg("other"))
 
         .def("mul_",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::mul_, py::const_),
             py::arg("other"))
-        // .def("mul_",
-        //     py::overload_cast<double>(&raxis::Tensor::mul_, py::const_),
-        //     py::arg("other"))
+        .def("mul_",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::mul_, py::const_),
+            py::arg("other"))
 
         .def("div_",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::div_, py::const_),
             py::arg("other"))
-        // .def("div_",
-        //     py::overload_cast<double>(&raxis::Tensor::div_, py::const_),
-        //     py::arg("other"))
+        .def("div_",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::div_, py::const_),
+            py::arg("other"))
 
         // Reversed
         .def("rsub",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::rsub, py::const_),
             py::arg("other"))
-        // .def("rsub",
-        //     py::overload_cast<double>(&raxis::Tensor::rsub, py::const_),
-        //     py::arg("other"))
+        .def("rsub",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::rsub, py::const_),
+            py::arg("other"))
 
         .def("rdiv",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::rdiv, py::const_),
             py::arg("other"))
-        // .def("rdiv",
-        //     py::overload_cast<double>(&raxis::Tensor::rdiv, py::const_),
-        //     py::arg("other"))
+        .def("rdiv",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::rdiv, py::const_),
+            py::arg("other"))
 
         .def("rsub_",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::rsub_, py::const_),
             py::arg("other"))
-        // .def("rsub_",
-        //     py::overload_cast<double>(&raxis::Tensor::rsub_, py::const_),
-        //     py::arg("other"))
+        .def("rsub_",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::rsub_, py::const_),
+            py::arg("other"))
 
         .def("rdiv_",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::rdiv_, py::const_),
             py::arg("other"))
-        // .def("rdiv_",
-        //     py::overload_cast<double>(&raxis::Tensor::rdiv_, py::const_),
-        //     py::arg("other"))
+        .def("rdiv_",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::rdiv_, py::const_),
+            py::arg("other"))
 
         ;
     
@@ -285,24 +306,46 @@ PYBIND11_MODULE(_C, c) {
     //     return raxis::Tensor(Tensor, requires_grad);
     // }, py::arg("data"), py::arg("requires_grad") = false, py::arg("device") = py::none(), py::arg("dtype") = py::none());
 
+    c.def("empty", [](raxis::IntArray shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device);
+        return raxis::empty(shape, options);
+    }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
 
-   c.def(
-        "ones", &raxis::ones,
-        py::arg("shape"), py::arg("dtype") = raxis::default_dtype()
-    );
+    c.def("empty_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device);
+        return raxis::empty_like(other, options);
+    }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
 
-    c.def(
-        "zeros", &raxis::zeros,
-        py::arg("shape"), py::arg("dtype") = raxis::default_dtype()
-    );
+    c.def("zeros", [](raxis::IntArray shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device);
+        return raxis::zeros(shape, options);
+    }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
 
-    // c.def("full", [](PyDims shape, double fill_value, bool requires_grad, PyDevice device, PyDtype dtype) {
-    //     torch::TensorOptions options = torch::TensorOptions();
-    //     options = options.device(device.get()).dtype(dtype.get());
-        
-    //     return raxis::full(shape.get(), fill_value, requires_grad, options);
-    // }, py::arg("shape"), py::arg("fill_value"), py::arg("requires_grad") = false, py::arg("device") = py::none(), py::arg("dtype") = py::none());
-       
+    c.def("zeros_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device);
+        return raxis::zeros_like(other, options);
+    }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
+
+    c.def("ones", [](raxis::IntArray shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device);
+        return raxis::ones(shape, options);
+    }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
+
+    c.def("ones_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device);
+        return raxis::ones_like(other, options);
+    }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
+
+    c.def("full", [](raxis::IntArray shape, raxis::Scalar fill_value, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device);
+        return raxis::full(shape, fill_value, options);
+    }, py::arg("shape"), py::arg("fill_value"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
+
+    c.def("full_like", [](const raxis::Tensor& other, raxis::Scalar fill_value, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device);
+        return raxis::full_like(other, fill_value, options);
+    }, py::arg("other"), py::arg("fill_value"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
+    
 
     // Basic operations
     c.def(
@@ -314,27 +357,50 @@ PYBIND11_MODULE(_C, c) {
         "add",
         py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::add), 
         py::arg("t1"), py::arg("t2"));
-
+    c.def(
+        "add",
+        py::overload_cast<const raxis::Tensor&, raxis::Scalar>(&raxis::add), 
+        py::arg("t1"), py::arg("value"));
+    
     c.def(
         "sub", 
         py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::sub), 
         py::arg("t1"), py::arg("t2"));
+    c.def(
+        "sub", 
+        py::overload_cast<const raxis::Tensor&, raxis::Scalar>(&raxis::sub), 
+        py::arg("t1"), py::arg("value"));
 
     c.def(
         "mul", 
         py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::mul), 
         py::arg("t1"), py::arg("t2"));
+    c.def(
+        "mul", 
+        py::overload_cast<const raxis::Tensor&, raxis::Scalar>(&raxis::mul), 
+        py::arg("t1"), py::arg("value"));
         
     c.def("div", 
         py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::div), 
         py::arg("t1"), py::arg("t2"));
+    c.def("div", 
+        py::overload_cast<const raxis::Tensor&, raxis::Scalar>(&raxis::div), 
+        py::arg("t1"), py::arg("value"));
 
     c.def(
         "rsub", 
         py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::rsub), 
         py::arg("t1"), py::arg("t2"));
+    c.def(
+        "rsub", 
+        py::overload_cast<const raxis::Tensor&, raxis::Scalar>(&raxis::rsub), 
+        py::arg("t1"), py::arg("value"));
         
     c.def("rdiv", 
         py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::rdiv), 
         py::arg("t1"), py::arg("t2"));
-}
+    c.def("rdiv", 
+        py::overload_cast<const raxis::Tensor&, raxis::Scalar>(&raxis::rdiv), 
+        py::arg("t1"), py::arg("value"));
+
+} // pybind11_module

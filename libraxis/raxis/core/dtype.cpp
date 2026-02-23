@@ -7,14 +7,6 @@
 
 namespace raxis {
 
-void Dtype::fill(void* data, size_t n, double value) const {
-    dispatch_all_types([&](auto type_tag) {
-        using T = typename decltype(type_tag)::type;
-        auto* ptr = static_cast<T*>(data);
-        std::fill(ptr, ptr + n, static_cast<T>(value));
-    });
-}
-
 std::string Dtype::to_string(const void* data) const {
     return dispatch_all_types([&](auto type_tag) -> std::string {
         using T = typename decltype(type_tag)::type;

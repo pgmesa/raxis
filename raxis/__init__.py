@@ -7,11 +7,11 @@ import importlib.util
 from pathlib import Path
 
 
-__version__ = "0.1.0-alpha.0"
+__version__ = "0.1.0-alpha.1"
 
 package_path = Path(__file__).parent.absolute()
 
-# # Add raxis dlls
+# Add raxis dlls
 raxis_lib_dirs = package_path / 'lib'
 
 # Platform-specific shared library loading

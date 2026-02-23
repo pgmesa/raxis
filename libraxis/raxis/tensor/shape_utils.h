@@ -3,7 +3,7 @@
 #include <vector>
 #include <cstddef>
 
-#include <raxis/core/export.h>
+#include <raxis/export.h>
 #include <raxis/core/types.h>
 
 

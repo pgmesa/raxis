@@ -6,7 +6,7 @@
 // Adapted from: pytorch/c10/util/UniqueVoidPtr.h
 // ===============================================
 
-namespace raxis::detail {
+namespace raxis {
 
 using DeleterFnPtr = void (*)(void*);
 inline void delete_nothing(void*) noexcept {}
@@ -29,6 +29,27 @@ public:
 
     void* get() const {
         return data_;
+    }
+
+    void clear() {
+        ctx_ = nullptr;
+        data_ = nullptr;
+    }
+
+    void* get_context() const {
+        return ctx_.get();
+    }
+
+    void* release_context() {
+        return ctx_.release();
+    }
+
+    operator bool() const {
+        return data_ || ctx_;
+    }
+
+    DeleterFnPtr get_deleter() const {
+        return ctx_.get_deleter();
     }
 };
     

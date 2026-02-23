@@ -4,52 +4,55 @@
 #include <memory>
 
 #include <raxis/core/types.h>
+#include <raxis/core/dtype.h>
+#include <raxis/core/scalar.h>
+#include <raxis/core/device.h>
+#include <raxis/core/allocator.h>
 
+#include <raxis/util/data_ptr.h>
 #include <raxis/util/unique_void_ptr.h>
 
 #include <raxis/tensor/shape_utils.h>
+#include <raxis/tensor/tensor_options.h>
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/detail/tensor_impl.h>
 
 
 namespace raxis {
 
-Tensor from_blob(void* data, const IntArray& shape, Dtype dtype) {
+Tensor from_blob(void* data, const IntArray& shape, Dtype dtype, Device device) {
     // Non-owning: Caller guarantees lifetime.
-    auto ptr = detail::UniqueVoidPtr(data);
-    auto impl = std::make_shared<TensorImpl>(std::move(ptr), shape, dtype);
+    DataPtr ptr (data, device);
+    auto impl = std::make_shared<detail::TensorImpl>(std::move(ptr), shape, dtype);
     return Tensor(std::move(impl));
 }
 
 Tensor from_blob(
     void* data,
-    const IntArray& shape,          
+    DeleterFnPtr deleter,
+    const IntArray& shape,
     Dtype dtype,
-    detail::DeleterFnPtr deleter
+    Device device
 ) {
-    detail::UniqueVoidPtr ptr(data, data, deleter);
-    auto impl = std::make_shared<TensorImpl>(std::move(ptr), shape, dtype);
+    DataPtr ptr(data, data, deleter, device);
+    auto impl = std::make_shared<detail::TensorImpl>(std::move(ptr), shape, dtype);
     return Tensor(std::move(impl));
 }
 
-Tensor empty(const IntArray& shape, Dtype dtype) {
-    size_t n = static_cast<size_t>(compute_numel(shape)); //returns int64_t
-    
-    detail::UniqueVoidPtr ptr;
-
-    if (n > 0) {
-        void* data = std::malloc(n * dtype.itemsize());
-        if (!data) {
-            throw std::bad_alloc();
-        }
-        ptr = detail::UniqueVoidPtr(data, data, &std::free);
-    }
-    
-    auto impl = std::make_shared<TensorImpl>(std::move(ptr), shape, dtype);
+Tensor empty(const IntArray& shape, TensorOptions options) {
+    Dtype dtype = options.dtype();
+    size_t n = static_cast<size_t>(compute_numel(shape));
+    auto allocator = get_allocator(options.device().type());
+    DataPtr data_ptr = allocator->allocate(n * dtype.itemsize());
+    auto impl = std::make_shared<detail::TensorImpl>(std::move(data_ptr), shape, dtype);
     return Tensor(std::move(impl));
 }
 
-Tensor empty_strided(const IntArray& shape, const IntArray& strides, Dtype dtype) {
+Tensor empty_like(const Tensor& other, TensorOptions options) {
+    return empty(other.shape(), other.options().merge_in(options));
+}
+
+Tensor empty_strided(const IntArray& shape, const IntArray& strides, TensorOptions options) {
     // Validate shapes and strides match
     if (shape.size() != strides.size()) {
         throw std::invalid_argument(
@@ -58,39 +61,48 @@ Tensor empty_strided(const IntArray& shape, const IntArray& strides, Dtype dtype
     }
     
     // Compute required memory based on shape and strides
+    Dtype dtype = options.dtype();
     size_t n = compute_numel_from_strides(shape, strides);
-    
-    detail::UniqueVoidPtr ptr;
-    if (n > 0) {
-        void* data = std::malloc(n * dtype.itemsize());
-        if (!data) {
-            throw std::bad_alloc();
-        }
-        ptr = detail::UniqueVoidPtr(data, data, &std::free);
-    }
-    
-    auto impl = std::make_shared<TensorImpl>(std::move(ptr), shape, dtype, strides);
+    auto allocator = get_allocator(options.device().type());
+    DataPtr data_ptr = allocator->allocate(n * dtype.itemsize());
+    auto impl = std::make_shared<detail::TensorImpl>(std::move(data_ptr), shape, dtype, strides);
     return Tensor(std::move(impl));
 }
 
-Tensor full(const IntArray& shape, double value, Dtype dtype) {  
-    Tensor out = empty(shape, dtype);
-    size_t n = static_cast<size_t>(out.numel());
-    if (n > 0) dtype.fill(out.mutable_data_ptr(), n, value);
+Tensor full(const IntArray& shape, Scalar value, TensorOptions options) {  
+    Tensor out = empty(shape, options);
+    if (out.numel() > 0) {
+        out.fill_(value);
+    }
     return out;
 }
 
-Tensor zeros(const IntArray& shape, Dtype dtype) {
-    return full(shape, 0, dtype);
+Tensor full_like(const Tensor& other, Scalar value, TensorOptions options) {  
+    return full(other.shape(), value, other.options().merge_in(options));
 }
 
-Tensor ones(const IntArray& shape, Dtype dtype) {
-    return full(shape, 1, dtype);
+Tensor zeros(const IntArray& shape, TensorOptions options) {
+    Tensor out = empty(shape, options);
+    if (out.numel() > 0) {
+        out.zero_();
+    }
+    return out;
 }
 
+Tensor zeros_like(const Tensor& other, TensorOptions options) {
+    return zeros(other.shape(), other.options().merge_in(options));
+}
 
-// Tensor scalar_tensor(Scalar s, Dtype dtype) {
-//     return empty({}, dtype);
-// }
+Tensor ones(const IntArray& shape, TensorOptions options) {
+    return full(shape, 1, options);
+}
+
+Tensor ones_like(const Tensor& other, TensorOptions options) {
+    return ones(other.shape(), other.options().merge_in(options));
+}
+
+Tensor scalar_tensor(Scalar s, TensorOptions options) {
+    return empty({}, options).fill_(s);
+}
 
 }

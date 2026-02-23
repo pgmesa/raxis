@@ -7,7 +7,10 @@
 #include <pybind11/stl.h>
 
 #include <raxis/core/types.h>
+#include <raxis/core/scalar.h>
 
+
+namespace py = pybind11;
 
 namespace pybind11::detail {
 
@@ -25,14 +28,14 @@ public:
             return true;
         }
 
-        if (pybind11::isinstance<pybind11::int_>(src)) {
-            value.push_back(pybind11::cast<int64_t>(src));
+        if (py::isinstance<py::int_>(src)) {
+            value.push_back(py::cast<int64_t>(src));
             return true;
         }
 
-        if (pybind11::isinstance<pybind11::sequence>(src)) {
-            for (auto item : pybind11::reinterpret_borrow<pybind11::sequence>(src)) {
-                value.push_back(pybind11::cast<int64_t>(item));
+        if (py::isinstance<py::sequence>(src)) {
+            for (auto item : py::reinterpret_borrow<py::sequence>(src)) {
+                value.push_back(py::cast<int64_t>(item));
             }
             return true;
         }
@@ -46,11 +49,42 @@ public:
         return_value_policy,
         handle
     ) {
-        pybind11::list lst;
+        py::list lst;
         for (auto v : src) {
-            lst.append(pybind11::int_(v));
+            lst.append(py::int_(v));
         }
         return lst.release();
+    }
+};
+
+
+template <>
+struct type_caster<raxis::Scalar> {
+    PYBIND11_TYPE_CASTER(raxis::Scalar, const_name("Scalar"));
+
+    bool load(handle src, bool) {
+        if (PyBool_Check(src.ptr())) {
+            value = raxis::Scalar(src.ptr() == Py_True);
+        } else if (PyLong_Check(src.ptr())) {
+            value = raxis::Scalar(PyLong_AsLongLong(src.ptr()));
+        } else if (PyFloat_Check(src.ptr())) {
+            value = raxis::Scalar(PyFloat_AsDouble(src.ptr()));
+        } else {
+            return false;
+        }
+        return true;
+    }
+
+    static handle cast(const raxis::Scalar& s, return_value_policy, handle) {
+        switch (s.tag()) {
+            case raxis::Scalar::Tag::Bool:
+                return py::bool_(s.to<bool>()).release();
+            case raxis::Scalar::Tag::Integral:
+                return py::int_(s.to<int64_t>()).release();
+            case raxis::Scalar::Tag::Floating:
+                return py::float_(s.to<double>()).release();
+        }
+        return py::none().release();
     }
 };
 

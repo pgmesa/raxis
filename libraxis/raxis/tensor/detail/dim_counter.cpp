@@ -6,7 +6,7 @@
 #include <raxis/core/types.h>
 
 
-namespace raxis {
+namespace raxis::detail {
 
 DimCounter::DimCounter(const IntArray& shape, Range range)
   : shape(shape), range(range), values(shape.size()) , offset(range.begin) 

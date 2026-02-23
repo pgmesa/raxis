@@ -4,7 +4,7 @@
 #include <string>
 #include <ostream>
 
-#include <raxis/core/export.h>
+#include <raxis/export.h>
 
 
 namespace raxis {
@@ -13,7 +13,8 @@ using DeviceIndex = int8_t;
 
 enum class DeviceType : int8_t {
     CPU = 0,
-    CUDA = 1
+    CUDA = 1,
+    NumTypes
 };
 
 constexpr const char* device_type_name(DeviceType type, bool lower_case) {

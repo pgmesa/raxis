@@ -4,8 +4,10 @@
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <ostream>
 
 #include <raxis/core/dtype.h>
+#include <raxis/util/exception.h>
 
 
 namespace raxis {
@@ -81,15 +83,12 @@ public:
     }
 
     Scalar operator-() const {
-        if (is_bool()) {
-            throw std::runtime_error("Cannot negate a boolean scalar");
-        }
+        RAXIS_INTERNAL_ASSERT(!is_bool(), "Cannot negate a boolean scalar");
         return is_floating() ? Scalar(-fval_) : Scalar(-ival_);
     }
 
     bool operator==(const Scalar& other) const {
-        // Compare values in the widest type
-        return other.to<double>() == other.to<double>();
+        return to<double>() == other.to<double>();
     }
     bool operator!=(const Scalar& other) const { return !(*this == other); }
 
@@ -118,6 +117,10 @@ private:
         double  fval_;
     };
 };
+
+inline std::ostream& operator<<(std::ostream& os, const Scalar& s) {
+    return os << s.to_string();
+}
 
 // Sanity checks
 static_assert(sizeof(Scalar) == 16, "Scalar should be 16 bytes");

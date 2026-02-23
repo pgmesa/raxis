@@ -1,12 +1,15 @@
 
-#include <raxis/ops/cpu/copy_kernel.h>
+#include <raxis/ops/dispatch_stub.h>
+#include <raxis/ops/cpu/loops.h>
+#include <raxis/ops/copy.h>
 
 #include <raxis/core/dtype.h>
 #include <raxis/tensor/tensor_iterator.h>
-#include <raxis/ops/cpu/loops.h>
 
 
-namespace raxis::kernels::cpu {
+namespace raxis {
+
+namespace {
 
 void direct_copy_kernel(TensorIterator& iter) {
     Dtype dtype = iter.dtype(0);
@@ -34,5 +37,9 @@ void copy_kernel(TensorIterator& iter) {
         });
     }
 }
+
+} // namespace
+
+REGISTER_CPU_DISPATCH(copy_stub, &copy_kernel);
     
-} // namespace raxis::kernels::cpu
+} // namespace raxis

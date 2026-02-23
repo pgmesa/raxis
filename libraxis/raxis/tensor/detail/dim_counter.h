@@ -6,7 +6,7 @@
 #include <raxis/util/range.h>
 
 
-namespace raxis {
+namespace raxis::detail {
 
 struct DimCounter {
     DimCounter(const IntArray& shape, Range range);

@@ -5,10 +5,8 @@
 #include <string>
 #include <stdexcept>
 
-#include <fmt/format.h>
-
-#include <raxis/format.h>
 #include <raxis/core/types.h>
+#include <raxis/util/exception.h>
 
 
 namespace raxis {
@@ -24,12 +22,14 @@ int64_t compute_numel(const IntArray& shape) noexcept {
 // Memory needed: max element offset + 1
 // = (3-1)*8 + (4-1)*2 + 1 = 16 + 6 + 1 = 23 elements
 int64_t compute_numel_from_strides(const IntArray& shape, const IntArray& strides) {
-    if (shape.empty()) return 0;
+    if (shape.empty()) return 1;
     
     int64_t max_offset = 0;
     for (size_t i = 0; i < shape.size(); ++i) {
         if (shape[i] > 1) {  // size 1 dimensions don't contribute
             max_offset += (shape[i] - 1) * strides[i];
+        } else if (shape[i] == 0) {
+            return 0;
         }
     }
     return max_offset + 1;
@@ -61,14 +61,10 @@ IntArray broadcast_shapes(const IntArray& shape1, const IntArray& shape2) {
         int64_t size1 = i < ndim1? shape1[ndim1 - ridx] : 1;
         int64_t size2 = i < ndim2? shape2[ndim2 - ridx] : 1;
         
-        if (size1 != 1 && size2 != 1 && size1 != size2) {
-            std::string msg = fmt::format(
-                "Shapes {} and {} are not broadcastable at dimension {}",
-                shape1, shape2, i
-            );
-            throw std::runtime_error(msg);
-        } 
-
+        bool broadcastable = size1 != 1 && size2 != 1 && size1 != size2;
+        RAXIS_CHECK(!broadcastable, "Shapes ", shape1, " and ", shape2, 
+            " are not broadcastable at dimension ", i);
+        
         result_shape[target_ndim - ridx] = std::max(size1, size2);
     }
 

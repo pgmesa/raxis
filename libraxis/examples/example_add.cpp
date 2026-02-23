@@ -47,30 +47,29 @@ Config parse_args(int argc, char** argv) {
 
 
 int main(int argc, char** argv) {
-    spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
+    try {
+        spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
 
-    // raxis::set_default_dtype(dtypes::Int64);
+        auto cfg = parse_args(argc, argv);
+        
+        Tensor t1 = raxis::full({400, 400}, 3, cfg.dtype1);
+        Tensor t2 = raxis::full({400, 400}, 5, cfg.dtype2);
 
-    auto cfg = parse_args(argc, argv);
-    
-    Tensor t1 = raxis::full({400, 400}, 3, cfg.dtype1);
-    Tensor t2 = raxis::full({400, 400}, 5, cfg.dtype2);
+        spdlog::info("t1: {}\n", t1);
+        spdlog::info("t2: {}\n", t2);
 
-    spdlog::info("t1: {}\n", t1);
-    spdlog::info("t2: {}\n", t2);
+        auto t0 = std::chrono::high_resolution_clock::now();
+        Tensor t3 = t1 + t2;
+        auto tf = std::chrono::high_resolution_clock::now();
+        auto elapsed = std::chrono::duration<double, std::milli>(tf - t0);
 
-    Tensor tensor_from_vec = raxis::tensor<uint8_t>({1, 2, 3, 4}, {2,2}, dtypes::Uint8);
-    spdlog::info("tensor_from_vec: {}\n", tensor_from_vec);
+        spdlog::info("Elapsed: {:.2f} ms\n", elapsed.count());
+        spdlog::info("result: {}\n", t3);
 
-    auto t0 = std::chrono::high_resolution_clock::now();
-    
-    Tensor t3 = t1 + t2;
-
-    auto tf = std::chrono::high_resolution_clock::now();
-    auto elapsed = std::chrono::duration<double, std::milli>(tf - t0);
-
-    spdlog::info("Elapsed: {:.2f} ms\n", elapsed.count());
-    spdlog::info("result: {}\n", t3);
+    } catch (const std::exception& e) {
+        spdlog::error("Exception: {}", e.what());
+        return 1;
+    }
 
     return 0;
 }

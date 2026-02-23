@@ -11,6 +11,7 @@
 #include <raxis/core/dtype.h>
 #include <raxis/core/types.h>
 
+#include <raxis/util/exception.h>
 #include <raxis/util/range.h>
 #include <raxis/util/function_ref.h>
 #include <raxis/util/maybe_owned.h>
@@ -23,26 +24,19 @@
 
 namespace raxis {
 
-void Operand::set_tensor(detail::MaybeOwned<Tensor>&& new_tensor) {
-    if (original_tensor_) {
-        throw std::runtime_error("Cannot set tensor on an exchanged tensor");
-    }
-
+void Operand::set_tensor(MaybeOwned<Tensor>&& new_tensor) {
+    RAXIS_INTERNAL_ASSERT(!original_tensor_, "Cannot set tensor on an exchanged tensor");
     tensor_ = std::move(new_tensor);
 }
 
-void Operand::exchange_tensor(detail::MaybeOwned<Tensor>&& new_tensor) {
-    if (original_tensor_) {
-        throw std::runtime_error("Tensor already exchanged");
-    } 
+void Operand::exchange_tensor(MaybeOwned<Tensor>&& new_tensor) {
+    RAXIS_INTERNAL_ASSERT(!original_tensor_, "Tensor already exchanged");
     original_tensor_ = std::move(tensor_);
     tensor_ = std::move(new_tensor);
 }
 
 void Operand::restore_original_tensor() {
-    if (!original_tensor_) {
-        throw std::runtime_error("No original tensor to restore");
-    }
+    RAXIS_INTERNAL_ASSERT(!original_tensor_, "No original tensor to restore");
     tensor_ = std::move(*original_tensor_);
     original_tensor_.reset();
 }
@@ -51,44 +45,49 @@ bool Operand::has_exchanged() const {
     return original_tensor_.has_value();
 }
 
-bool Operand::is_type_defined() const {
-    return target_dtype != dtypes::Undefined;
-}
-
 
 // ======================= Tensor Iterator Config =======================
 TensorIteratorConfig& TensorIteratorConfig::add_borrowed_output(const Tensor& output) {
-    tensors_.push_back(detail::MaybeOwned<Tensor>::borrowed(output));
+    RAXIS_INTERNAL_ASSERT(
+      num_inputs_ == 0,
+      "Keep in mind that you have to add all outputs first before adding any input");
+    tensors_.push_back(MaybeOwned<Tensor>::borrowed(output));
     num_outputs_++;
     return *this;
 }
 
 TensorIteratorConfig& TensorIteratorConfig::add_borrowed_input(const Tensor& input) {
-    tensors_.push_back(detail::MaybeOwned<Tensor>::borrowed(input));
+    tensors_.push_back(MaybeOwned<Tensor>::borrowed(input));
     num_inputs_++;
     return *this;
 }
 
 TensorIteratorConfig& TensorIteratorConfig::add_owned_output(const Tensor& output) {
-    tensors_.push_back(detail::MaybeOwned<Tensor>::owned(output));
+    RAXIS_INTERNAL_ASSERT(
+      num_inputs_ == 0,
+      "Keep in mind that you have to add all outputs first before adding any input");
+    tensors_.push_back(MaybeOwned<Tensor>::owned(output));
     num_outputs_++;
     return *this;
 }
 
 TensorIteratorConfig& TensorIteratorConfig::add_owned_input(const Tensor& input) {
-    tensors_.push_back(detail::MaybeOwned<Tensor>::owned(input));
+    tensors_.push_back(MaybeOwned<Tensor>::owned(input));
     num_inputs_++;
     return *this;
 }
 
 TensorIteratorConfig& TensorIteratorConfig::add_owned_output(Tensor&& output) {
-    tensors_.push_back(detail::MaybeOwned<Tensor>::owned(std::move(output)));
+    RAXIS_INTERNAL_ASSERT(
+      num_inputs_ == 0,
+      "Keep in mind that you have to add all outputs first before adding any input");
+    tensors_.push_back(MaybeOwned<Tensor>::owned(std::move(output)));
     num_outputs_++;
     return *this;
 }
 
 TensorIteratorConfig& TensorIteratorConfig::add_owned_input(Tensor&& input) {
-    tensors_.push_back(detail::MaybeOwned<Tensor>::owned(std::move(input)));
+    tensors_.push_back(MaybeOwned<Tensor>::owned(std::move(input)));
     num_inputs_++;
     return *this;
 }
@@ -171,6 +170,8 @@ void TensorIterator::compute_shape(const TensorIteratorConfig& config) {
     all_ops_same_shape_ = true;
     bool has_scalars = false;
     bool has_tensors = false;
+
+    // First pass: compute shape from inputs (with broadcasting)
     for (Operand& op: operands_) {
         if (!op.tensor().defined()) continue;
         
@@ -196,8 +197,15 @@ void TensorIterator::compute_shape(const TensorIteratorConfig& config) {
     // Ensure defined outputs have the correct shape
     for (size_t i = 0; i < num_outputs_; i++) {
         const Tensor& output = operands_[i].tensor();
-        if (output.defined() && (output.shape() != shape_) && !is_reduction_) {
-            throw std::runtime_error("Invalid shape encountered in output");
+        if (!output.defined()) continue;
+            
+        if (shape_.empty()) {
+            // No inputs (e.g. fill_), infer shape from output
+            shape_ = output.shape();
+        } else if (!is_reduction_) {
+            RAXIS_CHECK(output.shape() == shape_,
+             "Invalid shape encountered in output ", output.shape(), 
+             ", expected ", shape_);
         }
     }
 }
@@ -237,6 +245,7 @@ void TensorIterator::compute_types(const TensorIteratorConfig& config) {
     //   - determines if there are undefined outputs
     //   - determines if there are different dtypes and attempts
     //       to quickly acquire a common dtype
+    Device common_device = DeviceType::CPU;
     common_dtype_ = dtypes::Undefined;
     Dtype output_dtype = dtypes::Undefined;
     bool has_different_input_dtypes = false;
@@ -245,9 +254,7 @@ void TensorIterator::compute_types(const TensorIteratorConfig& config) {
     
     for (auto& op : operands_) {
         if (!op.is_type_defined()) {
-            if (!op.is_output) {
-                throw std::runtime_error("Found type undefined input tensor");
-            }
+            RAXIS_INTERNAL_ASSERT(op.is_output, "Found type undefined input tensor");
 
             if (config.static_dtype_.has_value()) {
                 op.target_dtype = config.static_dtype_.value();
@@ -255,14 +262,28 @@ void TensorIterator::compute_types(const TensorIteratorConfig& config) {
                 has_undefined_outputs = true;
             }
 
-            if (has_undefined_outputs) {
+            if (config.static_device_.has_value()) {
+                op.device = config.static_device_.value();
+            } else {
+                RAXIS_INTERNAL_ASSERT(config.check_all_same_device_);
+            }
+
+            if (has_undefined_outputs || !op.device.has_value()) {
                 continue;
             }
         }
 
-        // Validate type defined tensors are defined
+        // Validates input tensors are defined
         if (!op.tensor().defined()) {
-            throw std::runtime_error("Found undefined input tensor");
+            RAXIS_INTERNAL_ASSERT(op.is_output, "Found undefined input tensor");
+            continue;
+        }
+
+        RAXIS_INTERNAL_ASSERT(op.target_dtype == op.current_dtype);
+
+        // Acquires the first non-CPU device (if any) as the common device
+        if (common_device == DeviceType::CPU && !op.tensor().is_cpu()) {
+            common_device = op.tensor().device();
         }
 
         if (!op.is_output) {
@@ -288,6 +309,10 @@ void TensorIterator::compute_types(const TensorIteratorConfig& config) {
         }
     }
 
+    RAXIS_INTERNAL_ASSERT(!(has_different_input_dtypes && !config.promote_inputs_to_common_dtype_ &&
+                        (has_undefined_outputs || config.enforce_safe_casting_to_output_ ||
+                        config.cast_common_dtype_to_outputs_)));
+
     // Checks that all inputs and defined outputs are the same dtype, if requested
     if (config.check_all_same_dtype_ &&
         (has_different_input_dtypes || has_different_output_dtypes ||
@@ -297,13 +322,9 @@ void TensorIterator::compute_types(const TensorIteratorConfig& config) {
             if (!op.tensor().defined()) {
                 continue;
             }
-            if (op.target_dtype != common_dtype_) {
-                std::string msg = fmt::format(
-                    "Found dtype {} but expected {}", 
-                    op.target_dtype.name(), common_dtype_.name()
-                );
-                throw std::runtime_error(msg);
-            }
+
+            RAXIS_CHECK(op.target_dtype == common_dtype_, 
+                "Found dtype", op.target_dtype, " but expected ", common_dtype_);
         }
     }
 
@@ -331,41 +352,66 @@ void TensorIterator::compute_types(const TensorIteratorConfig& config) {
     //   - checks that all tensors are on the same device, if requested
     //   - checks that the common dtype can safely cast to each output, if requested
     //   - creates temporaries for CPU operations, if needed and requested
+    common_device_ = common_device;
+    int max_cpu_scalars_on_non_cpu = config.allow_cpu_scalars_ ? 1 : 0;
+    int current_cpu_scalars_on_non_cpu = 0;
     for (auto& op : operands_) {
         bool is_type_defined = op.is_type_defined();
+        bool is_device_defined = op.is_device_defined();
 
         if (!is_type_defined) {
             op.target_dtype = common_dtype_;
         }
 
+        if (!is_device_defined) {
+            op.device = common_device;
+        }
+
+        if (!is_type_defined && !is_device_defined) {
+            continue;
+        }
+
         // Skips undefined tensors
         if (!op.tensor().defined()) continue;
 
-        // Checks safe casting, if requested
-        if (config.enforce_safe_casting_to_output_ && op.is_output && op.current_dtype != common_dtype_) {
-            if (!can_cast(common_dtype_, op.current_dtype)) {
-                std::string msg = fmt::format(
-                    "result type {} can't be cast to the {} desired output type ", 
-                    common_dtype_.name(), op.current_dtype.name()
-                );
-                throw std::runtime_error(msg);
+        // Checks all tensors are on the same device, if requested
+        if (config.check_all_same_device_) {
+            // Handles CPU scalars on CUDA kernels that support them
+            if (!common_device.is_cpu() &&
+                config.allow_cpu_scalars_ && !op.is_output && op.tensor().ndim() == 0 &&
+                op.tensor().is_cpu()) {
+                RAXIS_CHECK(current_cpu_scalars_on_non_cpu < max_cpu_scalars_on_non_cpu,
+                            "Trying to pass too many CPU scalars to non-CPU kernel!");
+                ++current_cpu_scalars_on_non_cpu;
+            } else {
+                RAXIS_CHECK(op.device == common_device,
+                            "Expected all tensors to be on the same device, but "
+                            "found at least two devices, ", common_device, " and ", op.device.value(), "!");
             }
         }
 
-        // Creates temporaries for CPU operations, if needed and requested
-        // TODO: if (common_device == CPU) {
-        if (config.cast_common_dtype_to_outputs_ && op.is_output && op.current_dtype != common_dtype_) {
-            op.exchange_tensor(detail::MaybeOwned<Tensor>::owned(
-                empty(op.tensor().shape(), common_dtype_)
-            ));
-            op.current_dtype = common_dtype_;
-            op.target_dtype = common_dtype_;
+        // Checks safe casting, if requested
+        if (config.enforce_safe_casting_to_output_ && op.is_output && op.current_dtype != common_dtype_) {
+            RAXIS_CHECK(can_cast(common_dtype_, op.current_dtype),
+                  "result type ", common_dtype_, " can't be cast to the "
+                  "desired output type ", op.current_dtype);
         }
-        // }
+
+        // Creates temporaries for CPU operations, if needed and requested
+        if (common_device == DeviceType::CPU) {
+            if (config.cast_common_dtype_to_outputs_ && op.is_output && op.current_dtype != common_dtype_) {
+                RAXIS_INTERNAL_ASSERT(op.tensor().defined());
+                op.exchange_tensor(MaybeOwned<Tensor>::owned(
+                    empty_like(op.tensor(), common_dtype_)
+                ));
+                op.current_dtype = common_dtype_;
+                op.target_dtype = common_dtype_;
+            }
+        }
 
         // Promotes inputs by creating temporaries of the correct dtype
         if (config.promote_inputs_to_common_dtype_ && !op.is_output && op.current_dtype != common_dtype_) {
-            op.exchange_tensor(detail::MaybeOwned<Tensor>::owned(op.tensor().to(common_dtype_)));
+            op.exchange_tensor(MaybeOwned<Tensor>::owned(op.tensor().to(common_dtype_)));
             op.current_dtype = common_dtype_;
             op.target_dtype = common_dtype_;
         }
@@ -486,14 +532,9 @@ IntArray TensorIterator::compatible_stride(int64_t element_size) const {
 
 IntArray TensorIterator::invert_perm(const IntArray& input) const {
     // Invert the permutation caused by reorder_dimensions. This is not valid
-    // after coalesce_dimensions is called.
-    if (has_coalesced_dimensions_) {
-        throw std::runtime_error("coalesce_dimensions() has already been called");
-    }
-
-    if (input.size() != perm_.size()) {
-        throw std::runtime_error("Input size is different from perm_ size");
-    }
+    // after coalesce_dimensions is called
+    RAXIS_INTERNAL_ASSERT(!has_coalesced_dimensions_);
+    RAXIS_INTERNAL_ASSERT(input.size() == perm_.size());
 
     IntArray res(input.size());
     for (size_t dim = 0; dim < ndim(); dim++) {
@@ -507,9 +548,9 @@ void TensorIterator::set_output(int64_t output_idx, const IntArray& shape, const
     if (op.tensor().defined()) return;
     
     if (strides.empty()) {
-        op.set_tensor(detail::MaybeOwned<Tensor>::owned(empty(shape, op.target_dtype)));
+        op.set_tensor(MaybeOwned<Tensor>::owned(empty(shape, op.target_dtype)));
     } else {
-        op.set_tensor(detail::MaybeOwned<Tensor>::owned(empty_strided(shape, strides, op.target_dtype)));
+        op.set_tensor(MaybeOwned<Tensor>::owned(empty_strided(shape, strides, op.target_dtype)));
     }
 
 }
@@ -519,9 +560,7 @@ void TensorIterator::allocate_outputs() {
         Operand& op = operands_[out_idx];
         if (op.tensor().defined()) continue;
         
-        if (!op.is_type_defined()) {
-            throw std::runtime_error("No type for operand " + out_idx);
-        }
+        RAXIS_INTERNAL_ASSERT(op.is_type_defined(), "no type for operand", out_idx);
 
         size_t element_size = op.target_dtype.itemsize();
         op.stride_bytes = compatible_stride(static_cast<int64_t>(element_size));
@@ -632,7 +671,7 @@ void get_strides(int64_t* strides, const std::vector<Operand>& operands, int ndi
     }
 }
 
-namespace internal {
+namespace detail {
 
 inline void get_data_ptrs(
     char** ptrs,
@@ -672,7 +711,7 @@ void serial_for_each(
         }
     } else {
         std::vector<char*> ptrs(noperands);
-        DimCounter counter(shape, range);
+        detail::DimCounter counter(shape, range);
         while(!counter.is_done()) {
             get_data_ptrs(ptrs.data(), base_ptrs, noperands, strides, counter.values);
             auto step = counter.max_2d_step();
@@ -682,7 +721,7 @@ void serial_for_each(
     }
 }
 
-} // namespace internal
+} // namespace detail
 
 void TensorIterator::serial_for_each(loop2d_t loop, Range range) const {
     if (range.size() == 0) return;
@@ -696,7 +735,7 @@ void TensorIterator::serial_for_each(loop2d_t loop, Range range) const {
     get_base_ptrs(ptrs.data(), operands_);
     get_strides(strides.data(), operands_, ndim);
 
-    internal::serial_for_each(shape_, strides, ptrs.data(), noperands, loop, range);
+    detail::serial_for_each(shape_, strides, ptrs.data(), noperands, loop, range);
 }
 
 

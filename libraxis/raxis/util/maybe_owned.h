@@ -3,7 +3,7 @@
 #include <optional>
 
 
-namespace raxis::detail {
+namespace raxis {
 
 template<typename T>
 class MaybeOwned {

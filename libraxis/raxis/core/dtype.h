@@ -2,13 +2,14 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <algorithm>
 #include <array>
+#include <ostream>
 
-#include <raxis/core/export.h>
+#include <raxis/export.h>
+#include <raxis/util/exception.h>
 
 
 namespace raxis {
@@ -108,14 +109,6 @@ public:
     constexpr bool operator==(Dtype other) const { return kind_ == other.kind_; }
     constexpr bool operator!=(Dtype other) const { return kind_ != other.kind_; }
     
-    void check_defined(const std::string& context = "") const {
-        if (!defined()) {
-            throw std::runtime_error(
-                "Undefined dtype" + (context.empty() ? "" : " in " + context)
-            );
-        }
-    }
-    
     template<typename T>
     static constexpr Dtype from_type() {
         if constexpr (std::is_same_v<T, bool>)          return Dtype(DtypeKind::Bool);
@@ -147,7 +140,7 @@ public:
             case DtypeKind::Float64:
                 return func(std::type_identity<float64>{});
             default:
-                throw std::runtime_error("Cannot dispatch undefined dtype");
+                RAXIS_INTERNAL_ASSERT(false, "Cannot dispatch undefined dtype");
         }
     }
 
@@ -159,19 +152,22 @@ public:
             case DtypeKind::Float64:
                 return func(std::type_identity<float64>{});
             default:
-                std::string msg = "Cannot float dispatch '";
-                msg += dtype_name(kind_);
-                msg += "' dtype";
-                throw std::runtime_error(msg);
+                RAXIS_INTERNAL_ASSERT(false, 
+                    "Cannot float dispatch '", dtype_name(kind_), "' dtype");
         }
     }
 
-    // Utility: fill buffer with value
-    void fill(void* data, size_t n, double value) const;
-    
     // Utility: convert single element to string
     std::string to_string(const void* data) const;
 };
+
+inline std::ostream& operator<<(std::ostream& os, Dtype dtype) {
+    return os << dtype.name();
+}
+
+inline std::ostream& operator<<(std::ostream& os, DtypeKind kind) {
+    return os << dtype_name(kind);
+}
 
 namespace dtypes {
 inline static constexpr Dtype Undefined = Dtype(DtypeKind::Undefined);

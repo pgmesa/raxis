@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "raxis"
 dynamic = ["version"]
-description = ""
+description = "A Tensor library"
 readme = "README.md"
-requires-python = ">=3.10, <3.13"
+requires-python = ">=3.10, <3.15"
 license = "MIT"
 urls = {Homepage = "https://github.com/pgmesa/raxis"}
-keywords = ["NDArray", "C++", "Python"]
+keywords = ["Tensor", "C++", "Python"]
 authors = [
     {name = "Pablo García Mesa", email = "pgmesa.sm@gmail.com"}
 ]

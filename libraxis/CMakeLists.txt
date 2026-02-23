@@ -72,7 +72,7 @@ add_library(raxis SHARED ${RAXIS_SOURCES})
 
 target_compile_definitions(raxis
     PRIVATE
-        RAXIS_EXPORTS
+        RAXIS_BUILD
     PUBLIC
         FMT_HEADER_ONLY
         SPDLOG_HEADER_ONLY

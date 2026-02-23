@@ -5,9 +5,12 @@
 
 #include <raxis/tensor/tensor_iterator.h>
 #include <raxis/util/function_traits.h>
+#include <raxis/util/exception.h>
 
 
-namespace raxis::kernels::cpu {
+namespace raxis {
+
+namespace {
 
 template <typename T>
 inline T load(const void* ptr) {
@@ -78,13 +81,14 @@ inline void execute_op(
     }
 }
 
-template <typename func_t>
-void cpu_kernel(TensorIterator& iter, func_t&& op, int64_t grain_size = internal::GRAIN_SIZE) {
-    using traits = function_traits<func_t>;
+} // namespace
 
-    if (iter.num_outputs() != 1) {
-        throw std::runtime_error("cpu_kernel needs num_outputs == 1");
-    }
+template <typename func_t>
+void cpu_kernel(TensorIterator& iter, func_t&& op, int64_t grain_size = detail::GRAIN_SIZE) {
+    using traits = function_traits<func_t>;
+    
+    RAXIS_INTERNAL_ASSERT(iter.num_inputs() == traits::arity);
+    RAXIS_INTERNAL_ASSERT(iter.num_outputs() == 1);
     
     iter.for_each([&](char** data, const int64_t* strides, int64_t size) {
         // Process 1D slices. This is all that iter.for_each is ever sending to the loop lambda

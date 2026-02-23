@@ -7,9 +7,11 @@
 #include <cassert>
 
 #include <raxis/core/dtype.h>
+#include <raxis/core/device.h>
 #include <raxis/core/types.h>
 
 #include <raxis/util/range.h>
+#include <raxis/util/exception.h>
 #include <raxis/util/function_ref.h>
 #include <raxis/util/maybe_owned.h>
 
@@ -18,7 +20,7 @@
 
 namespace raxis {
 
-namespace internal {
+namespace detail {
 // From: aten/src/ATen/TensorIterator.h
 // This parameter is heuristically chosen to determine the minimum number of
 // work that warrants parallelism. For example, when summing an tensor, it is
@@ -32,16 +34,25 @@ struct Operand {
     IntArray stride_bytes;
     bool is_output = false;
     bool is_read_write = false;
-    Dtype target_dtype;
-    Dtype current_dtype;
-    // std::optional<Device>
 
-    explicit Operand(detail::MaybeOwned<Tensor>&& arr) {
-        if (arr->defined()) {
-            target_dtype = arr->dtype();
+    /// The desired device and type for the operand. For inputs, this specifies
+    /// that the input should be converted to this type if necessary. For outputs,
+    /// this specifies which type to allocate. target_dtype and device are
+    /// initialized with the dtype and device of the tensor but during type
+    /// promotion target_dtype value can become different from tensor's dtype
+    /// also, during type promotion target_dtype and device can be set for an
+    /// undefined tensor so that tensor can be properly constructed later.
+    Dtype target_dtype;
+    std::optional<Device> device;
+    Dtype current_dtype;
+
+    explicit Operand(MaybeOwned<Tensor>&& t) {
+        if (t->defined()) {
+            device = t->device();
+            target_dtype = t->dtype();
             current_dtype = target_dtype;
         }
-        tensor_ = std::move(arr);
+        tensor_ = std::move(t);
     }
 
     const Tensor& tensor() const {
@@ -52,15 +63,22 @@ struct Operand {
         return *(original_tensor_.value());
     }
 
-    void set_tensor(detail::MaybeOwned<Tensor>&& new_tensor);
-    void exchange_tensor(detail::MaybeOwned<Tensor>&& new_tensor);
+    void set_tensor(MaybeOwned<Tensor>&& new_tensor);
+    void exchange_tensor(MaybeOwned<Tensor>&& new_tensor);
     void restore_original_tensor();
     bool has_exchanged() const;
-    bool is_type_defined() const;
+
+    bool is_device_defined() const {
+        return device.has_value();
+    }
+
+    bool is_type_defined() const {
+        return target_dtype != dtypes::Undefined;
+    }
     
 private:
-    detail::MaybeOwned<Tensor> tensor_;
-    std::optional<detail::MaybeOwned<Tensor>> original_tensor_; // Original tensor (if swapped)
+    MaybeOwned<Tensor> tensor_;
+    std::optional<MaybeOwned<Tensor>> original_tensor_; // Original tensor (if swapped)
 };
 
 
@@ -73,15 +91,9 @@ public:
     friend struct TensorIterator;
     
     TensorIteratorConfig& add_output(const Tensor& output) {
-        if (num_inputs_ != 0) {
-            throw std::runtime_error("Cannot add output after inputs have been added");
-        }
         return add_borrowed_output(output);
     }
     TensorIteratorConfig& add_input(const Tensor& input) {
-        if (num_outputs_ == 0) {
-            throw std::runtime_error("At least one output must be added before inputs");
-        }
         return add_borrowed_input(input);
     }
     // Don't allow borrowing from temporaries
@@ -113,6 +125,15 @@ public:
         check_all_same_dtype_ = _check;
         return *this;
     }
+
+    // Sets the check_all_same_device_ flag, which is true by default
+    // If true, all operands must be on the same device, with the possible
+    //   exception of CPU scalars, which can be passed to some CUDA kernels
+    //   as kernel arguments.
+    TensorIteratorConfig& check_all_same_device(const bool _check) {
+        check_all_same_device_ = _check;
+        return *this;
+    }
     
     TensorIteratorConfig& enforce_safe_casting_to_output(const bool _enforce) {
         enforce_safe_casting_to_output_ = _enforce;
@@ -134,9 +155,8 @@ public:
 
     TensorIteratorConfig& promote_integer_inputs_to_float(const bool _promote) {
         promote_integer_inputs_to_float_ = _promote;
-        if (promote_integer_inputs_to_float_ && !promote_inputs_to_common_dtype_) {
-            throw std::runtime_error("'promote_inputs_to_common_dtype_' must also be true");
-        }
+        RAXIS_INTERNAL_ASSERT(
+            !promote_integer_inputs_to_float_ || promote_inputs_to_common_dtype_);
         return *this;
     }
 
@@ -158,16 +178,29 @@ public:
         return *this;
     }
 
+    TensorIteratorConfig& declare_static_device(Device device) {
+        static_device_ = device;
+        return *this;
+    }
+
+    TensorIteratorConfig& allow_cpu_scalars(const bool _allow_cpu_scalars) {
+        allow_cpu_scalars_ = _allow_cpu_scalars;
+        return *this;
+    }
+
     TensorIterator build();
 
 private:
-    std::vector<detail::MaybeOwned<Tensor>> tensors_;
+    std::vector<MaybeOwned<Tensor>> tensors_;
     int num_outputs_ = 0;
     int num_inputs_ = 0;
-    std::optional<Dtype> static_dtype_ = std::nullopt;
     std::optional<IntArray> static_shape_ = std::nullopt;
+    std::optional<Dtype> static_dtype_ = std::nullopt;
+    std::optional<Device> static_device_ = std::nullopt;
+    bool allow_cpu_scalars_ = false;
     bool is_reduction_ = false;
     bool check_all_same_dtype_ = true;
+    bool check_all_same_device_ = true;
     bool enforce_safe_casting_to_output_ = false;
     bool enforce_linear_iteration_ = false;
     bool promote_inputs_to_common_dtype_ = false;
@@ -179,7 +212,6 @@ namespace iterator {
 
 inline TensorIteratorConfig binary_op_config() {
     return TensorIteratorConfig()
-        // .set_check_mem_overlap(true)
         // .allow_cpu_scalars(true)
         .promote_inputs_to_common_dtype(true)
         .cast_common_dtype_to_outputs(true)
@@ -219,6 +251,18 @@ public:
         return common_dtype_;
     }
 
+    Dtype dtype(int64_t idx = 0) const{
+        return operands_[idx].current_dtype;
+    }
+
+    Device device(int64_t idx = 0) const {
+        return operands_[idx].device.value();
+    }
+    
+    DeviceType device_type(int64_t idx = 0) const {
+        return device(idx).type();
+    }
+
     const Operand& get_operand(int64_t idx) const {
         return operands_[idx]; 
     }
@@ -232,15 +276,11 @@ public:
         return get_tensor(idx);
     }
 
-    Dtype dtype(int64_t idx) const{
-        return operands_[idx].current_dtype;
-    }
-
     void build(TensorIteratorConfig& config);
     void print_state(std::ostream& os = std::cout) const;
 
     // Type-erased 2D loop
-    using loop2d_t = detail::function_ref<void(char** data, const int64_t* strides, int64_t size0, int64_t size1)>;
+    using loop2d_t = function_ref<void(char** data, const int64_t* strides, int64_t size0, int64_t size1)>;
     
     // Templated 1D loop (inlined, optimizable)
     template <typename loop1d_t,
@@ -248,7 +288,7 @@ public:
             std::is_invocable_r_v<
                 void, loop1d_t, char**, const int64_t*, int64_t>,
             int> = 0>
-    void for_each(loop1d_t loop, int64_t grain_size = internal::GRAIN_SIZE) const {
+    void for_each(loop1d_t loop, int64_t grain_size = detail::GRAIN_SIZE) const {
         for_each(loop_2d_from_1d(loop), grain_size);
     }
 
@@ -261,7 +301,7 @@ public:
         serial_for_each(loop_2d_from_1d(loop), range);
     }
 
-    void for_each(loop2d_t loop, int64_t grain_size = internal::GRAIN_SIZE) const;
+    void for_each(loop2d_t loop, int64_t grain_size = detail::GRAIN_SIZE) const;
     void serial_for_each(loop2d_t loop, Range range) const;
 
     /// Create a strides array for a Tensor with shape of this iterator. The
@@ -289,8 +329,8 @@ private:
     bool all_ops_same_shape_ = false;
     bool all_ops_are_scalars_ = false;
 
-    Dtype common_dtype_;
-    // common_device_
+    Dtype common_dtype_ = dtypes::Undefined;
+    Device common_device_ = DeviceType::CPU;
     
     /// From iterator config
     bool is_reduction_ = false;

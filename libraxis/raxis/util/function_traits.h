@@ -17,6 +17,9 @@
 
 // Fallback: for any callable with operator() (lambdas, functors, etc.)
 // Redirects to the appropriate specialization by extracting the operator() signature
+
+namespace raxis {
+    
 template <typename T>
 struct function_traits : public function_traits<decltype(&T::operator())> {};
 
@@ -49,3 +52,5 @@ struct function_traits<ReturnType(Args...)> {
         using type = typename std::tuple_element<i, ArgsTuple>::type;
     };
 };
+
+}

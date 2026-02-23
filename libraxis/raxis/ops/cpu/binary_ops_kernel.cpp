@@ -1,12 +1,15 @@
 
-#include <raxis/ops/cpu/binary_ops_kernel.h>
+#include <raxis/ops/cpu/loops.h>
+#include <raxis/ops/dispatch_stub.h>
+#include <raxis/ops/binary_ops.h>
 
 #include <raxis/core/dtype.h>
 #include <raxis/tensor/tensor_iterator.h>
-#include <raxis/ops/cpu/loops.h>
 
 
-namespace raxis::kernels::cpu {
+namespace raxis {
+
+namespace {
 
 void add_kernel(TensorIterator& iter) {
     iter.common_dtype().dispatch_all_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
@@ -46,5 +49,11 @@ void div_kernel(TensorIterator& iter) {
     });
 }
 
+} // namespace
 
-} // namesapce raxis::kernels::cpu
+REGISTER_CPU_DISPATCH(add_stub, &add_kernel);
+REGISTER_CPU_DISPATCH(sub_stub, &sub_kernel);
+REGISTER_CPU_DISPATCH(mul_stub, &mul_kernel);
+REGISTER_CPU_DISPATCH(div_stub, &div_kernel);
+
+} // namesapce raxis
