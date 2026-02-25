@@ -151,10 +151,6 @@ inline TensorOptions requires_grad(bool rg = true) {
     return TensorOptions().requires_grad(rg);
 }
 
-// ============================================================================
-// ostream
-// ============================================================================
-
 RAXIS_API std::ostream& operator<<(std::ostream& stream, const TensorOptions& options);
 
 } // namespace raxis

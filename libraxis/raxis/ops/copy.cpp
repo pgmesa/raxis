@@ -22,20 +22,6 @@ Tensor& copy(const Tensor& a, Tensor& out) {
     return out;
 }
 
-Tensor clone(const Tensor& a) {
-    Tensor out;
-    copy(a, out);
-    return out;
-}
-
-Tensor to(const Tensor& a, Dtype dtype) {
-    if (a.dtype() == dtype) return a;
-
-    Tensor out = empty(a.shape(), dtype);
-    copy(a, out);
-    return out;
-}
-
 DEFINE_DISPATCH(copy_stub);
 
 }

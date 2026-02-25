@@ -4,6 +4,8 @@
 #include <sstream>
 #include <string>
 
+#include <raxis/util/exception.h>
+
 
 namespace raxis {
 
@@ -36,9 +38,7 @@ Dtype default_dtype() {
 }
 
 void set_default_dtype(Dtype dtype) {
-    if (!dtype.defined()) {
-        throw std::invalid_argument("default dtype must be defined");
-    }
+    RAXIS_CHECK(dtype.defined(), "Default dtype must be defined");
     detail::get_default_dtype_ref() = dtype;
 }
 

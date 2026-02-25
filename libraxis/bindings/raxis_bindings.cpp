@@ -9,7 +9,8 @@
 #include <raxis/raxis.h>
 
 #include "casters.h"
-#include "parsers.h"
+#include "numpy_utils.h"
+#include "python_tensor_factory.h"
 
 
 namespace py = pybind11;
@@ -30,6 +31,9 @@ PYBIND11_MODULE(_C, c) {
 
     // Dtype binding
     py::class_<raxis::Dtype>(c, "dtype", py::module_local())
+        .def(py::init([](py::handle obj) {
+            return raxis::python::dtype_from_python(obj);
+        }))
         .def_property_readonly("name", &raxis::Dtype::name)
         .def_property_readonly("itemsize", &raxis::Dtype::itemsize)
         .def("__repr__", [](const raxis::Dtype& d) {
@@ -41,6 +45,8 @@ PYBIND11_MODULE(_C, c) {
         .def("__hash__", [](const raxis::Dtype& d) {
             return static_cast<size_t>(d.kind());
         });
+    
+    py::implicitly_convertible<py::handle, raxis::Dtype>();
 
     c.attr("float32") = py::cast(dtypes::Float32);
     c.attr("float64") = py::cast(dtypes::Float64);
@@ -86,15 +92,15 @@ PYBIND11_MODULE(_C, c) {
         .def("dim", &raxis::Tensor::ndim)
         .def("numpy", [](py::object self) {
             auto& a = self.cast<raxis::Tensor&>();
-            return tensor_to_numpy(self, a);
+            return raxis::python::tensor_to_numpy(self, a);
         })
         .def("__array__", [](py::object self) {
             auto& a = self.cast<raxis::Tensor&>();
-            return tensor_to_numpy(self, a);
+            return raxis::python::tensor_to_numpy(self, a);
         })
         .def("__repr__", [](const raxis::Tensor& t) -> std::string {
             // Create numpy view directly
-            py::array np_arr = tensor_to_numpy(
+            py::array np_arr = raxis::python::tensor_to_numpy(
                 py::cast(&t, py::return_value_policy::reference), t
             );
             std::string repr_str = py::repr(np_arr).cast<std::string>();
@@ -301,10 +307,33 @@ PYBIND11_MODULE(_C, c) {
         ;
     
     // Initializers
-    // c.def("array", [](PyTensorData data, bool requires_grad, PyDevice device, PyDtype dtype) {
-    //     torch::Tensor Tensor = data.get().to(device.get()).to(dtype.get());
-    //     return raxis::Tensor(Tensor, requires_grad);
-    // }, py::arg("data"), py::arg("requires_grad") = false, py::arg("device") = py::none(), py::arg("dtype") = py::none());
+    c.def("tensor", [](py::object data, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
+        return raxis::python::tensor_from_python(data, dtype, device);
+    },
+    py::arg("data"),
+    py::arg("dtype") = py::none(),
+    py::arg("device") = py::none(),
+    R"doc(
+        Create a tensor from data.
+
+        Args:
+            data: A scalar, list, or nested list of scalars (int, float, bool).
+            dtype: Optional target dtype. If None, inferred from data.
+            device: Optional target device. Defaults to CPU.
+
+        Returns:
+            A new Tensor with the given data, dtype, and device.
+
+        Examples:
+            >>> raxis.tensor(5)                          # 0-d int tensor
+            >>> raxis.tensor([1, 2, 3])                  # 1-d int tensor
+            >>> raxis.tensor([[1.0, 2.0], [3.0, 4.0]])   # 2-d float tensor
+            >>> raxis.tensor([1, 2.0, 3])                # promotes to float
+    )doc");
+
+    c.def("from_numpy", [](py::array arr) {
+        return raxis::python::tensor_from_numpy(arr);
+    });
 
     c.def("empty", [](raxis::IntArray shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
         auto options = raxis::TensorOptions().dtype(dtype).device(device);

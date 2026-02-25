@@ -89,6 +89,7 @@ public:
     Tensor clone() const;
     Tensor& copy_(const Tensor& other) const;
     Tensor to(Dtype dtype) const;
+    Tensor to(Device device) const;
 
     Tensor& fill_(Scalar value) const;
     Tensor& zero_() const;

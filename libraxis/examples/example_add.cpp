@@ -58,6 +58,9 @@ int main(int argc, char** argv) {
         spdlog::info("t1: {}\n", t1);
         spdlog::info("t2: {}\n", t2);
 
+        Tensor t_ = raxis::tensor(true);
+        spdlog::info("t_: {}\n", t_);
+
         auto t0 = std::chrono::high_resolution_clock::now();
         Tensor t3 = t1 + t2;
         auto tf = std::chrono::high_resolution_clock::now();

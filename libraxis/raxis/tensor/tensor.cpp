@@ -119,16 +119,31 @@ std::string Tensor::to_string() const {
 }
 
 // ========================= Operations =========================
-Tensor Tensor::clone() const {
-    return ::raxis::clone(*this);
-}
-
 Tensor& Tensor::copy_(const Tensor& other) const {
     return ::raxis::copy(other, const_cast<Tensor&>(*this));
 }
 
+Tensor Tensor::clone() const {
+    Tensor out = empty_like(*this);
+    out.copy_(*this);
+    return out;
+}
+
 Tensor Tensor::to(Dtype new_dtype) const {
-    return ::raxis::to(*this, new_dtype);
+    if (dtype() == new_dtype) return *this;
+
+    Tensor out = empty_like(*this, new_dtype);
+    out.copy_(*this);
+    return out;
+}
+
+Tensor Tensor::to(Device new_device) const {
+    if (device() == new_device) return *this;
+
+    RAXIS_CHECK(false, 
+        "Cross-device transfer not yet implemented: ",
+        device(), " → ", new_device);
+    return *this;
 }
 
 

@@ -3,8 +3,8 @@
 
 #include <string>
 #include <ostream>
-#include <stdexcept>
 
+#include <raxis/util/exception.h>
 
 namespace raxis {
 
@@ -14,7 +14,9 @@ Device::Device(const std::string& str) {
 
     if (type_str == "cpu")       type_ = DeviceType::CPU;
     else if (type_str == "cuda") type_ = DeviceType::CUDA;
-    else throw std::invalid_argument("Unknown device: '" + str + "'");
+    else {
+        RAXIS_CHECK(false, "Unknown device: '", str , "'");
+    }
 
     if (colon != std::string::npos) {
         index_ = static_cast<DeviceIndex>(std::stoi(str.substr(colon + 1)));

@@ -12,7 +12,5 @@ using copy_fn = void(*)(TensorIterator&);
 DECLARE_DISPATCH(copy_fn, copy_stub);
 
 RAXIS_API Tensor& copy(const Tensor& a, Tensor& out);
-RAXIS_API Tensor clone(const Tensor& a);
-RAXIS_API Tensor to(const Tensor& a, Dtype dtype);
 
 }

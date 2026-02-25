@@ -199,7 +199,7 @@ inline Dtype parse_dtype(const std::string& name) {
     if (normalized == "float32" || normalized == "f4") return dtypes::Float32;
     if (normalized == "float64" || normalized == "f8") return dtypes::Float64;
     
-    throw std::invalid_argument("Unknown dtype: '" + name + "'");
+    RAXIS_CHECK(false, "Unknown dtype: '", name, "'");
 }
 
 // ============================================================================
@@ -294,7 +294,7 @@ constexpr Dtype default_float_dtype() {
 }
 
 constexpr Dtype default_int_dtype() {
-    return dtypes::Int32;
+    return dtypes::Int64;
 }
 
 RAXIS_API Dtype default_dtype();
