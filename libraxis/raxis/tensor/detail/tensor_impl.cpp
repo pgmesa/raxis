@@ -1,6 +1,8 @@
 
 #include <raxis/tensor/detail/tensor_impl.h>
 
+#include <optional>
+
 #include <raxis/core/dtype.h>
 #include <raxis/core/device.h>
 
@@ -17,24 +19,12 @@ TensorImpl::TensorImpl(
     DataPtr data,
     size_t nbytes,
     const IntArray& shape,
-    Dtype dtype,
-    const IntArray& strides
-) : storage_(std::make_shared<StorageImpl>(std::move(data), nbytes)),
-    storage_offset_(0),
-    shape_(shape),
-    strides_(strides),
-    dtype_(dtype),
-    numel_(compute_numel(shape)) {}
-
-TensorImpl::TensorImpl(
-    DataPtr data,
-    size_t nbytes,
-    const IntArray& shape,
+    std::optional<IntArray> strides,
     Dtype dtype
 ) : storage_(std::make_shared<StorageImpl>(std::move(data), nbytes)),
     storage_offset_(0),
     shape_(shape),
-    strides_(compute_strides(shape)),
+    strides_(strides.value_or(compute_strides(shape))),
     dtype_(dtype),
     numel_(compute_numel(shape)) {}
 

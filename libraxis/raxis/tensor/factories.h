@@ -22,14 +22,16 @@ using Deleter = std::function<void(void*)>;
 RAXIS_API Tensor from_blob(
     void* data, 
     const IntArray& shape, 
-    Dtype dtype,
+    std::optional<IntArray> strides,
+    Dtype dtype, 
     Device device = DeviceType::CPU
 );
 
 RAXIS_API Tensor from_blob(
     void* data,
     DeleterFnPtr deleter,
-    const IntArray& shape,          
+    const IntArray& shape,
+    std::optional<IntArray> strides,
     Dtype dtype,
     Device device = DeviceType::CPU
 );
@@ -39,6 +41,7 @@ RAXIS_API Tensor from_blob(
     void* ctx,
     DeleterFnPtr deleter,
     const IntArray& shape,
+    std::optional<IntArray> strides,
     Dtype dtype,
     Device device = DeviceType::CPU
 );

@@ -23,23 +23,50 @@
 
 namespace raxis {
 
-Tensor from_blob(void* data, const IntArray& shape, Dtype dtype, Device device) {
+namespace detail {
+    
+inline std::shared_ptr<TensorImpl> make_tensor_impl(
+    DataPtr data, 
+    const IntArray& shape, 
+    std::optional<IntArray> strides, 
+    Dtype dtype
+) {
+    size_t nbytes = strides 
+        ? compute_numel_from_strides(shape, *strides) * dtype.itemsize()
+        : compute_numel(shape) * dtype.itemsize();
+
+    return std::make_shared<TensorImpl>(
+        std::move(data), nbytes, shape, std::move(strides), dtype
+    );
+}
+
+} // namespace detail
+
+
+Tensor from_blob(
+    void* data, 
+    const IntArray& shape, 
+    std::optional<IntArray> strides,
+    Dtype dtype, 
+    Device device
+) {
     // Non-owning: Caller guarantees lifetime.
-    DataPtr ptr (data, device);
-    auto impl = std::make_shared<detail::TensorImpl>(std::move(ptr), compute_numel(shape), shape, dtype);
-    return Tensor(std::move(impl));
+    return Tensor(detail::make_tensor_impl(
+        DataPtr(data, device), shape, std::move(strides), dtype)
+    );
 }
 
 Tensor from_blob(
     void* data,
     DeleterFnPtr deleter,
     const IntArray& shape,
+    std::optional<IntArray> strides,
     Dtype dtype,
     Device device
 ) {
-    DataPtr ptr(data, data, deleter, device);
-    auto impl = std::make_shared<detail::TensorImpl>(std::move(ptr), compute_numel(shape), shape, dtype);
-    return Tensor(std::move(impl));
+    return Tensor(detail::make_tensor_impl(
+        DataPtr(data, data, deleter, device), shape, std::move(strides), dtype)
+    );
 }
 
 Tensor from_blob(
@@ -47,41 +74,37 @@ Tensor from_blob(
     void* ctx,
     DeleterFnPtr deleter,
     const IntArray& shape,
+    std::optional<IntArray> strides,
     Dtype dtype,
     Device device
 ) {
-    DataPtr ptr(data, ctx, deleter, device);
-    auto impl = std::make_shared<detail::TensorImpl>(std::move(ptr), compute_numel(shape), shape, dtype);
-    return Tensor(std::move(impl));
+    return Tensor(detail::make_tensor_impl(
+        DataPtr(data, ctx, deleter, device), shape, std::move(strides), dtype)
+    );
 }
 
 Tensor empty(const IntArray& shape, TensorOptions options) {
     Dtype dtype = options.dtype();
-    size_t n = static_cast<size_t>(compute_numel(shape));
-    auto allocator = get_allocator(options.device().type());
-    size_t nbytes = n * dtype.itemsize();
-    DataPtr data_ptr = allocator->allocate(nbytes);
-    auto impl = std::make_shared<detail::TensorImpl>(std::move(data_ptr), nbytes, shape, dtype);
-    return Tensor(std::move(impl));
+    size_t nbytes = static_cast<size_t>(compute_numel(shape)) * dtype.itemsize();
+    auto data_ptr = get_allocator(options.device().type())->allocate(nbytes);
+    return Tensor(std::make_shared<detail::TensorImpl>(
+        std::move(data_ptr), nbytes, shape, std::nullopt, dtype)
+    );
+}
+
+Tensor empty_strided(const IntArray& shape, const IntArray& strides, TensorOptions options) {
+    RAXIS_CHECK(shape.size() == strides.size(), 
+        "Shape and strides must have the same number of dimensions");
+    Dtype dtype = options.dtype();
+    size_t nbytes = compute_numel_from_strides(shape, strides) * dtype.itemsize();
+    auto data_ptr = get_allocator(options.device().type())->allocate(nbytes);
+    return Tensor(std::make_shared<detail::TensorImpl>(
+        std::move(data_ptr), nbytes, shape, strides, dtype)
+    );
 }
 
 Tensor empty_like(const Tensor& other, TensorOptions options) {
     return empty(other.shape(), other.options().merge_in(options));
-}
-
-Tensor empty_strided(const IntArray& shape, const IntArray& strides, TensorOptions options) {
-    // Validate shapes and strides match
-    RAXIS_CHECK(shape.size() == strides.size(), 
-        "Shape and strides must have the same number of dimensions");
-    
-    // Compute required memory based on shape and strides
-    Dtype dtype = options.dtype();
-    size_t n = compute_numel_from_strides(shape, strides);
-    auto allocator = get_allocator(options.device().type());
-    size_t nbytes = n * dtype.itemsize();
-    DataPtr data_ptr = allocator->allocate(nbytes);
-    auto impl = std::make_shared<detail::TensorImpl>(std::move(data_ptr), nbytes, shape, dtype, strides);
-    return Tensor(std::move(impl));
 }
 
 Tensor full(const IntArray& shape, Scalar value, TensorOptions options) {  

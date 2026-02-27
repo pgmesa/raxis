@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include <raxis/core/types.h>
 #include <raxis/core/dtype.h>
 #include <raxis/core/device.h>
@@ -17,14 +19,8 @@ public:
         DataPtr data,
         size_t nbytes,
         const IntArray& shape,
+        std::optional<IntArray> strides,
         Dtype dtype);
-
-    TensorImpl(
-        DataPtr data,
-        size_t nbytes,
-        const IntArray& shape,
-        Dtype dtype,
-        const IntArray& strides);
 
     TensorImpl(
         std::shared_ptr<StorageImpl> storage,
@@ -60,8 +56,8 @@ private:
     int64_t storage_offset_ = 0;
 
     IntArray shape_;
-    Dtype dtype_;
     IntArray strides_;
+    Dtype dtype_;
 
     int64_t numel_;
     bool is_wrapped_number_ = false;

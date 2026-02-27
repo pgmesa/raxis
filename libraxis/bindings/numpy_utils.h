@@ -41,11 +41,12 @@ inline Dtype dtype_from_numpy(py::dtype dt) {
 }
 
 Tensor tensor_from_numpy(py::array arr) {
-    arr = py::array::ensure(arr, py::array::c_style);
-        
     IntArray shape(arr.ndim());
-    for (int i = 0; i < arr.ndim(); ++i)
+    IntArray strides(arr.ndim());
+    for (int i = 0; i < arr.ndim(); ++i) {
         shape[i] = arr.shape(i);
+        strides[i] = arr.strides(i) / arr.itemsize(); // byte strides → element strides
+    }
     
     Dtype dtype = dtype_from_numpy(arr.dtype());
     
@@ -58,7 +59,8 @@ Tensor tensor_from_numpy(py::array arr) {
         [](void* ctx) {
             delete static_cast<py::object*>(ctx);
         },
-        shape,
+        std::move(shape), 
+        std::move(strides),
         dtype
     );
 }
@@ -71,8 +73,8 @@ py::array tensor_to_numpy(py::object self, const Tensor& a) {
 
     return py::array(
         numpy_dtype(a.dtype()),    // dtype
-        shape,                     // shape
-        strides,                   // strides (bytes!)
+        std::move(shape),                     // shape
+        std::move(strides),                   // strides (bytes!)
         a.data_ptr(),              // data pointer
         self                       // base object (keeps Tensor alive)
     );
