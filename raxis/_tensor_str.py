@@ -372,7 +372,7 @@ def _str(tensor) -> str:
 
     # Show dtype if not one of the "default" types
     if tensor.dtype.name not in _DEFAULT_DTYPE_NAMES:
-        suffixes.append(f"dtype=raxis.{tensor.dtype.name}")
+        suffixes.append(f"dtype={tensor.dtype.name}")
 
     # Empty tensor
     if tensor.numel() == 0:
