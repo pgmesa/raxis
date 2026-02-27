@@ -47,3 +47,6 @@ spec.loader.exec_module(_C)
 
 # Expose everything from the dynamically loaded _C module
 from raxis._C import *
+from raxis._tensor_str import _str
+
+Tensor.__repr__ = _str
