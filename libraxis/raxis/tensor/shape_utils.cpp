@@ -71,4 +71,30 @@ IntArray broadcast_shapes(const IntArray& shape1, const IntArray& shape2) {
     return result_shape;
 }
 
+int64_t wrap_dim(int64_t dim, int64_t ndim) {
+    RAXIS_CHECK(ndim > 0 || dim == 0,
+        "wrap_dim: cannot use dim with a 0-d tensor");
+    if (dim < 0) dim += ndim;
+    RAXIS_CHECK(dim >= 0 && dim < ndim,
+        "Dimension out of range (expected to be in range of [",
+        -ndim, ", ", ndim - 1, "], but got ", dim, ")");
+    return dim;
+}
+
+int64_t wrap_dim_allow_upper(int64_t dim, int64_t ndim) {
+    int64_t upper = ndim + 1;
+    if (dim < 0) dim += upper;
+    RAXIS_CHECK(dim >= 0 && dim < upper,
+        "Dimension out of range (expected to be in range of [",
+        -upper, ", ", ndim, "], but got ", dim, ")");
+    return dim;
+}
+
+int64_t wrap_index(int64_t index, int64_t dim_size) {
+    if (index < 0) index += dim_size;
+    RAXIS_CHECK(index >= 0 && index < dim_size,
+        "Index ", index, " is out of bounds for dimension with size ", dim_size);
+    return index;
+}
+
 }

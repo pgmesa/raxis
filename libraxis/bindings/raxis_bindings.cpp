@@ -36,6 +36,9 @@ PYBIND11_MODULE(_C, c) {
         }))
         .def_property_readonly("name", &raxis::Dtype::name)
         .def_property_readonly("itemsize", &raxis::Dtype::itemsize)
+        .def_property_readonly("is_floating", &raxis::Dtype::is_floating)
+        .def_property_readonly("is_integral", &raxis::Dtype::is_integral)
+        .def_property_readonly("is_signed", &raxis::Dtype::is_signed)
         .def("__repr__", [](const raxis::Dtype& d) {
             return d.name();
         })
@@ -90,31 +93,34 @@ PYBIND11_MODULE(_C, c) {
         .def_property_readonly("device", &raxis::Tensor::device, "Device")
         .def("numel", &raxis::Tensor::numel)
         .def("dim", &raxis::Tensor::ndim)
+        .def("tolist", [](const raxis::Tensor& self) -> py::object {
+            return raxis::python::tensor_to_list(self);
+        })
+        .def("item", [](const raxis::Tensor& self) -> py::object {
+            raxis::Scalar s = self.item();
+            return raxis::python::scalar_to_pyobject(s, self.dtype());
+        })
         .def("numpy", [](py::object self) {
             auto& a = self.cast<raxis::Tensor&>();
             return raxis::python::tensor_to_numpy(self, a);
         })
+
         .def("__array__", [](py::object self) {
             auto& a = self.cast<raxis::Tensor&>();
             return raxis::python::tensor_to_numpy(self, a);
         })
-        .def("__repr__", [](const raxis::Tensor& t) -> std::string {
-            // Create numpy view directly
-            py::array np_arr = raxis::python::tensor_to_numpy(
-                py::cast(&t, py::return_value_policy::reference), t
-            );
-            std::string repr_str = py::repr(np_arr).cast<std::string>();
-            
-            size_t pos = repr_str.find("array(");
-            if (pos != std::string::npos) {
-                repr_str.replace(pos, 6, "raxis(");
-            }
-            
-            return repr_str;
-        })
 
         .def("__len__", [](const raxis::Tensor& self) {
             return self.shape()[0];
+        })
+        .def("__getitem__", [](const raxis::Tensor& self, py::object idx) {
+            return self.index(raxis::python::py_index_to_tensor_indices(idx));
+        })
+        .def("__setitem__", [](raxis::Tensor& self, py::object idx, const raxis::Tensor& value) {
+            self.index_put_(raxis::python::py_index_to_tensor_indices(idx), value);
+        })
+        .def("__setitem__", [](raxis::Tensor& self, py::object idx, raxis::Scalar value) {
+            self.index_put_(raxis::python::py_index_to_tensor_indices(idx), value);
         })
 
         // Normal basic operations

@@ -18,7 +18,14 @@
 
 
 namespace raxis {
-    
+
+namespace indexing {
+
+struct TensorIndex;
+struct Slice;
+
+}
+
 class RAXIS_API Tensor {
 public:
     Tensor() = default;
@@ -68,11 +75,20 @@ public:
         return static_cast<T*>(mutable_data_ptr());
     }
 
+    template<typename T>
+    T item() const {
+        RAXIS_CHECK(numel() == 1, 
+            "a Tensor with ", numel(), " elements cannot be converted to Scalar");
+        return data_ptr<T>()[0];
+    }
+    Scalar item() const;
+
     int64_t numel() const;
     int ndim() const;
     const IntArray& shape() const;
     const IntArray& strides() const;
     IntArray byte_strides() const;
+    int64_t storage_offset() const;
     Dtype dtype() const;
     Device device() const;
     bool requires_grad() const;
@@ -85,7 +101,21 @@ public:
 
     std::string to_string() const;
 
-    // Operations
+    // ===================== View operations ======================
+    Tensor alias() const;
+    Tensor select(int64_t dim, int64_t index) const;
+    Tensor slice(int64_t dim, const indexing::Slice& slice) const;
+    /// Assumes start/stop/step are already resolved
+    Tensor slice(int64_t dim, int64_t start, int64_t stop, int64_t step = 1) const;
+    Tensor unsqueeze(int64_t dim) const;
+    Tensor squeeze(std::optional<int64_t> dim_opt = std::nullopt) const;
+
+    // ========================= Indexing =========================
+    Tensor index(const std::vector<indexing::TensorIndex>& indices) const;
+    void index_put_(const std::vector<indexing::TensorIndex>& indices, const Tensor& value);
+    void index_put_(const std::vector<indexing::TensorIndex>& indices, Scalar value);
+
+    // ======================== Copy & Fill =======================
     Tensor clone() const;
     Tensor& copy_(const Tensor& other) const;
     Tensor to(Dtype dtype) const;
@@ -94,6 +124,7 @@ public:
     Tensor& fill_(Scalar value) const;
     Tensor& zero_() const;
 
+    // ===================== Binary Operations ====================
     Tensor add(const Tensor& other) const;
     Tensor add(Scalar s) const;
     Tensor sub(const Tensor& other) const;
@@ -123,6 +154,9 @@ public:
     Tensor& rdiv_(Scalar s) const;
 
     // Operators
+    Tensor operator[](int64_t index) const;
+    Tensor operator[](indexing::TensorIndex idx) const;
+
     Tensor operator+(const Tensor& other) const;
     Tensor operator+(Scalar s) const;
     Tensor operator-(const Tensor& other) const;
@@ -145,6 +179,11 @@ private:
     std::shared_ptr<detail::TensorImpl> impl_;
 
     void ensure_defined(const char* context = nullptr) const;
+
+    Tensor make_view(
+        int64_t storage_offset,
+        const IntArray& shape,
+        const IntArray& strides) const;
 };
 
 } // namespace raxis

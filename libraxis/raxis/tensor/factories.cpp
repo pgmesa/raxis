@@ -13,6 +13,7 @@
 #include <raxis/util/exception.h>
 #include <raxis/util/unique_void_ptr.h>
 
+#include <raxis/tensor/detail/storage_impl.h>
 #include <raxis/tensor/shape_utils.h>
 #include <raxis/tensor/tensor_options.h>
 #include <raxis/tensor/tensor.h>
@@ -25,7 +26,7 @@ namespace raxis {
 Tensor from_blob(void* data, const IntArray& shape, Dtype dtype, Device device) {
     // Non-owning: Caller guarantees lifetime.
     DataPtr ptr (data, device);
-    auto impl = std::make_shared<detail::TensorImpl>(std::move(ptr), shape, dtype);
+    auto impl = std::make_shared<detail::TensorImpl>(std::move(ptr), compute_numel(shape), shape, dtype);
     return Tensor(std::move(impl));
 }
 
@@ -37,7 +38,7 @@ Tensor from_blob(
     Device device
 ) {
     DataPtr ptr(data, data, deleter, device);
-    auto impl = std::make_shared<detail::TensorImpl>(std::move(ptr), shape, dtype);
+    auto impl = std::make_shared<detail::TensorImpl>(std::move(ptr), compute_numel(shape), shape, dtype);
     return Tensor(std::move(impl));
 }
 
@@ -50,7 +51,7 @@ Tensor from_blob(
     Device device
 ) {
     DataPtr ptr(data, ctx, deleter, device);
-    auto impl = std::make_shared<detail::TensorImpl>(std::move(ptr), shape, dtype);
+    auto impl = std::make_shared<detail::TensorImpl>(std::move(ptr), compute_numel(shape), shape, dtype);
     return Tensor(std::move(impl));
 }
 
@@ -58,8 +59,9 @@ Tensor empty(const IntArray& shape, TensorOptions options) {
     Dtype dtype = options.dtype();
     size_t n = static_cast<size_t>(compute_numel(shape));
     auto allocator = get_allocator(options.device().type());
-    DataPtr data_ptr = allocator->allocate(n * dtype.itemsize());
-    auto impl = std::make_shared<detail::TensorImpl>(std::move(data_ptr), shape, dtype);
+    size_t nbytes = n * dtype.itemsize();
+    DataPtr data_ptr = allocator->allocate(nbytes);
+    auto impl = std::make_shared<detail::TensorImpl>(std::move(data_ptr), nbytes, shape, dtype);
     return Tensor(std::move(impl));
 }
 
@@ -76,8 +78,9 @@ Tensor empty_strided(const IntArray& shape, const IntArray& strides, TensorOptio
     Dtype dtype = options.dtype();
     size_t n = compute_numel_from_strides(shape, strides);
     auto allocator = get_allocator(options.device().type());
-    DataPtr data_ptr = allocator->allocate(n * dtype.itemsize());
-    auto impl = std::make_shared<detail::TensorImpl>(std::move(data_ptr), shape, dtype, strides);
+    size_t nbytes = n * dtype.itemsize();
+    DataPtr data_ptr = allocator->allocate(nbytes);
+    auto impl = std::make_shared<detail::TensorImpl>(std::move(data_ptr), nbytes, shape, dtype, strides);
     return Tensor(std::move(impl));
 }
 

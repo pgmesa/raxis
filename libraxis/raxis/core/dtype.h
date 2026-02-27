@@ -17,7 +17,6 @@ namespace raxis {
 using float32 = float;
 using float64 = double;
 
-// Lightweight enum (1 byte, trivially copyable)
 enum class DtypeKind : uint8_t {
     Undefined = 0,
     Bool,
@@ -27,7 +26,7 @@ enum class DtypeKind : uint8_t {
     Int64,
     Float32,
     Float64,
-    NumTypes // get the count of enum values (always at the end)
+    NumTypes
 };
 
 // ============================================================================
@@ -91,23 +90,51 @@ class RAXIS_API Dtype {
     DtypeKind kind_;
     
 public: 
-    constexpr Dtype() : kind_(DtypeKind::Undefined) {}
-    constexpr explicit Dtype(DtypeKind kind) : kind_(kind) {}
+    constexpr Dtype()
+        : kind_(DtypeKind::Undefined) {}
+
+    constexpr explicit Dtype(DtypeKind kind)
+        : kind_(kind) {}
     
-    constexpr DtypeKind kind() const { return kind_; }
-    constexpr size_t itemsize() const { return dtype_itemsize(kind_); }
-    constexpr const char* name() const { return dtype_name(kind_); }
-    constexpr bool defined() const { return kind_ != DtypeKind::Undefined; }
+    constexpr DtypeKind kind() const { 
+        return kind_; 
+    }
     
-    constexpr bool is_floating() const { return dtype_is_floating(kind_); }
+    constexpr size_t itemsize() const { 
+        return dtype_itemsize(kind_);
+    }
+
+    constexpr const char* name() const {
+        return dtype_name(kind_);
+    }
+
+    constexpr bool defined() const {
+        return kind_ != DtypeKind::Undefined;
+    }
+    
+    constexpr bool is_floating() const {
+        return dtype_is_floating(kind_);
+    }
+
     constexpr bool is_integral(bool include_bool = false) const {
         return dtype_is_integral(kind_, include_bool);
     }
-    constexpr bool is_bool() const { return dtype_is_bool(kind_); }
-    constexpr bool is_signed() const { return dtype_is_signed(kind_); }
     
-    constexpr bool operator==(Dtype other) const { return kind_ == other.kind_; }
-    constexpr bool operator!=(Dtype other) const { return kind_ != other.kind_; }
+    constexpr bool is_bool() const {
+        return dtype_is_bool(kind_);
+    }
+
+    constexpr bool is_signed() const {
+        return dtype_is_signed(kind_);
+    }
+    
+    constexpr bool operator==(Dtype other) const {
+        return kind_ == other.kind_;
+    }
+
+    constexpr bool operator!=(Dtype other) const {
+        return kind_ != other.kind_;
+    }
     
     template<typename T>
     static constexpr Dtype from_type() {
@@ -203,7 +230,7 @@ inline Dtype parse_dtype(const std::string& name) {
 }
 
 // ============================================================================
-// Type promotion (NumPy-style rules)
+// Type promotion
 // ============================================================================
 
 namespace detail {

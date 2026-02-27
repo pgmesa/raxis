@@ -74,7 +74,7 @@ struct TensorDataContainer {
     const IntArray& sizes() const { return sizes_; }
 
     const Scalar& scalar() const {
-        RAXIS_CHECK(is_scalar_, "TensorDataContainer::scalar() called on non-scalar container");
+        RAXIS_INTERNAL_ASSERT(is_scalar_, "scalar() called on non-scalar container");
         return scalar_;
     }
 

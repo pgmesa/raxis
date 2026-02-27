@@ -16,6 +16,7 @@
 #include <raxis/util/maybe_owned.h>
 
 #include <raxis/tensor/tensor.h>
+#include <raxis/tensor/shape_utils.h>
 
 
 namespace raxis {

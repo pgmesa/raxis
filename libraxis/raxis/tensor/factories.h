@@ -11,6 +11,7 @@
 #include <raxis/core/scalar.h>
 
 #include <raxis/tensor/tensor.h>
+#include <raxis/tensor/shape_utils.h>
 #include <raxis/tensor/tensor_options.h>
 #include <raxis/tensor/detail/tensor_data_container.h>
 

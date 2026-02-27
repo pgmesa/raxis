@@ -13,7 +13,7 @@
 namespace raxis {
 
 // ============================================================================
-// Scalar — type-preserving wrapper for a single numeric value
+// Scalar - type-preserving wrapper for a single numeric value
 // ============================================================================
 //
 // Scalar holds a single numeric value alongside a tag that records whether the
@@ -32,28 +32,40 @@ public:
     };
 
     template <typename T, std::enable_if_t<std::is_same_v<T, bool>, int> = 0>
-    Scalar(T value) : tag_(Tag::Bool), ival_(value ? 1 : 0) {}
+    Scalar(T value) 
+        : tag_(Tag::Bool), ival_(value ? 1 : 0) {}
 
     // Integers (any non-bool integral type)
     template <
         typename T,
         std::enable_if_t<std::is_integral_v<T> && !std::is_same_v<T, bool>, int> = 0>
-    Scalar(T value) : tag_(Tag::Integral), ival_(static_cast<int64_t>(value)) {}
+    Scalar(T value) 
+        : tag_(Tag::Integral), ival_(static_cast<int64_t>(value)) {}
 
     // Floating point
     template <
         typename T,
         std::enable_if_t<std::is_floating_point_v<T>, int> = 0>
-    Scalar(T value) : tag_(Tag::Floating), fval_(static_cast<double>(value)) {}
+    Scalar(T value) 
+        : tag_(Tag::Floating), fval_(static_cast<double>(value)) {}
 
     // Default: zero (integral)
-    Scalar() : tag_(Tag::Integral), ival_(0) {}
+    Scalar() 
+        : tag_(Tag::Integral), ival_(0) {}
 
     Tag tag() const { return tag_; }
 
-    bool is_bool() const { return tag_ == Tag::Bool; }
-    bool is_integral() const { return tag_ == Tag::Integral; }
-    bool is_floating() const { return tag_ == Tag::Floating; }
+    bool is_bool() const {
+        return tag_ == Tag::Bool;
+    }
+
+    bool is_integral() const {
+        return tag_ == Tag::Integral;
+    }
+
+    bool is_floating() const {
+        return tag_ == Tag::Floating;
+    }
 
     Dtype dtype() const {
         switch (tag_) {

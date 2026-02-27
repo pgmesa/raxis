@@ -6,7 +6,7 @@
 
 #include <raxis/util/data_ptr.h>
 
-#include <raxis/tensor/shape_utils.h>
+#include <raxis/tensor/detail/storage_impl.h>
 
 
 namespace raxis::detail {
@@ -15,14 +15,23 @@ struct TensorImpl {
 public:
     TensorImpl(
         DataPtr data,
+        size_t nbytes,
         const IntArray& shape,
         Dtype dtype);
 
     TensorImpl(
         DataPtr data,
+        size_t nbytes,
         const IntArray& shape,
         Dtype dtype,
         const IntArray& strides);
+
+    TensorImpl(
+        std::shared_ptr<StorageImpl> storage,
+        int64_t storage_offset,
+        const IntArray& shape,
+        const IntArray& strides,
+        Dtype dtype);
 
     TensorImpl() = delete;
     ~TensorImpl() = default;
@@ -42,9 +51,14 @@ public:
     Device device() const;
     int ndim() const;
     int64_t numel() const;
+    int64_t storage_offset() const;
+
+    const std::shared_ptr<StorageImpl>& storage() const;
 
 private:
-    DataPtr data_ptr_;
+    std::shared_ptr<StorageImpl> storage_;
+    int64_t storage_offset_ = 0;
+
     IntArray shape_;
     Dtype dtype_;
     IntArray strides_;
