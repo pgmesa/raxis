@@ -107,7 +107,10 @@ Tensor empty_like(const Tensor& other, TensorOptions options) {
     return empty(other.shape(), other.options().merge_in(options));
 }
 
-Tensor full(const IntArray& shape, Scalar value, TensorOptions options) {  
+Tensor full(const IntArray& shape, Scalar value, TensorOptions options) {
+    if (!options.has_dtype()) {
+        options = options.dtype(value.dtype());
+    }
     Tensor out = empty(shape, options);
     if (out.numel() > 0) {
         out.fill_(value);
