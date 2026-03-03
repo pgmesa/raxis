@@ -360,7 +360,7 @@ def _str(tensor) -> str:
     Produces output like:
         raxis([1., 2., 3.])
         raxis([[1, 2],
-               [3, 4]], dtype=raxis.int32)
+               [3, 4]], dtype=int32)
     """
     prefix = "raxis("
     indent = len(prefix)
