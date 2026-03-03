@@ -22,8 +22,8 @@ void direct_copy_kernel(TensorIterator& iter) {
 }
 
 void copy_kernel(TensorIterator& iter) {
-    Dtype dtype_inp = iter.dtype(0);
-    Dtype dtype_out = iter.dtype(1);
+    Dtype dtype_out = iter.dtype(0);
+    Dtype dtype_inp = iter.dtype(1);
     
     if (dtype_inp == dtype_out) {
         direct_copy_kernel(iter);
