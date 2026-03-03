@@ -38,7 +38,7 @@ inline Dtype dtype_from_python(py::handle obj) {
     }
 
     throw py::type_error(
-        "expected a dtype, got " + py::str(obj.get_type()).cast<std::string>()
+        "expected a dtype, got " + py::str(py::type::of(obj)).cast<std::string>()
     );
 }
 
@@ -50,7 +50,7 @@ inline Dtype py_scalar_dtype(const py::handle& obj) {
     RAXIS_CHECK(
         false,
         "tensor(): unsupported scalar type: ",
-        py::str(obj.get_type()).cast<std::string>()
+        py::str(py::type::of(obj)).cast<std::string>()
     );
     return dtypes::Undefined; // unreachable
 }
