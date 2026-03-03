@@ -6,8 +6,6 @@
 #include <type_traits>
 #include <numeric>
 
-#include <fmt/format.h>
-
 #include <raxis/core/dtype.h>
 #include <raxis/core/types.h>
 

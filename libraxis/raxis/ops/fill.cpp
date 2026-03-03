@@ -1,6 +1,8 @@
 
 #include <raxis/ops/fill.h>
 
+#include <cstring>
+
 #include <raxis/ops/scalar_ops.h>
 
 #include <raxis/core/scalar.h>
