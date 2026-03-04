@@ -17,7 +17,7 @@ namespace pybind11::detail {
 template <>
 struct type_caster<raxis::IntArray> {
 public:
-    PYBIND11_TYPE_CASTER(raxis::IntArray, _("IntArray"));
+    PYBIND11_TYPE_CASTER(raxis::IntArray, _("list[int] | tuple[int, ...]"));
 
     // Python -> C++
     bool load(handle src, bool) {
@@ -60,7 +60,7 @@ public:
 
 template <>
 struct type_caster<raxis::Scalar> {
-    PYBIND11_TYPE_CASTER(raxis::Scalar, const_name("Scalar"));
+    PYBIND11_TYPE_CASTER(raxis::Scalar, const_name("int | float | bool"));
 
     bool load(handle src, bool) {
         if (PyBool_Check(src.ptr())) {
