@@ -40,6 +40,7 @@ public:
     void* mutable_data();
 
     void set_wrapped_number(bool);
+    bool is_wrapped_number() const;
 
     const IntArray& shape() const;
     const IntArray& strides() const;

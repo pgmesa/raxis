@@ -64,12 +64,12 @@ RAXIS_API Tensor scalar_tensor(Scalar s, TensorOptions options = {});
 
 
 // ============================================================================
-// tensor() — create from data
+// tensor() - create from data
 // ============================================================================
 //
 // Accepts nested braced-init-lists, scalars, and std::vector<T>.
 //
-//   raxis::tensor({{1, 2}, {3, 4}})                        → int32, shape {2,2}
+//   raxis::tensor({{1, 2}, {3, 4}})                        → int64, shape {2,2}
 //   raxis::tensor({{1.0, 2.0}}, dtypes::Float64)           → float64, shape {1,2}
 //   raxis::tensor(3.14f)                                   → float32, shape {}
 //   raxis::tensor(std::vector<float>{1,2,3})               → float32, shape {3}

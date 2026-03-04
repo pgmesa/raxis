@@ -347,7 +347,7 @@ private:
     void compute_shape(const TensorIteratorConfig&);
     void check_output_shapes();
     void compute_types(const TensorIteratorConfig&);
-    Dtype compute_common_dtype(Dtype base_dtype);
+    Dtype compute_common_dtype();
     void compute_strides(const TensorIteratorConfig&);
     void reorder_dimensions();
     void permute_dimensions(const IntArray& perm);

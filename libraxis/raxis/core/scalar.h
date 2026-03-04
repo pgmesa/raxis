@@ -70,8 +70,8 @@ public:
     Dtype dtype() const {
         switch (tag_) {
             case Tag::Bool:     return dtypes::Bool;
-            case Tag::Integral: return dtypes::Int64;
-            case Tag::Floating: return dtypes::Float64;
+            case Tag::Integral: return default_int_dtype();
+            case Tag::Floating: return default_float_dtype();
         }
         return dtypes::Undefined;
     }

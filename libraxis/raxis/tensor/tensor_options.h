@@ -27,7 +27,7 @@ inline Device device_or_default(std::optional<Device> device) {
 /// A lightweight "bag of optional properties" for tensor construction.
 ///
 /// Modeled after PyTorch's c10::TensorOptions, but without Layout,
-/// MemoryFormat, or pinned_memory — those can be added later without
+/// MemoryFormat, or pinned_memory - those can be added later without
 /// breaking the API.
 ///
 /// The class supports three usage styles:

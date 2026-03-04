@@ -125,6 +125,10 @@ detail::TensorImpl* Tensor::unsafe_get_tensor_impl() const {
     return impl_.get();
 }
 
+bool Tensor::is_wrapped_number() const {
+    return impl_->is_wrapped_number();
+}
+
 std::string Tensor::to_string() const {
     if (!defined()) 
         return "raxis(undefined tensor!)";

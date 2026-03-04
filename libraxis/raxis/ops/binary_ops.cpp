@@ -37,6 +37,10 @@ Tensor& sub(const Tensor& a, const Tensor& b, Tensor& out) {
     RAXIS_CHECK(!is_boolean_op, 
         "Subtraction, the `-` operator, with two bool tensors is not supported.");
 
+    RAXIS_CHECK(!a.dtype().is_bool() && !b.dtype().is_bool(), 
+        "Subtraction, the `-` operator, with a bool tensor is not supported. "
+        "If you are trying to invert a mask, use the `~` or `logical_not()` operator instead.");
+
     auto iter = iterator::binary_op_config()
         .add_output(out)
         .add_input(a)

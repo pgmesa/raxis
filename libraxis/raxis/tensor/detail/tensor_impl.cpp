@@ -56,6 +56,10 @@ void TensorImpl::set_wrapped_number(bool is_wrapped) {
     is_wrapped_number_ = is_wrapped;
 }
 
+bool TensorImpl::is_wrapped_number() const {
+    return is_wrapped_number_;
+}
+
 const IntArray& TensorImpl::shape() const {
     return shape_;
 }

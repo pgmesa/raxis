@@ -17,6 +17,7 @@
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/factories.h>
 #include <raxis/tensor/shape_utils.h>
+#include <raxis/tensor/type_promotion.h>
 #include <raxis/tensor/detail/dim_counter.h>
 
 
@@ -337,7 +338,7 @@ void TensorIterator::compute_types(const TensorIteratorConfig& config) {
     
     // Computes a common dtype, if needed
     if ((has_different_input_dtypes || all_ops_are_scalars_) && config.promote_inputs_to_common_dtype_) {
-        common_dtype_ = compute_common_dtype(common_dtype_);
+        common_dtype_ = compute_common_dtype();
     }
 
     // Promotes common dtype to the default float scalar type, if needed
@@ -416,16 +417,13 @@ void TensorIterator::compute_types(const TensorIteratorConfig& config) {
     }
 }
 
-Dtype TensorIterator::compute_common_dtype(Dtype base_dtype) {
-    Dtype common_dtype = base_dtype;
+Dtype TensorIterator::compute_common_dtype() {
+    PromotionState state;
     for (auto& op : operands_) {
         if (op.is_output) continue;
-        
-        if (op.current_dtype != common_dtype) {
-            common_dtype = promote_types(common_dtype, op.current_dtype);
-        }
+        state = update_promotion_state(op.tensor(), state);
     }
-    return common_dtype;
+    return compute_promoted_dtype(state);
 }
 
 void TensorIterator::permute_dimensions(const IntArray& perm) {

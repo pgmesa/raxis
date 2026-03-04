@@ -135,6 +135,9 @@ Tensor zeros_like(const Tensor& other, TensorOptions options) {
 }
 
 Tensor ones(const IntArray& shape, TensorOptions options) {
+    if (!options.has_dtype()) {
+        options = options.dtype(default_float_dtype());
+    }
     return full(shape, 1, options);
 }
 
@@ -171,10 +174,10 @@ Tensor tensor_from_scalars(
 }
 
 Tensor tensor(detail::TensorDataContainer data, TensorOptions options) {
-    // 1. Handle scalar (0-d tensor)
     Dtype desired = options.dtype_opt().value_or(compute_desired_dtype(data.dtype()));
     TensorOptions resolved = options.dtype(desired);
     
+    // Handle scalar (0-d tensor)
     if (data.is_scalar()) {
         return scalar_tensor(data.scalar(), resolved);
     }

@@ -24,7 +24,6 @@ namespace raxis::python {
 
 
 inline Dtype dtype_from_python(py::handle obj) {
-    // Already a raxis.Dtype
     if (py::isinstance<Dtype>(obj)) {
         return obj.cast<Dtype>();
     }
@@ -56,20 +55,6 @@ inline Dtype py_scalar_dtype(const py::handle& obj) {
 }
 
 // ============================================================================
-// Dtype promotion for mixed-type lists
-// ============================================================================
-//
-// When a list contains mixed types (e.g. [1, 2.0, 3]), we promote:
-//   Bool + Int   → Int
-//   Bool + Float → Float
-//   Int  + Float → Float
-
-inline Dtype promote_py_dtypes(Dtype a, Dtype b) {
-    if (a == b) return a;
-    return promote_types(a, b);
-}
-
-// ============================================================================
 // Recursive structure parsing
 // ============================================================================
 //
@@ -86,7 +71,7 @@ inline void infer_shape(const py::handle& obj, IntArray& shape, int64_t depth) {
         auto len = static_cast<int64_t>(seq.size());
 
         if (depth == static_cast<int64_t>(shape.size())) {
-            // First time seeing this depth — record the size
+            // First time seeing this depth - record the size
             shape.push_back(len);
         } else {
             RAXIS_CHECK(
@@ -124,7 +109,7 @@ inline void flatten_py_data(
             dtype = elem_dtype;
             dtype_set = true;
         } else {
-            dtype = promote_py_dtypes(dtype, elem_dtype);
+            dtype = promote_types(dtype, elem_dtype);
         }
 
         // Extract the value.
@@ -192,6 +177,12 @@ inline Tensor tensor_from_python(
         .dtype(target_dtype)
         .device(device_opt.value_or(DeviceType::CPU));
 
+    if (dtype_opt.has_value()) {
+        RAXIS_CHECK(can_cast(inferred_dtype, target_dtype),
+            "can't convert ", inferred_dtype.name(),
+            " data to ", target_dtype.name(), " dtype");
+    }
+
     return tensor_from_scalars(flat, shape, options);
 }
 
@@ -246,7 +237,7 @@ inline py::object scalar_to_pyobject(Scalar s, Dtype dtype) {
 
 inline py::object tensor_to_list(const Tensor& tensor) {
     if (tensor.ndim() == 0) {
-        // Scalar — return a Python scalar, not a list
+        // Return a Python scalar, not a list
         return scalar_to_pyobject(tensor.item(), tensor.dtype());
     }
     

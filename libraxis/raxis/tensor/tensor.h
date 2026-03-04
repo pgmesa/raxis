@@ -98,6 +98,7 @@ public:
     bool is_cuda() const;
 
     detail::TensorImpl* unsafe_get_tensor_impl() const;
+    bool is_wrapped_number() const;
 
     std::string to_string() const;
 

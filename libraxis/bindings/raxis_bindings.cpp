@@ -42,8 +42,9 @@ PYBIND11_MODULE(_C, c) {
         .def("__repr__", [](const raxis::Dtype& d) {
             return d.name();
         })
-        .def("__eq__", [](const raxis::Dtype& a, const raxis::Dtype& b) {
-            return a == b;
+        .def("__eq__", [](const raxis::Dtype& a, py::object other) -> bool {
+            if (!py::isinstance<raxis::Dtype>(other)) return false;
+            return a == other.cast<raxis::Dtype>();
         })
         .def("__hash__", [](const raxis::Dtype& d) {
             return static_cast<size_t>(d.kind());
@@ -69,7 +70,10 @@ PYBIND11_MODULE(_C, c) {
         })
         .def_property_readonly("index", &raxis::Device::index)
         .def("__repr__", &raxis::Device::str)
-        .def("__eq__", &raxis::Device::operator==)
+        .def("__eq__", [](const raxis::Device& a, py::object other) -> bool {
+            if (!py::isinstance<raxis::Device>(other)) return false;
+            return a == other.cast<raxis::Device>();
+        })
         .def("__hash__", [](const raxis::Device& d) { });
 
     // Implicit conversion from str → Device (so device="cuda:0" works)
@@ -219,6 +223,8 @@ PYBIND11_MODULE(_C, c) {
         .def("to",
             py::overload_cast<raxis::Dtype>(&raxis::Tensor::to, py::const_),
             py::arg("dtype"))
+        .def("detach",
+            py::overload_cast<>(&raxis::Tensor::clone, py::const_))
 
         .def("zero_", 
             py::overload_cast<>(&raxis::Tensor::zero_, py::const_))
