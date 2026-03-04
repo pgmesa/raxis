@@ -79,6 +79,12 @@ PYBIND11_MODULE(_C, c) {
     // Implicit conversion from str → Device (so device="cuda:0" works)
     py::implicitly_convertible<std::string, raxis::Device>();
 
+    // Constants
+    c.attr("inf") = raxis::inf;
+    c.attr("nan") = raxis::nan;
+    c.attr("pi") = raxis::pi;
+    c.attr("e") = raxis::e;
+
     // Tensor
     py::class_<raxis::Tensor>(c, "Tensor")
         .def_property_readonly("shape", [](const raxis::Tensor& self) -> py::tuple {

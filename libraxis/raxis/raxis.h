@@ -3,6 +3,7 @@
 #include <raxis/core/device.h>
 #include <raxis/core/dtype.h>
 #include <raxis/core/scalar.h>
+#include <raxis/core/constants.h>
 
 #include <raxis/ops/binary_ops.h>
 #include <raxis/ops/scalar_ops.h>
