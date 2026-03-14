@@ -177,12 +177,6 @@ inline Tensor tensor_from_python(
         .dtype(target_dtype)
         .device(device_opt.value_or(DeviceType::CPU));
 
-    if (dtype_opt.has_value()) {
-        RAXIS_CHECK(can_cast(inferred_dtype, target_dtype),
-            "can't convert ", inferred_dtype.name(),
-            " data to ", target_dtype.name(), " dtype");
-    }
-
     return tensor_from_scalars(flat, shape, options);
 }
 
