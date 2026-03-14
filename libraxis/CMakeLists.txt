@@ -97,6 +97,24 @@ target_link_libraries(raxis
         
 )
 
+option(RAXIS_USE_OPENMP "Use OpenMP for parallelism" OFF)
+
+if(RAXIS_USE_OPENMP)
+    find_package(OpenMP)
+    if(OpenMP_CXX_FOUND)
+        target_compile_definitions(raxis PUBLIC RAXIS_PARALLEL_OPENMP=1)
+        target_link_libraries(raxis PUBLIC OpenMP::OpenMP_CXX)
+        message(STATUS "Parallel backend: OpenMP")
+    else()
+        message(WARNING "OpenMP requested but not found, falling back to native")
+        target_compile_definitions(raxis PUBLIC RAXIS_PARALLEL_NATIVE=1)
+        message(STATUS "Parallel backend: native")
+    endif()
+else()
+    # target_compile_definitions(raxis PUBLIC RAXIS_PARALLEL_NATIVE=1)
+    message(STATUS "Parallel backend: serial (none)")
+endif()
+
 add_library(raxis::raxis ALIAS raxis)
 # ─────────────────────────────────────────────────────────────────────────────
 

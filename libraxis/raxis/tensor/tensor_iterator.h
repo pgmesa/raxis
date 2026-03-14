@@ -22,14 +22,16 @@
 namespace raxis {
 
 namespace detail {
+
 // From: aten/src/ATen/TensorIterator.h
 // This parameter is heuristically chosen to determine the minimum number of
-// work that warrants parallelism. For example, when summing an tensor, it is
+// work that warrants parallelism. For example, when summing a tensor, it is
 // deemed inefficient to parallelise over tensors shorter than 32768. Further,
 // no parallel algorithm (such as parallel_reduce) should split work into
 // smaller than GRAIN_SIZE chunks.
 constexpr int64_t GRAIN_SIZE = 32768;
-}
+
+} // namespace detail
 
 struct Operand {
     IntArray stride_bytes;

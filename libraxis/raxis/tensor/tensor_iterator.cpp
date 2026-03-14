@@ -13,6 +13,7 @@
 #include <raxis/util/range.h>
 #include <raxis/util/function_ref.h>
 #include <raxis/util/maybe_owned.h>
+#include <raxis/util/parallel.h>
 
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/factories.h>
@@ -644,7 +645,9 @@ void TensorIterator::for_each(loop2d_t loop, int64_t grain_size) const {
     } else if (numel < grain_size || num_threads == 1) {
         return serial_for_each(loop, {0, numel});
     } else {
-        // TODO: parallel for_each()
+        parallel_for(0, numel, grain_size, [&](int64_t begin, int64_t end) {
+            serial_for_each(loop, {begin, end});
+        });
     }
 }
 
