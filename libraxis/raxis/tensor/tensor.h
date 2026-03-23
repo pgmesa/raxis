@@ -93,6 +93,7 @@ public:
     Device device() const;
     bool requires_grad() const;
     TensorOptions options() const;
+    bool is_contiguous() const;
     
     bool is_cpu() const;
     bool is_cuda() const;
@@ -118,12 +119,26 @@ public:
 
     // ======================== Copy & Fill =======================
     Tensor clone() const;
+    Tensor contiguous() const;
     Tensor& copy_(const Tensor& other) const;
     Tensor to(Dtype dtype) const;
     Tensor to(Device device) const;
 
     Tensor& fill_(Scalar value) const;
     Tensor& zero_() const;
+
+    // =================== Reduction Operations ===================
+    Tensor sum(std::optional<Dtype> dtype = std::nullopt) const;
+    Tensor sum(
+        const IntArray& dim, 
+        bool keepdim = false, 
+        std::optional<Dtype> dtype = std::nullopt) const;
+        
+    Tensor nansum(std::optional<Dtype> dtype = std::nullopt) const;
+    Tensor nansum(
+        const IntArray& dim, 
+        bool keepdim = false, 
+        std::optional<Dtype> dtype = std::nullopt) const;
 
     // ===================== Binary Operations ====================
     Tensor add(const Tensor& other) const;
@@ -154,6 +169,30 @@ public:
     Tensor& rdiv_(const Tensor& other) const;
     Tensor& rdiv_(Scalar s) const;
 
+    // =================== Comparison Operations ===================
+    Tensor gt(const Tensor& other) const;
+    Tensor gt(Scalar s) const;
+    Tensor ge(const Tensor& other) const;
+    Tensor ge(Scalar s) const;
+    Tensor lt(const Tensor& other) const;
+    Tensor lt(Scalar s) const;
+    Tensor le(const Tensor& other) const;
+    Tensor le(Scalar s) const;
+    Tensor eq(const Tensor& other) const;
+    Tensor eq(Scalar s) const;
+    Tensor ne(const Tensor& other) const;
+    Tensor ne(Scalar s) const;
+ 
+    // =================== Elementwise Operations ==================
+    Tensor maximum(const Tensor& other) const;
+    Tensor minimum(const Tensor& other) const;
+    Tensor pow(const Tensor& exponent) const;
+    Tensor pow(Scalar exponent) const;
+ 
+    // ==================== Logical Operations =====================
+    Tensor logical_and(const Tensor& other) const;
+    Tensor logical_or(const Tensor& other) const;
+
     // Operators
     Tensor operator[](int64_t index) const;
     Tensor operator[](indexing::TensorIndex idx) const;
@@ -175,6 +214,20 @@ public:
     Tensor& operator*=(Scalar s) const;
     Tensor& operator/=(const Tensor& other) const;
     Tensor& operator/=(Scalar s) const;
+
+    // Comparison
+    Tensor operator>(const Tensor& other) const;
+    Tensor operator>(Scalar s) const;
+    Tensor operator>=(const Tensor& other) const;
+    Tensor operator>=(Scalar s) const;
+    Tensor operator<(const Tensor& other) const;
+    Tensor operator<(Scalar s) const;
+    Tensor operator<=(const Tensor& other) const;
+    Tensor operator<=(Scalar s) const;
+    Tensor operator==(const Tensor& other) const;
+    Tensor operator==(Scalar s) const;
+    Tensor operator!=(const Tensor& other) const;
+    Tensor operator!=(Scalar s) const;
 
 private:
     std::shared_ptr<detail::TensorImpl> impl_;

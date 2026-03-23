@@ -9,9 +9,10 @@
 #include <fmt/format.h>
 
 #include <raxis/format.h>
-#include <raxis/ops/binary_ops.h>
 #include <raxis/ops/copy.h>
 #include <raxis/ops/fill.h>
+#include <raxis/ops/binary_ops.h>
+#include <raxis/ops/reduce_ops.h>
 
 #include <raxis/tensor/shape_utils.h>
 #include <raxis/tensor/detail/tensor_impl.h>
@@ -111,6 +112,26 @@ Scalar Tensor::item() const {
             return Scalar(data_ptr<scalar_t>()[0]);
         }
     );
+}
+
+bool Tensor::is_contiguous() const {
+    ensure_defined("is_contiguous");
+    const IntArray& sh = shape();
+    const IntArray& st = strides();
+    if (sh.empty()) return true;
+    
+    int64_t expected_stride = 1;
+    for (int i = static_cast<int>(sh.size()) - 1; i >= 0; --i) {
+        if (sh[i] == 1) continue;
+        if (st[i] != expected_stride) return false;
+        expected_stride *= sh[i];
+    }
+    return true;
+}
+
+Tensor Tensor::contiguous() const {
+    if (is_contiguous()) return *this;
+    return clone();
 }
 
 bool Tensor::is_cpu() const {
@@ -336,6 +357,31 @@ Tensor& Tensor::zero_() const {
     return ::raxis::zero_(const_cast<Tensor&>(*this));
 }
 
+// =================== Reduction Operations ===================
+Tensor Tensor::sum(std::optional<Dtype> dtype) const {
+    return ::raxis::sum(*this, dtype);
+}
+
+Tensor Tensor::sum(
+    const IntArray& dim, 
+    bool keepdim, 
+    std::optional<Dtype> dtype
+) const {
+    return ::raxis::sum(*this, dim, keepdim, dtype);
+}
+
+Tensor Tensor::nansum(std::optional<Dtype> dtype) const {
+    return ::raxis::nansum(*this, dtype);
+}
+
+Tensor Tensor::nansum(
+    const IntArray& dim, 
+    bool keepdim, 
+    std::optional<Dtype> dtype
+) const {
+    return ::raxis::nansum(*this, dim, keepdim, dtype);
+}
+
 // ===================== Binary Operations ====================
 Tensor Tensor::add(const Tensor& other) const {
     return ::raxis::add(*this, other);
@@ -436,6 +482,30 @@ Tensor& Tensor::rdiv_(Scalar s) const {
     return ::raxis::rdiv_(const_cast<Tensor&>(*this), s);
 }
 
+// =================== Comparison Operations ===================
+Tensor Tensor::gt(const Tensor& other) const { return ::raxis::gt(*this, other); }
+Tensor Tensor::gt(Scalar s) const            { return ::raxis::gt(*this, s); }
+Tensor Tensor::ge(const Tensor& other) const { return ::raxis::ge(*this, other); }
+Tensor Tensor::ge(Scalar s) const            { return ::raxis::ge(*this, s); }
+Tensor Tensor::lt(const Tensor& other) const { return ::raxis::lt(*this, other); }
+Tensor Tensor::lt(Scalar s) const            { return ::raxis::lt(*this, s); }
+Tensor Tensor::le(const Tensor& other) const { return ::raxis::le(*this, other); }
+Tensor Tensor::le(Scalar s) const            { return ::raxis::le(*this, s); }
+Tensor Tensor::eq(const Tensor& other) const { return ::raxis::eq(*this, other); }
+Tensor Tensor::eq(Scalar s) const            { return ::raxis::eq(*this, s); }
+Tensor Tensor::ne(const Tensor& other) const { return ::raxis::ne(*this, other); }
+Tensor Tensor::ne(Scalar s) const            { return ::raxis::ne(*this, s); }
+ 
+// =================== Elementwise Operations ==================
+Tensor Tensor::maximum(const Tensor& other) const { return ::raxis::maximum(*this, other); }
+Tensor Tensor::minimum(const Tensor& other) const { return ::raxis::minimum(*this, other); }
+Tensor Tensor::pow(const Tensor& exponent) const  { return ::raxis::pow(*this, exponent); }
+Tensor Tensor::pow(Scalar exponent) const         { return ::raxis::pow(*this, exponent); }
+ 
+// ==================== Logical Operations =====================
+Tensor Tensor::logical_and(const Tensor& other) const { return ::raxis::logical_and(*this, other); }
+Tensor Tensor::logical_or(const Tensor& other) const  { return ::raxis::logical_or(*this, other); }
+
 // ========================= Operators =========================
 Tensor Tensor::operator[](int64_t index) const {
     return select(0, index);
@@ -510,5 +580,19 @@ Tensor& Tensor::operator/=(const Tensor& other) const {
 Tensor& Tensor::operator/=(Scalar s) const {
     return ::raxis::div_(const_cast<Tensor&>(*this), s);
 }
+
+// Comparison
+Tensor Tensor::operator>(const Tensor& other) const   { return ::raxis::gt(*this, other); }
+Tensor Tensor::operator>(Scalar s) const              { return ::raxis::gt(*this, s); }
+Tensor Tensor::operator>=(const Tensor& other) const  { return ::raxis::ge(*this, other); }
+Tensor Tensor::operator>=(Scalar s) const             { return ::raxis::ge(*this, s); }
+Tensor Tensor::operator<(const Tensor& other) const   { return ::raxis::lt(*this, other); }
+Tensor Tensor::operator<(Scalar s) const              { return ::raxis::lt(*this, s); }
+Tensor Tensor::operator<=(const Tensor& other) const  { return ::raxis::le(*this, other); }
+Tensor Tensor::operator<=(Scalar s) const             { return ::raxis::le(*this, s); }
+Tensor Tensor::operator==(const Tensor& other) const  { return ::raxis::eq(*this, other); }
+Tensor Tensor::operator==(Scalar s) const             { return ::raxis::eq(*this, s); }
+Tensor Tensor::operator!=(const Tensor& other) const  { return ::raxis::ne(*this, other); }
+Tensor Tensor::operator!=(Scalar s) const             { return ::raxis::ne(*this, s); }
 
 } // namespace raxis

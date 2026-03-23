@@ -738,6 +738,12 @@ void TensorIterator::serial_for_each(loop2d_t loop, Range range) const {
 }
 
 
+void TensorIterator::parallel_reduce(loop2d_t loop) const {
+    // TODO
+    serial_for_each(loop, {0, numel()});
+}
+
+
 void TensorIterator::print_state(std::ostream& os) const {
     os << "=== TensorIterator state ===\n";
     os << "ndim: " << ndim() << "\n";

@@ -5,6 +5,7 @@
 #include <type_traits>
 #include <optional>
 #include <cassert>
+#include <bitset>
 
 #include <raxis/core/dtype.h>
 #include <raxis/core/device.h>
@@ -226,10 +227,21 @@ inline TensorIteratorConfig binary_float_op_config() {
         .promote_integer_inputs_to_float(true);
 }
 
+inline TensorIteratorConfig comparison_op_config() {
+    return TensorIteratorConfig()
+        .allow_cpu_scalars(true)
+        .promote_inputs_to_common_dtype(true)
+        .cast_common_dtype_to_outputs(false)
+        .enforce_safe_casting_to_output(false)
+        .declare_static_dtype(dtypes::Bool);
+}
+
 } // namespace iterator
 
 struct TensorIterator {
 public:
+    using DimMask = std::bitset<64>;
+
     int ndim() const {
         return static_cast<int>(shape_.size());
     }
@@ -306,6 +318,8 @@ public:
 
     void for_each(loop2d_t loop, int64_t grain_size = detail::GRAIN_SIZE) const;
     void serial_for_each(loop2d_t loop, Range range) const;
+
+    void parallel_reduce(loop2d_t loop) const;
 
     /// Create a strides array for a Tensor with shape of this iterator. The
     /// parameter `element_size` specifies the size of Tensor's data type in

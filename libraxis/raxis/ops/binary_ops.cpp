@@ -214,5 +214,116 @@ DEFINE_DISPATCH(add_stub);
 DEFINE_DISPATCH(sub_stub);
 DEFINE_DISPATCH(mul_stub);
 DEFINE_DISPATCH(div_stub);
-    
+
+
+namespace {
+ 
+template<typename Stub>
+Tensor comparison_op(const Tensor& a, const Tensor& b, Stub& stub) {
+    Tensor out;
+    auto iter = iterator::comparison_op_config()
+        .add_output(out)
+        .add_input(a)
+        .add_input(b)
+        .build();
+ 
+    stub(iter.device_type(), iter);
+    return iter.get_output(0);
+}
+ 
+} // namespace
+ 
+Tensor gt(const Tensor& a, const Tensor& b) { return comparison_op(a, b, gt_stub); }
+Tensor gt(const Tensor& a, Scalar s)        { return gt(a, wrapped_scalar_tensor(s)); }
+Tensor ge(const Tensor& a, const Tensor& b) { return comparison_op(a, b, ge_stub); }
+Tensor ge(const Tensor& a, Scalar s)        { return ge(a, wrapped_scalar_tensor(s)); }
+Tensor lt(const Tensor& a, const Tensor& b) { return comparison_op(a, b, lt_stub); }
+Tensor lt(const Tensor& a, Scalar s)        { return lt(a, wrapped_scalar_tensor(s)); }
+Tensor le(const Tensor& a, const Tensor& b) { return comparison_op(a, b, le_stub); }
+Tensor le(const Tensor& a, Scalar s)        { return le(a, wrapped_scalar_tensor(s)); }
+Tensor eq(const Tensor& a, const Tensor& b) { return comparison_op(a, b, eq_stub); }
+Tensor eq(const Tensor& a, Scalar s)        { return eq(a, wrapped_scalar_tensor(s)); }
+Tensor ne(const Tensor& a, const Tensor& b) { return comparison_op(a, b, ne_stub); }
+Tensor ne(const Tensor& a, Scalar s)        { return ne(a, wrapped_scalar_tensor(s)); }
+ 
+
+Tensor maximum(const Tensor& a, const Tensor& b) {
+    Tensor out;
+    auto iter = iterator::binary_op_config()
+        .add_output(out)
+        .add_input(a)
+        .add_input(b)
+        .build();
+ 
+    maximum_stub(iter.device_type(), iter);
+    return iter.get_output(0);
+}
+ 
+Tensor minimum(const Tensor& a, const Tensor& b) {
+    Tensor out;
+    auto iter = iterator::binary_op_config()
+        .add_output(out)
+        .add_input(a)
+        .add_input(b)
+        .build();
+ 
+    minimum_stub(iter.device_type(), iter);
+    return iter.get_output(0);
+}
+ 
+
+Tensor pow(const Tensor& a, const Tensor& b) {
+    Tensor out;
+    auto iter = iterator::binary_float_op_config()
+        .add_output(out)
+        .add_input(a)
+        .add_input(b)
+        .build();
+ 
+    pow_stub(iter.device_type(), iter);
+    return iter.get_output(0);
+}
+ 
+Tensor pow(const Tensor& a, Scalar s) {
+    return pow(a, wrapped_scalar_tensor(s));
+}
+ 
+
+Tensor logical_and(const Tensor& a, const Tensor& b) {
+    Tensor out;
+    auto iter = iterator::comparison_op_config()
+        .add_output(out)
+        .add_input(a)
+        .add_input(b)
+        .build();
+ 
+    logical_and_stub(iter.device_type(), iter);
+    return iter.get_output(0);
+}
+ 
+Tensor logical_or(const Tensor& a, const Tensor& b) {
+    Tensor out;
+    auto iter = iterator::comparison_op_config()
+        .add_output(out)
+        .add_input(a)
+        .add_input(b)
+        .build();
+ 
+    logical_or_stub(iter.device_type(), iter);
+    return iter.get_output(0);
+}
+ 
+
+DEFINE_DISPATCH(gt_stub);
+DEFINE_DISPATCH(ge_stub);
+DEFINE_DISPATCH(lt_stub);
+DEFINE_DISPATCH(le_stub);
+DEFINE_DISPATCH(eq_stub);
+DEFINE_DISPATCH(ne_stub);
+DEFINE_DISPATCH(maximum_stub);
+DEFINE_DISPATCH(minimum_stub);
+DEFINE_DISPATCH(pow_stub);
+DEFINE_DISPATCH(logical_and_stub);
+DEFINE_DISPATCH(logical_or_stub);
+
 }
