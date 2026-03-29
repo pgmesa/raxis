@@ -140,6 +140,18 @@ public:
         bool keepdim = false, 
         std::optional<Dtype> dtype = std::nullopt) const;
 
+    Tensor mean(std::optional<Dtype> dtype = std::nullopt) const;
+    Tensor mean(
+        const IntArray& dim, 
+        bool keepdim = false, 
+        std::optional<Dtype> dtype = std::nullopt) const;
+        
+    Tensor nanmean(std::optional<Dtype> dtype = std::nullopt) const;
+    Tensor nanmean(
+        const IntArray& dim, 
+        bool keepdim = false, 
+        std::optional<Dtype> dtype = std::nullopt) const;
+
     // ===================== Binary Operations ====================
     Tensor add(const Tensor& other) const;
     Tensor add(Scalar s) const;
@@ -169,6 +181,11 @@ public:
     Tensor& rdiv_(const Tensor& other) const;
     Tensor& rdiv_(Scalar s) const;
 
+    Tensor maximum(const Tensor& other) const;
+    Tensor minimum(const Tensor& other) const;
+    Tensor pow(const Tensor& exponent) const;
+    Tensor pow(Scalar exponent) const;
+
     // =================== Comparison Operations ===================
     Tensor gt(const Tensor& other) const;
     Tensor gt(Scalar s) const;
@@ -182,16 +199,34 @@ public:
     Tensor eq(Scalar s) const;
     Tensor ne(const Tensor& other) const;
     Tensor ne(Scalar s) const;
- 
-    // =================== Elementwise Operations ==================
-    Tensor maximum(const Tensor& other) const;
-    Tensor minimum(const Tensor& other) const;
-    Tensor pow(const Tensor& exponent) const;
-    Tensor pow(Scalar exponent) const;
+    Tensor isnan() const;
  
     // ==================== Logical Operations =====================
     Tensor logical_and(const Tensor& other) const;
     Tensor logical_or(const Tensor& other) const;
+
+    // ====================== Unary Operations =====================
+    Tensor neg() const;
+    Tensor abs() const;
+    Tensor ceil() const;
+    Tensor floor() const;
+    Tensor round() const;
+    Tensor exp() const;
+    Tensor log() const;
+    Tensor sqrt() const;
+    Tensor sigmoid() const;
+    Tensor logical_not() const;
+    
+    Tensor& neg_() const;
+    Tensor& abs_() const;
+    Tensor& ceil_() const;
+    Tensor& floor_() const;
+    Tensor& round_() const;
+    Tensor& exp_() const;
+    Tensor& log_() const;
+    Tensor& sqrt_() const;
+    Tensor& sigmoid_() const;
+    Tensor& logical_not_() const;
 
     // Operators
     Tensor operator[](int64_t index) const;
@@ -214,6 +249,10 @@ public:
     Tensor& operator*=(Scalar s) const;
     Tensor& operator/=(const Tensor& other) const;
     Tensor& operator/=(Scalar s) const;
+
+    // Unary
+    Tensor operator-() const;
+    Tensor operator~() const;
 
     // Comparison
     Tensor operator>(const Tensor& other) const;

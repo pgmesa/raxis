@@ -322,9 +322,204 @@ PYBIND11_MODULE(_C, c) {
             py::overload_cast<raxis::Scalar>(&raxis::Tensor::rdiv_, py::const_),
             py::arg("other"))
 
+        // Comparison operators
+        .def("__gt__",
+            py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::gt, py::const_),
+            py::arg("other"))
+        .def("__gt__",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::gt, py::const_),
+            py::arg("other"))
+ 
+        .def("__ge__",
+            py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::ge, py::const_),
+            py::arg("other"))
+        .def("__ge__",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::ge, py::const_),
+            py::arg("other"))
+ 
+        .def("__lt__",
+            py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::lt, py::const_),
+            py::arg("other"))
+        .def("__lt__",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::lt, py::const_),
+            py::arg("other"))
+ 
+        .def("__le__",
+            py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::le, py::const_),
+            py::arg("other"))
+        .def("__le__",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::le, py::const_),
+            py::arg("other"))
+ 
+        .def("__eq__",
+            py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::eq, py::const_),
+            py::arg("other"))
+        .def("__eq__",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::eq, py::const_),
+            py::arg("other"))
+ 
+        .def("__ne__",
+            py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::ne, py::const_),
+            py::arg("other"))
+        .def("__ne__",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::ne, py::const_),
+            py::arg("other"))
+ 
+        // Comparison methods
+        .def("gt",
+            py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::gt, py::const_),
+            py::arg("other"))
+        .def("gt",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::gt, py::const_),
+            py::arg("other"))
+ 
+        .def("ge",
+            py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::ge, py::const_),
+            py::arg("other"))
+        .def("ge",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::ge, py::const_),
+            py::arg("other"))
+ 
+        .def("lt",
+            py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::lt, py::const_),
+            py::arg("other"))
+        .def("lt",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::lt, py::const_),
+            py::arg("other"))
+ 
+        .def("le",
+            py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::le, py::const_),
+            py::arg("other"))
+        .def("le",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::le, py::const_),
+            py::arg("other"))
+ 
+        .def("eq",
+            py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::eq, py::const_),
+            py::arg("other"))
+        .def("eq",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::eq, py::const_),
+            py::arg("other"))
+ 
+        .def("ne",
+            py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::ne, py::const_),
+            py::arg("other"))
+        .def("ne",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::ne, py::const_),
+            py::arg("other"))
+ 
+        // Elementwise methods
+        .def("maximum",
+            py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::maximum, py::const_),
+            py::arg("other"))
+        .def("minimum",
+            py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::minimum, py::const_),
+            py::arg("other"))
+ 
+        .def("pow",
+            py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::pow, py::const_),
+            py::arg("exponent"))
+        .def("pow",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::pow, py::const_),
+            py::arg("exponent"))
+        .def("__pow__",
+            py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::pow, py::const_),
+            py::arg("exponent"))
+        .def("__pow__",
+            py::overload_cast<raxis::Scalar>(&raxis::Tensor::pow, py::const_),
+            py::arg("exponent"))
+ 
+        // Logical methods
+        .def("logical_and",
+            py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::logical_and, py::const_),
+            py::arg("other"))
+        .def("logical_or",
+            py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::logical_or, py::const_),
+            py::arg("other"))
+
+        // Unary operators
+        .def("__neg__", &raxis::Tensor::neg)
+        .def("__abs__", &raxis::Tensor::abs)
+        .def("__invert__", &raxis::Tensor::logical_not)
+ 
+        // Unary methods
+        .def("isnan", &raxis::Tensor::isnan)
+        .def("neg", &raxis::Tensor::neg)
+        .def("abs", &raxis::Tensor::abs)
+        .def("ceil", &raxis::Tensor::ceil)
+        .def("floor", &raxis::Tensor::floor)
+        .def("round", &raxis::Tensor::round)
+        .def("exp", &raxis::Tensor::exp)
+        .def("log", &raxis::Tensor::log)
+        .def("sqrt", &raxis::Tensor::sqrt)
+        .def("sigmoid", &raxis::Tensor::sigmoid)
+        .def("logical_not", &raxis::Tensor::logical_not)
+
+        .def("neg_", &raxis::Tensor::neg_)
+        .def("abs_", &raxis::Tensor::abs_)
+        .def("ceil_", &raxis::Tensor::ceil_)
+        .def("floor_", &raxis::Tensor::floor_)
+        .def("round_", &raxis::Tensor::round_)
+        .def("exp_", &raxis::Tensor::exp_)
+        .def("log_", &raxis::Tensor::log_)
+        .def("sqrt_", &raxis::Tensor::sqrt_)
+        .def("sigmoid_", &raxis::Tensor::sigmoid_)
+        .def("logical_not_", &raxis::Tensor::logical_not_)
+        
+        // Reduction methods
+        .def("sum", [](
+                const raxis::Tensor& self, 
+                std::optional<raxis::DimArray> dim,
+                bool keepdim,
+                std::optional<raxis::Dtype> dtype
+            ) -> raxis::Tensor {
+                return dim.has_value()? self.sum(*dim, keepdim, dtype) : self.sum(dtype);
+            },
+            py::arg("dim") = py::none(),
+            py::arg("keepdim") = false,
+            py::arg("dtype") = py::none()
+        )
+        .def("nansum", [](
+                const raxis::Tensor& self, 
+                std::optional<raxis::DimArray> dim,
+                bool keepdim,
+                std::optional<raxis::Dtype> dtype
+            ) -> raxis::Tensor {
+                return dim.has_value()? self.nansum(*dim, keepdim, dtype) : self.nansum(dtype);
+            },
+            py::arg("dim") = py::none(),
+            py::arg("keepdim") = false,
+            py::arg("dtype") = py::none()
+        )
+
+        .def("mean", [](
+                const raxis::Tensor& self, 
+                std::optional<raxis::DimArray> dim,
+                bool keepdim,
+                std::optional<raxis::Dtype> dtype
+            ) -> raxis::Tensor {
+                return dim.has_value()? self.mean(*dim, keepdim, dtype) : self.mean(dtype);
+            },
+            py::arg("dim") = py::none(),
+            py::arg("keepdim") = false,
+            py::arg("dtype") = py::none()
+        )
+        .def("nanmean", [](
+                const raxis::Tensor& self, 
+                std::optional<raxis::DimArray> dim,
+                bool keepdim,
+                std::optional<raxis::Dtype> dtype
+            ) -> raxis::Tensor {
+                return dim.has_value()? self.nanmean(*dim, keepdim, dtype) : self.nanmean(dtype);
+            },
+            py::arg("dim") = py::none(),
+            py::arg("keepdim") = false,
+            py::arg("dtype") = py::none()
+        )
+        
         ;
     
-    // Initializers
+    // Factories
     c.def("tensor", [](py::object data, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
         return raxis::python::tensor_from_python(data, dtype, device);
     },
@@ -449,5 +644,163 @@ PYBIND11_MODULE(_C, c) {
     c.def("rdiv", 
         py::overload_cast<const raxis::Tensor&, raxis::Scalar>(&raxis::rdiv), 
         py::arg("t1"), py::arg("value"));
+
+
+    // Comparison Ops
+    c.def("gt",
+        py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::gt),
+        py::arg("input"), py::arg("other"));
+    c.def("gt",
+        py::overload_cast<const raxis::Tensor&, raxis::Scalar>(&raxis::gt),
+        py::arg("input"), py::arg("other"));
+ 
+    c.def("ge",
+        py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::ge),
+        py::arg("input"), py::arg("other"));
+    c.def("ge",
+        py::overload_cast<const raxis::Tensor&, raxis::Scalar>(&raxis::ge),
+        py::arg("input"), py::arg("other"));
+ 
+    c.def("lt",
+        py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::lt),
+        py::arg("input"), py::arg("other"));
+    c.def("lt",
+        py::overload_cast<const raxis::Tensor&, raxis::Scalar>(&raxis::lt),
+        py::arg("input"), py::arg("other"));
+ 
+    c.def("le",
+        py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::le),
+        py::arg("input"), py::arg("other"));
+    c.def("le",
+        py::overload_cast<const raxis::Tensor&, raxis::Scalar>(&raxis::le),
+        py::arg("input"), py::arg("other"));
+ 
+    c.def("eq",
+        py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::eq),
+        py::arg("input"), py::arg("other"));
+    c.def("eq",
+        py::overload_cast<const raxis::Tensor&, raxis::Scalar>(&raxis::eq),
+        py::arg("input"), py::arg("other"));
+ 
+    c.def("ne",
+        py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::ne),
+        py::arg("input"), py::arg("other"));
+    c.def("ne",
+        py::overload_cast<const raxis::Tensor&, raxis::Scalar>(&raxis::ne),
+        py::arg("input"), py::arg("other"));
+ 
+    // Elementwise Ops
+    c.def("maximum",
+        py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::maximum),
+        py::arg("input"), py::arg("other"));
+    c.def("minimum",
+        py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::minimum),
+        py::arg("input"), py::arg("other"));
+ 
+    c.def("pow",
+        py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::pow),
+        py::arg("input"), py::arg("exponent"));
+    c.def("pow",
+        py::overload_cast<const raxis::Tensor&, raxis::Scalar>(&raxis::pow),
+        py::arg("input"), py::arg("exponent"));
+ 
+    // Logical Ops
+    c.def("logical_and",
+        py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::logical_and),
+        py::arg("input"), py::arg("other"));
+    c.def("logical_or",
+        py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::logical_or),
+        py::arg("input"), py::arg("other"));
+
+
+    // Unary Ops
+    c.def("isnan",
+        py::overload_cast<const raxis::Tensor&>(&raxis::isnan),
+        py::arg("input"));
+    c.def("neg",
+        py::overload_cast<const raxis::Tensor&>(&raxis::neg),
+        py::arg("input"));
+    c.def("abs",
+        py::overload_cast<const raxis::Tensor&>(&raxis::abs),
+        py::arg("input"));
+    c.def("ceil",
+        py::overload_cast<const raxis::Tensor&>(&raxis::ceil),
+        py::arg("input"));
+    c.def("floor",
+        py::overload_cast<const raxis::Tensor&>(&raxis::floor),
+        py::arg("input"));
+    c.def("round",
+        py::overload_cast<const raxis::Tensor&>(&raxis::round),
+        py::arg("input"));
+    c.def("exp",
+        py::overload_cast<const raxis::Tensor&>(&raxis::exp),
+        py::arg("input"));
+    c.def("log",
+        py::overload_cast<const raxis::Tensor&>(&raxis::log),
+        py::arg("input"));
+    c.def("sqrt",
+        py::overload_cast<const raxis::Tensor&>(&raxis::sqrt),
+        py::arg("input"));
+    c.def("sigmoid",
+        py::overload_cast<const raxis::Tensor&>(&raxis::sigmoid),
+        py::arg("input"));
+    c.def("logical_not",
+        py::overload_cast<const raxis::Tensor&>(&raxis::logical_not),
+        py::arg("input"));
+
+    // Reduction Ops
+    c.def("sum", [](
+            const raxis::Tensor& tensor, 
+            std::optional<raxis::DimArray> dim,
+            bool keepdim,
+            std::optional<raxis::Dtype> dtype
+        ) -> raxis::Tensor {
+            return dim.has_value()? raxis::sum(tensor, *dim, keepdim, dtype) : raxis::sum(tensor, dtype);
+        },
+        py::arg("tensor"),
+        py::arg("dim") = py::none(),
+        py::arg("keepdim") = false,
+        py::arg("dtype") = py::none()
+    );
+    c.def("nansum", [](
+            const raxis::Tensor& tensor, 
+            std::optional<raxis::DimArray> dim,
+            bool keepdim,
+            std::optional<raxis::Dtype> dtype
+        ) -> raxis::Tensor {
+            return dim.has_value()? raxis::nansum(tensor, *dim, keepdim, dtype) : raxis::nansum(tensor, dtype);
+        },
+        py::arg("tensor"),
+        py::arg("dim") = py::none(),
+        py::arg("keepdim") = false,
+        py::arg("dtype") = py::none()
+    );
+
+    c.def("mean", [](
+            const raxis::Tensor& tensor, 
+            std::optional<raxis::DimArray> dim,
+            bool keepdim,
+            std::optional<raxis::Dtype> dtype
+        ) -> raxis::Tensor {
+            return dim.has_value()? raxis::mean(tensor, *dim, keepdim, dtype) : raxis::mean(tensor, dtype);
+        },
+        py::arg("tensor"),
+        py::arg("dim") = py::none(),
+        py::arg("keepdim") = false,
+        py::arg("dtype") = py::none()
+    );
+    c.def("nanmean", [](
+            const raxis::Tensor& tensor, 
+            std::optional<raxis::DimArray> dim,
+            bool keepdim,
+            std::optional<raxis::Dtype> dtype
+        ) -> raxis::Tensor {
+            return dim.has_value()? raxis::nanmean(tensor, *dim, keepdim, dtype) : raxis::nanmean(tensor, dtype);
+        },
+        py::arg("tensor"),
+        py::arg("dim") = py::none(),
+        py::arg("keepdim") = false,
+        py::arg("dtype") = py::none()
+    );
 
 } // pybind11_module

@@ -12,6 +12,7 @@
 #include <raxis/ops/copy.h>
 #include <raxis/ops/fill.h>
 #include <raxis/ops/binary_ops.h>
+#include <raxis/ops/unary_ops.h>
 #include <raxis/ops/reduce_ops.h>
 
 #include <raxis/tensor/shape_utils.h>
@@ -382,129 +383,115 @@ Tensor Tensor::nansum(
     return ::raxis::nansum(*this, dim, keepdim, dtype);
 }
 
+Tensor Tensor::mean(std::optional<Dtype> dtype) const {
+    return ::raxis::mean(*this, dtype);
+}
+
+Tensor Tensor::mean(
+    const IntArray& dim, 
+    bool keepdim, 
+    std::optional<Dtype> dtype
+) const {
+    return ::raxis::mean(*this, dim, keepdim, dtype);
+}
+
+Tensor Tensor::nanmean(std::optional<Dtype> dtype) const {
+    return ::raxis::nanmean(*this, dtype);
+}
+
+Tensor Tensor::nanmean(
+    const IntArray& dim, 
+    bool keepdim, 
+    std::optional<Dtype> dtype
+) const {
+    return ::raxis::nanmean(*this, dim, keepdim, dtype);
+}
+
 // ===================== Binary Operations ====================
-Tensor Tensor::add(const Tensor& other) const {
-    return ::raxis::add(*this, other);
-}
+Tensor Tensor::add(const Tensor& other) const { return ::raxis::add(*this, other); }
+Tensor Tensor::sub(const Tensor& other) const { return ::raxis::sub(*this, other); }
+Tensor Tensor::mul(const Tensor& other) const { return ::raxis::mul(*this, other); }
+Tensor Tensor::div(const Tensor& other) const { return ::raxis::div(*this, other); }
 
-Tensor Tensor::add(Scalar s) const {
-    return ::raxis::add(*this, s);
-}
-
-Tensor Tensor::sub(const Tensor& other) const {
-    return ::raxis::sub(*this, other);
-}
-
-Tensor Tensor::sub(Scalar s) const {
-    return ::raxis::sub(*this, s);
-}
-
-Tensor Tensor::mul(const Tensor& other) const {
-    return ::raxis::mul(*this, other);
-}
-
-Tensor Tensor::mul(Scalar s) const {
-    return ::raxis::mul(*this, s);
-}
-
-Tensor Tensor::div(const Tensor& other) const {
-    return ::raxis::div(*this, other);
-}
-
-Tensor Tensor::div(Scalar s) const {
-    return ::raxis::div(*this, s);
-}
+Tensor Tensor::add(Scalar s) const { return ::raxis::add(*this, s); }
+Tensor Tensor::sub(Scalar s) const { return ::raxis::sub(*this, s); }
+Tensor Tensor::mul(Scalar s) const { return ::raxis::mul(*this, s); }
+Tensor Tensor::div(Scalar s) const { return ::raxis::div(*this, s); }
 
 
-Tensor& Tensor::add_(const Tensor& other) const {
-    return ::raxis::add_(const_cast<Tensor&>(*this), other);
-}
+Tensor& Tensor::add_(const Tensor& other) const { return ::raxis::add_(const_cast<Tensor&>(*this), other); }
+Tensor& Tensor::sub_(const Tensor& other) const { return ::raxis::sub_(const_cast<Tensor&>(*this), other); }
+Tensor& Tensor::mul_(const Tensor& other) const { return ::raxis::mul_(const_cast<Tensor&>(*this), other); }
+Tensor& Tensor::div_(const Tensor& other) const { return ::raxis::div_(const_cast<Tensor&>(*this), other); }
 
-Tensor& Tensor::add_(Scalar s) const {
-    return ::raxis::add_(const_cast<Tensor&>(*this), s);
-}
-
-Tensor& Tensor::sub_(const Tensor& other) const {
-    return ::raxis::sub_(const_cast<Tensor&>(*this), other);
-}
-
-Tensor& Tensor::sub_(Scalar s) const {
-    return ::raxis::sub_(const_cast<Tensor&>(*this), s);
-}
-
-Tensor& Tensor::mul_(const Tensor& other) const {
-    return ::raxis::mul_(const_cast<Tensor&>(*this), other);
-}
-
-Tensor& Tensor::mul_(Scalar s) const {
-    return ::raxis::mul_(const_cast<Tensor&>(*this), s);
-}
-
-Tensor& Tensor::div_(const Tensor& other) const {
-    return ::raxis::div_(const_cast<Tensor&>(*this), other);
-}
-
-Tensor& Tensor::div_(Scalar s) const {
-    return ::raxis::div_(const_cast<Tensor&>(*this), s);
-}
+Tensor& Tensor::add_(Scalar s) const { return ::raxis::add_(const_cast<Tensor&>(*this), s); }
+Tensor& Tensor::sub_(Scalar s) const { return ::raxis::sub_(const_cast<Tensor&>(*this), s); }
+Tensor& Tensor::mul_(Scalar s) const { return ::raxis::mul_(const_cast<Tensor&>(*this), s); }
+Tensor& Tensor::div_(Scalar s) const { return ::raxis::div_(const_cast<Tensor&>(*this), s); }
 
 
-Tensor Tensor::rsub(const Tensor& other) const {
-    return ::raxis::rsub(*this, other);
-}
+Tensor Tensor::rsub(const Tensor& other) const { return ::raxis::rsub(*this, other); }
+Tensor Tensor::rdiv(const Tensor& other) const { return ::raxis::rdiv(*this, other); }
 
-Tensor Tensor::rsub(Scalar s) const {
-    return ::raxis::rsub(*this, s);
-}
-
-Tensor Tensor::rdiv(const Tensor& other) const {
-    return ::raxis::rdiv(*this, other);
-}
-
-Tensor Tensor::rdiv(Scalar s) const {
-    return ::raxis::rdiv(*this, s);
-}
+Tensor Tensor::rsub(Scalar s) const { return ::raxis::rsub(*this, s); }
+Tensor Tensor::rdiv(Scalar s) const { return ::raxis::rdiv(*this, s); }
 
 
-Tensor& Tensor::rsub_(const Tensor& other) const {
-    return ::raxis::rsub_(const_cast<Tensor&>(*this), other);
-}
+Tensor& Tensor::rsub_(const Tensor& other) const { return ::raxis::rsub_(const_cast<Tensor&>(*this), other); }
+Tensor& Tensor::rdiv_(const Tensor& other) const { return ::raxis::rdiv_(const_cast<Tensor&>(*this), other); }
 
-Tensor& Tensor::rsub_(Scalar s) const {
-    return ::raxis::rsub_(const_cast<Tensor&>(*this), s);
-}
+Tensor& Tensor::rsub_(Scalar s) const { return ::raxis::rsub_(const_cast<Tensor&>(*this), s); }
+Tensor& Tensor::rdiv_(Scalar s) const { return ::raxis::rdiv_(const_cast<Tensor&>(*this), s); }
 
-Tensor& Tensor::rdiv_(const Tensor& other) const {
-    return ::raxis::rdiv_(const_cast<Tensor&>(*this), other);
-}
 
-Tensor& Tensor::rdiv_(Scalar s) const {
-    return ::raxis::rdiv_(const_cast<Tensor&>(*this), s);
-}
-
-// =================== Comparison Operations ===================
-Tensor Tensor::gt(const Tensor& other) const { return ::raxis::gt(*this, other); }
-Tensor Tensor::gt(Scalar s) const            { return ::raxis::gt(*this, s); }
-Tensor Tensor::ge(const Tensor& other) const { return ::raxis::ge(*this, other); }
-Tensor Tensor::ge(Scalar s) const            { return ::raxis::ge(*this, s); }
-Tensor Tensor::lt(const Tensor& other) const { return ::raxis::lt(*this, other); }
-Tensor Tensor::lt(Scalar s) const            { return ::raxis::lt(*this, s); }
-Tensor Tensor::le(const Tensor& other) const { return ::raxis::le(*this, other); }
-Tensor Tensor::le(Scalar s) const            { return ::raxis::le(*this, s); }
-Tensor Tensor::eq(const Tensor& other) const { return ::raxis::eq(*this, other); }
-Tensor Tensor::eq(Scalar s) const            { return ::raxis::eq(*this, s); }
-Tensor Tensor::ne(const Tensor& other) const { return ::raxis::ne(*this, other); }
-Tensor Tensor::ne(Scalar s) const            { return ::raxis::ne(*this, s); }
- 
-// =================== Elementwise Operations ==================
 Tensor Tensor::maximum(const Tensor& other) const { return ::raxis::maximum(*this, other); }
 Tensor Tensor::minimum(const Tensor& other) const { return ::raxis::minimum(*this, other); }
 Tensor Tensor::pow(const Tensor& exponent) const  { return ::raxis::pow(*this, exponent); }
 Tensor Tensor::pow(Scalar exponent) const         { return ::raxis::pow(*this, exponent); }
+
+// =================== Comparison Operations ===================
+Tensor Tensor::gt(const Tensor& other) const { return ::raxis::gt(*this, other); }
+Tensor Tensor::ge(const Tensor& other) const { return ::raxis::ge(*this, other); }
+Tensor Tensor::lt(const Tensor& other) const { return ::raxis::lt(*this, other); }
+Tensor Tensor::le(const Tensor& other) const { return ::raxis::le(*this, other); }
+Tensor Tensor::eq(const Tensor& other) const { return ::raxis::eq(*this, other); }
+Tensor Tensor::ne(const Tensor& other) const { return ::raxis::ne(*this, other); }
+
+Tensor Tensor::gt(Scalar s) const { return ::raxis::gt(*this, s); }
+Tensor Tensor::ge(Scalar s) const { return ::raxis::ge(*this, s); }
+Tensor Tensor::lt(Scalar s) const { return ::raxis::lt(*this, s); }
+Tensor Tensor::le(Scalar s) const { return ::raxis::le(*this, s); }
+Tensor Tensor::eq(Scalar s) const { return ::raxis::eq(*this, s); }
+Tensor Tensor::ne(Scalar s) const { return ::raxis::ne(*this, s); }
+
+Tensor Tensor::isnan() const { return ::raxis::isnan(*this); }
  
 // ==================== Logical Operations =====================
 Tensor Tensor::logical_and(const Tensor& other) const { return ::raxis::logical_and(*this, other); }
-Tensor Tensor::logical_or(const Tensor& other) const  { return ::raxis::logical_or(*this, other); }
+Tensor Tensor::logical_or (const Tensor& other) const { return ::raxis::logical_or(*this, other); }
+
+// ====================== Unary Operations =====================
+Tensor Tensor::neg() const { return ::raxis::neg(*this); }
+Tensor Tensor::abs() const { return ::raxis::abs(*this); }
+Tensor Tensor::ceil() const { return ::raxis::ceil(*this); }
+Tensor Tensor::floor() const { return ::raxis::floor(*this); }
+Tensor Tensor::round() const { return ::raxis::round(*this); }
+Tensor Tensor::exp() const { return ::raxis::exp(*this); }
+Tensor Tensor::log() const { return ::raxis::log(*this); }
+Tensor Tensor::sqrt() const { return ::raxis::sqrt(*this); }
+Tensor Tensor::sigmoid() const { return ::raxis::sigmoid(*this); }
+Tensor Tensor::logical_not() const { return ::raxis::logical_not(*this); }
+
+Tensor& Tensor::neg_() const { return ::raxis::neg_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::abs_() const { return ::raxis::abs_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::ceil_() const { return ::raxis::ceil_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::floor_() const { return ::raxis::floor_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::round_() const { return ::raxis::round_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::exp_() const { return ::raxis::exp_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::log_() const { return ::raxis::log_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::sqrt_() const { return ::raxis::sqrt_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::sigmoid_() const { return ::raxis::sigmoid_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::logical_not_() const { return ::raxis::logical_not_(const_cast<Tensor&>(*this)); }
 
 // ========================= Operators =========================
 Tensor Tensor::operator[](int64_t index) const {
@@ -515,84 +502,44 @@ Tensor Tensor::operator[](indexing::TensorIndex idx) const {
     return index({idx});
 }
 
+Tensor Tensor::operator+(const Tensor& other) const { return ::raxis::add(*this, other); }
+Tensor Tensor::operator-(const Tensor& other) const { return ::raxis::sub(*this, other); }
+Tensor Tensor::operator*(const Tensor& other) const { return ::raxis::mul(*this, other); }
+Tensor Tensor::operator/(const Tensor& other) const { return ::raxis::div(*this, other); }
 
-Tensor Tensor::operator+(const Tensor& other) const {
-    return ::raxis::add(*this, other);
-}
-
-Tensor Tensor::operator+(Scalar s) const {
-    return ::raxis::add(*this, s);
-}
-
-Tensor Tensor::operator-(const Tensor& other) const {
-    return ::raxis::sub(*this, other);
-}
-
-Tensor Tensor::operator-(Scalar s) const {
-    return ::raxis::sub(*this, s);
-}
-
-Tensor Tensor::operator*(const Tensor& other) const {
-    return ::raxis::mul(*this, other);
-}
-
-Tensor Tensor::operator*(Scalar s) const {
-    return ::raxis::mul(*this, s);
-}
-
-Tensor Tensor::operator/(const Tensor& other) const {
-    return ::raxis::div(*this, other);
-}
-
-Tensor Tensor::operator/(Scalar s) const {
-    return ::raxis::div(*this, s);
-}
+Tensor Tensor::operator+(Scalar s) const { return ::raxis::add(*this, s); }
+Tensor Tensor::operator-(Scalar s) const { return ::raxis::sub(*this, s); }
+Tensor Tensor::operator*(Scalar s) const { return ::raxis::mul(*this, s); }
+Tensor Tensor::operator/(Scalar s) const { return ::raxis::div(*this, s); }
 
 // In-place
-Tensor& Tensor::operator+=(const Tensor& other) const {
-    return ::raxis::add_(const_cast<Tensor&>(*this), other);
-}
+Tensor& Tensor::operator+=(const Tensor& other) const { return ::raxis::add_(const_cast<Tensor&>(*this), other); }
+Tensor& Tensor::operator-=(const Tensor& other) const { return ::raxis::sub_(const_cast<Tensor&>(*this), other); }
+Tensor& Tensor::operator*=(const Tensor& other) const { return ::raxis::mul_(const_cast<Tensor&>(*this), other); }
+Tensor& Tensor::operator/=(const Tensor& other) const { return ::raxis::div_(const_cast<Tensor&>(*this), other); }
 
-Tensor& Tensor::operator+=(Scalar s) const {
-    return ::raxis::add_(const_cast<Tensor&>(*this), s);
-}
+Tensor& Tensor::operator+=(Scalar s) const { return ::raxis::add_(const_cast<Tensor&>(*this), s); }
+Tensor& Tensor::operator-=(Scalar s) const { return ::raxis::sub_(const_cast<Tensor&>(*this), s); }
+Tensor& Tensor::operator*=(Scalar s) const { return ::raxis::mul_(const_cast<Tensor&>(*this), s); }
+Tensor& Tensor::operator/=(Scalar s) const { return ::raxis::div_(const_cast<Tensor&>(*this), s); }
 
-Tensor& Tensor::operator-=(const Tensor& other) const {
-    return ::raxis::sub_(const_cast<Tensor&>(*this), other);
-}
-
-Tensor& Tensor::operator-=(Scalar s) const {
-    return ::raxis::sub_(const_cast<Tensor&>(*this), s);
-}
-
-Tensor& Tensor::operator*=(const Tensor& other) const {
-    return ::raxis::mul_(const_cast<Tensor&>(*this), other);
-}
-
-Tensor& Tensor::operator*=(Scalar s) const {
-    return ::raxis::mul_(const_cast<Tensor&>(*this), s);
-}
-
-Tensor& Tensor::operator/=(const Tensor& other) const {
-    return ::raxis::div_(const_cast<Tensor&>(*this), other);
-}
-
-Tensor& Tensor::operator/=(Scalar s) const {
-    return ::raxis::div_(const_cast<Tensor&>(*this), s);
-}
+// Unary
+Tensor Tensor::operator-() const { return ::raxis::neg(*this); }
+Tensor Tensor::operator~() const { return ::raxis::logical_not(*this); }
 
 // Comparison
-Tensor Tensor::operator>(const Tensor& other) const   { return ::raxis::gt(*this, other); }
-Tensor Tensor::operator>(Scalar s) const              { return ::raxis::gt(*this, s); }
-Tensor Tensor::operator>=(const Tensor& other) const  { return ::raxis::ge(*this, other); }
-Tensor Tensor::operator>=(Scalar s) const             { return ::raxis::ge(*this, s); }
-Tensor Tensor::operator<(const Tensor& other) const   { return ::raxis::lt(*this, other); }
-Tensor Tensor::operator<(Scalar s) const              { return ::raxis::lt(*this, s); }
-Tensor Tensor::operator<=(const Tensor& other) const  { return ::raxis::le(*this, other); }
-Tensor Tensor::operator<=(Scalar s) const             { return ::raxis::le(*this, s); }
-Tensor Tensor::operator==(const Tensor& other) const  { return ::raxis::eq(*this, other); }
-Tensor Tensor::operator==(Scalar s) const             { return ::raxis::eq(*this, s); }
-Tensor Tensor::operator!=(const Tensor& other) const  { return ::raxis::ne(*this, other); }
-Tensor Tensor::operator!=(Scalar s) const             { return ::raxis::ne(*this, s); }
+Tensor Tensor::operator> (const Tensor& other) const { return ::raxis::gt(*this, other); }
+Tensor Tensor::operator>=(const Tensor& other) const { return ::raxis::ge(*this, other); }
+Tensor Tensor::operator< (const Tensor& other) const { return ::raxis::lt(*this, other); }
+Tensor Tensor::operator<=(const Tensor& other) const { return ::raxis::le(*this, other); }
+Tensor Tensor::operator==(const Tensor& other) const { return ::raxis::eq(*this, other); }
+Tensor Tensor::operator!=(const Tensor& other) const { return ::raxis::ne(*this, other); }
+
+Tensor Tensor::operator> (Scalar s) const { return ::raxis::gt(*this, s); }
+Tensor Tensor::operator>=(Scalar s) const { return ::raxis::ge(*this, s); }
+Tensor Tensor::operator< (Scalar s) const { return ::raxis::lt(*this, s); }
+Tensor Tensor::operator<=(Scalar s) const { return ::raxis::le(*this, s); }
+Tensor Tensor::operator==(Scalar s) const { return ::raxis::eq(*this, s); }
+Tensor Tensor::operator!=(Scalar s) const { return ::raxis::ne(*this, s); }
 
 } // namespace raxis

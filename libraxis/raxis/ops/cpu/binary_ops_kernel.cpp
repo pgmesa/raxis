@@ -24,7 +24,7 @@ void add_kernel(TensorIterator& iter) {
 }
 
 void sub_kernel(TensorIterator& iter) {
-    iter.common_dtype().dispatch_all_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+    iter.common_dtype().dispatch_all_types_except_bool([&]<typename scalar_t>(std::type_identity<scalar_t>) {
         cpu_kernel(iter, [](scalar_t a, scalar_t b) -> scalar_t {
             return a - b;
         });

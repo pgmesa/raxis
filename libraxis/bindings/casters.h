@@ -12,6 +12,14 @@
 
 namespace py = pybind11;
 
+
+namespace raxis {
+    struct DimArray : IntArray {
+        using IntArray::IntArray;
+        using IntArray::operator=;
+    };
+}
+
 namespace pybind11::detail {
 
 template <>
@@ -22,16 +30,6 @@ public:
     // Python -> C++
     bool load(handle src, bool) {
         value.clear();
-
-        if (src.is_none()) {
-            // None -> scalar tensor (empty shape)
-            return true;
-        }
-
-        if (py::isinstance<py::int_>(src)) {
-            value.push_back(py::cast<int64_t>(src));
-            return true;
-        }
 
         if (py::isinstance<py::sequence>(src)) {
             for (auto item : py::reinterpret_borrow<py::sequence>(src)) {
@@ -54,6 +52,41 @@ public:
             lst.append(py::int_(v));
         }
         return lst.release();
+    }
+};
+
+
+template <>
+struct type_caster<raxis::DimArray> {
+public:
+    PYBIND11_TYPE_CASTER(raxis::DimArray, _("list[int] | tuple[int, ...] | int"));
+
+    bool load(handle src, bool) {
+        raxis::DimArray arr;
+        if (py::isinstance<py::int_>(src)) {
+            arr.push_back(py::cast<int64_t>(src));
+            value = std::move(arr);
+            return true;
+        }
+
+        if (py::isinstance<py::sequence>(src)) {
+            for (auto item : py::reinterpret_borrow<py::sequence>(src)) {
+                arr.push_back(py::cast<int64_t>(item));
+            }
+            value = std::move(arr);
+            return true;
+        }
+
+        return false;
+    }
+
+    static handle cast(
+        const raxis::DimArray& src,
+        return_value_policy policy,
+        handle parent
+    ) {
+        return type_caster<raxis::IntArray>::cast(
+            static_cast<const raxis::IntArray&>(src), policy, parent);
     }
 };
 

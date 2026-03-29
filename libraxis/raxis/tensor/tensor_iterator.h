@@ -216,7 +216,7 @@ namespace iterator {
 
 inline TensorIteratorConfig binary_op_config() {
     return TensorIteratorConfig()
-        // .allow_cpu_scalars(true)
+        .allow_cpu_scalars(true)
         .promote_inputs_to_common_dtype(true)
         .cast_common_dtype_to_outputs(true)
         .enforce_safe_casting_to_output(true);
@@ -234,6 +234,21 @@ inline TensorIteratorConfig comparison_op_config() {
         .cast_common_dtype_to_outputs(false)
         .enforce_safe_casting_to_output(false)
         .declare_static_dtype(dtypes::Bool);
+}
+
+inline TensorIteratorConfig unary_op_config() {
+    return TensorIteratorConfig()
+        .cast_common_dtype_to_outputs(false)
+        .enforce_safe_casting_to_output(false)
+        .check_all_same_dtype(true);
+}
+ 
+inline TensorIteratorConfig unary_float_op_config() {
+    return TensorIteratorConfig()
+        .promote_inputs_to_common_dtype(true)
+        .cast_common_dtype_to_outputs(true)
+        .enforce_safe_casting_to_output(true)
+        .promote_integer_inputs_to_float(true);
 }
 
 } // namespace iterator

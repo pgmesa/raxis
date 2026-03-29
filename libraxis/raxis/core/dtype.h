@@ -172,6 +172,42 @@ public:
     }
 
     template<typename Func>
+    auto dispatch_all_types_except_bool(Func&& func) const {
+        switch (kind_) {
+            case DtypeKind::Uint8:
+                return func(std::type_identity<uint8_t>{});
+            case DtypeKind::Uint16:
+                return func(std::type_identity<uint16_t>{});
+            case DtypeKind::Int32:
+                return func(std::type_identity<int32_t>{});
+            case DtypeKind::Int64:
+                return func(std::type_identity<int64_t>{});
+            case DtypeKind::Float32:
+                return func(std::type_identity<float32>{});
+            case DtypeKind::Float64:
+                return func(std::type_identity<float64>{});
+            default:
+                RAXIS_INTERNAL_ASSERT(false, "Cannot dispatch undefined dtype");
+        }
+    }
+
+    template<typename Func>
+    auto dispatch_signed_types(Func&& func) const {
+        switch (kind_) {
+            case DtypeKind::Int32:
+                return func(std::type_identity<int32_t>{});
+            case DtypeKind::Int64:
+                return func(std::type_identity<int64_t>{});
+            case DtypeKind::Float32:
+                return func(std::type_identity<float32>{});
+            case DtypeKind::Float64:
+                return func(std::type_identity<float64>{});
+            default:
+                RAXIS_INTERNAL_ASSERT(false, "Cannot dispatch undefined dtype");
+        }
+    }
+
+    template<typename Func>
     auto dispatch_floating_types(Func&& func) const {
         switch (kind_) {
             case DtypeKind::Float32:
@@ -182,6 +218,23 @@ public:
                 RAXIS_INTERNAL_ASSERT(false, 
                     "Cannot float dispatch '", dtype_name(kind_), "' dtype");
         }
+    }
+
+    template<typename Func>
+    auto dispatch_integral_types(Func&& func, bool include_bool = false) const {
+        switch (kind_) {
+            case DtypeKind::Bool:
+                if (include_bool) return func(std::type_identity<bool>{});
+                break;
+            case DtypeKind::Int32:
+                return func(std::type_identity<int32_t>{});
+            case DtypeKind::Int64:
+                return func(std::type_identity<int64_t>{});
+            default:
+                break;
+        }
+        RAXIS_INTERNAL_ASSERT(false, 
+            "Cannot integer dispatch '", dtype_name(kind_), "' dtype");
     }
 
     // Utility: convert single element to string
