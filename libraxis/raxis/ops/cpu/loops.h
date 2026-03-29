@@ -3,9 +3,10 @@
 #include <stdexcept>
 #include <type_traits>
 
-#include <raxis/tensor/tensor_iterator.h>
-#include <raxis/util/function_traits.h>
+#include <raxis/macros.h>
 #include <raxis/util/exception.h>
+#include <raxis/util/function_traits.h>
+#include <raxis/tensor/tensor_iterator.h>
 
 
 namespace raxis {
@@ -82,6 +83,23 @@ inline void execute_op(
 }
 
 } // namespace
+
+// Basic loop operation (one output, N inputs). May be auto-vectorized
+// by the compiler. Supports inputs and outputs of different types.
+template <typename func_t>
+inline void
+basic_loop(char* RAXIS_RESTRICT data[], const int64_t* strides_, int64_t i, int64_t n, func_t&& op) {
+    using traits = function_traits<func_t>;
+    constexpr int ntensors = traits::arity + 1;
+
+    // Copying strides to temporary array helps auto vectorization in older GCC versions.
+    int64_t strides[ntensors];
+    for (int i = 0; i < ntensors; i++) {
+        strides[i] = strides_[i];
+    }
+
+    execute_op(data, strides, i, n, std::forward<func_t>(op));
+}
 
 template <typename func_t>
 void cpu_kernel(TensorIterator& iter, func_t&& op, int64_t grain_size = detail::GRAIN_SIZE) {
