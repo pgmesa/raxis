@@ -516,6 +516,43 @@ PYBIND11_MODULE(_C, c) {
             py::arg("keepdim") = false,
             py::arg("dtype") = py::none()
         )
+
+        .def("prod", [](
+                const raxis::Tensor& self, 
+                std::optional<raxis::DimArray> dim,
+                bool keepdim,
+                std::optional<raxis::Dtype> dtype
+            ) -> raxis::Tensor {
+                return dim.has_value()? self.prod(*dim, keepdim, dtype) : self.prod(dtype);
+            },
+            py::arg("dim") = py::none(),
+            py::arg("keepdim") = false,
+            py::arg("dtype") = py::none()
+        )
+
+        .def("max", &raxis::Tensor::max)
+        .def("min", &raxis::Tensor::min)
+
+        .def("amax", [](
+                const raxis::Tensor& self, 
+                raxis::DimArray dim,
+                bool keepdim
+            ) -> raxis::Tensor {
+                return self.amax(dim, keepdim);
+            },
+            py::arg("dim") = raxis::DimArray{},
+            py::arg("keepdim") = false
+        )
+        .def("amin", [](
+                const raxis::Tensor& self, 
+                raxis::DimArray dim,
+                bool keepdim
+            ) -> raxis::Tensor {
+                return self.amin(dim, keepdim);
+            },
+            py::arg("dim") = raxis::DimArray{},
+            py::arg("keepdim") = false
+        )
         
         ;
     
@@ -801,6 +838,48 @@ PYBIND11_MODULE(_C, c) {
         py::arg("dim") = py::none(),
         py::arg("keepdim") = false,
         py::arg("dtype") = py::none()
+    );
+
+    c.def("prod", [](
+            const raxis::Tensor& tensor, 
+            std::optional<raxis::DimArray> dim,
+            bool keepdim,
+            std::optional<raxis::Dtype> dtype
+        ) -> raxis::Tensor {
+            return dim.has_value()? raxis::prod(tensor, *dim, keepdim, dtype) : raxis::prod(tensor, dtype);
+        },
+        py::arg("tensor"),
+        py::arg("dim") = py::none(),
+        py::arg("keepdim") = false,
+        py::arg("dtype") = py::none()
+    );
+
+    c.def("max", py::overload_cast<const raxis::Tensor&>(&raxis::max),
+    py::arg("input"));
+    c.def("min", py::overload_cast<const raxis::Tensor&>(&raxis::min),
+        py::arg("input"));
+
+    c.def("amax", [](
+            const raxis::Tensor& tensor, 
+            raxis::DimArray dim,
+            bool keepdim
+        ) -> raxis::Tensor {
+            return raxis::amax(tensor, dim, keepdim);
+        },
+        py::arg("tensor"),
+        py::arg("dim") = raxis::DimArray{},
+        py::arg("keepdim") = false
+    );
+    c.def("amin", [](
+            const raxis::Tensor& tensor, 
+            raxis::DimArray dim,
+            bool keepdim
+        ) -> raxis::Tensor {
+            return raxis::amin(tensor, dim, keepdim);
+        },
+        py::arg("tensor"),
+        py::arg("dim") = raxis::DimArray{},
+        py::arg("keepdim") = false
     );
 
 } // pybind11_module

@@ -152,6 +152,19 @@ public:
         bool keepdim = false, 
         std::optional<Dtype> dtype = std::nullopt) const;
 
+
+    Tensor prod(std::optional<Dtype> dtype = std::nullopt) const;
+    Tensor prod(
+        const IntArray& dim, 
+        bool keepdim = false, 
+        std::optional<Dtype> dtype = std::nullopt) const;
+
+    Tensor max() const;
+    Tensor min() const;
+
+    Tensor amax(const IntArray& dim = {}, bool keepdim = false) const;
+    Tensor amin(const IntArray& dim = {}, bool keepdim = false) const;
+
     // ===================== Binary Operations ====================
     Tensor add(const Tensor& other) const;
     Tensor add(Scalar s) const;

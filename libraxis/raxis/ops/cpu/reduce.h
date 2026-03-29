@@ -56,9 +56,7 @@ inline void scalar_outer_reduction(char** data, int64_t inner_stride,
 }
 
 template <typename scalar_t, typename func_t>
-void cpu_reduce_kernel(
-    TensorIterator& iter, func_t op, double ident)
-{
+void cpu_reduce_kernel(TensorIterator& iter, func_t op, scalar_t ident) {
     iter.get_output(0).fill_(ident);
     iter.parallel_reduce(
         [&op](char** data, const int64_t* strides, int64_t size0, int64_t size1) {

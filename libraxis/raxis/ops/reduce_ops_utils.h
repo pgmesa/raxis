@@ -152,5 +152,23 @@ TensorIterator make_reduction(
     
     return iter;
 }
+
+inline void zero_numel_check_dims(const Tensor& self, int64_t dim, const char* fn_name){
+    if (self.ndim() == 0) {
+        RAXIS_CHECK(dim == 0 || dim == -1, fn_name,
+            ": Expected reduction dim -1 or 0 for scalar but got ", dim);
+    } else {
+        RAXIS_CHECK(self.shape()[dim] != 0, fn_name,
+            ": Expected reduction dim ", dim, " to have non-zero size.");
+    }
+}
+
+inline void zero_numel_check_dims(const Tensor& self, const IntArray& dim, const char* fn_name) {
+    RAXIS_CHECK(!dim.empty(), fn_name,
+        ": Expected reduction dim to be specified for input.numel() == 0.");
+    for (int64_t d : dim) {
+        zero_numel_check_dims(self, wrap_dim(d, self.ndim()), fn_name);
+    }
+}
     
 } // namespace raxis

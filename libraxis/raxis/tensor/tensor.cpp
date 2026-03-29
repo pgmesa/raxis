@@ -407,6 +407,35 @@ Tensor Tensor::nanmean(
     return ::raxis::nanmean(*this, dim, keepdim, dtype);
 }
 
+Tensor Tensor::prod(std::optional<Dtype> dtype) const {
+    return ::raxis::prod(*this, dtype);
+}
+
+Tensor Tensor::prod(
+    const IntArray& dim, 
+    bool keepdim, 
+    std::optional<Dtype> dtype
+) const {
+    return ::raxis::prod(*this, dim, keepdim, dtype);
+}
+
+
+Tensor Tensor::max() const {
+    return ::raxis::max(*this);
+}
+
+Tensor Tensor::min() const {
+    return ::raxis::min(*this);
+}
+
+Tensor Tensor::amax(const IntArray& dim, bool keepdim) const {
+    return ::raxis::amax(*this, dim, keepdim);
+}
+
+Tensor Tensor::amin(const IntArray& dim, bool keepdim) const {
+    return ::raxis::amin(*this, dim, keepdim);
+}
+
 // ===================== Binary Operations ====================
 Tensor Tensor::add(const Tensor& other) const { return ::raxis::add(*this, other); }
 Tensor Tensor::sub(const Tensor& other) const { return ::raxis::sub(*this, other); }

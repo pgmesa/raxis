@@ -143,7 +143,7 @@ Tensor mean(
 {
     Dtype dtype = get_dtype_from_input(self, opt_dtype, /*promote_integers=*/true);
     Tensor result = create_reduction_result(self, dim, keepdim, dtype);
-    return mean_out(result, self, dim, keepdim, opt_dtype);
+    return mean_out(result, self, dim, keepdim, dtype);
 }
 
 Tensor mean(const Tensor& self, std::optional<Dtype> dtype) {
@@ -185,8 +185,89 @@ Tensor nanmean(const Tensor& self, std::optional<Dtype> dtype) {
     return nanmean(self, {}, false, dtype);
 }
 
+
+Tensor& prod_out(
+    Tensor& result,
+    const Tensor& self,
+    const IntArray& dim,
+    bool keepdim,
+    std::optional<Dtype> opt_dtype
+) {
+    Dtype dtype = get_dtype_from_result(result, opt_dtype);
+    auto iter = make_reduction("prod", self, result, dim, keepdim, dtype);
+
+    if (iter.numel() == 0) {
+        result.fill_(1);
+    } else {
+        prod_stub(iter.device_type(), iter);
+    }
+
+    return result;
+}
+
+Tensor prod(
+    const Tensor& self, 
+    const IntArray& dim,
+    bool keepdim,
+    std::optional<Dtype> opt_dtype
+) {
+    Dtype dtype = get_dtype_from_input(self, opt_dtype, /*promote_integers=*/true);
+    Tensor result = create_reduction_result(self, dim, keepdim, dtype);
+    return prod_out(result, self, dim, keepdim, dtype);
+}
+
+Tensor prod(const Tensor& self, std::optional<Dtype> dtype) {
+    return prod(self, {}, false, dtype);
+}
+
+
+Tensor max(const Tensor& self) {
+    RAXIS_CHECK(self.numel() > 0,
+        "max(): Expected reduction dim to be specified for input.numel() == 0.");
+    Tensor result = empty({}, self.options());
+    max_all_stub(self.device().type(), result, self.contiguous());
+    return result;
+}
+
+Tensor min(const Tensor& self) {
+    RAXIS_CHECK(self.numel() > 0,
+        "min(): Expected reduction dim to be specified for input.numel() == 0.");
+    Tensor result = empty({}, self.options());
+    min_all_stub(self.device().type(), result, self.contiguous());
+    return result;
+}
+
+Tensor amax(const Tensor& self, const IntArray& dim, bool keepdim) {
+    if (self.numel() == 0) {
+        zero_numel_check_dims(self, dim, "amax()");
+    }
+    Tensor result;
+    auto iter = make_reduction("amax", self, result,
+        std::optional<IntArray>(dim), keepdim, self.dtype());
+    max_values_stub(iter.device_type(), iter);
+    return result;
+}
+
+Tensor amin(const Tensor& self, const IntArray& dim, bool keepdim) {
+    if (self.numel() == 0) {
+        zero_numel_check_dims(self, dim, "amin()");
+    }
+    Tensor result;
+    auto iter = make_reduction("amin", self, result,
+        std::optional<IntArray>(dim), keepdim, self.dtype());
+    min_values_stub(iter.device_type(), iter);
+    return result;
+}
+
 DEFINE_DISPATCH(sum_stub);
 DEFINE_DISPATCH(nansum_stub);
 DEFINE_DISPATCH(mean_stub);
+DEFINE_DISPATCH(prod_stub);
+DEFINE_DISPATCH(max_all_stub);
+DEFINE_DISPATCH(min_all_stub);
+DEFINE_DISPATCH(max_values_stub);
+DEFINE_DISPATCH(min_values_stub);
+// DEFINE_DISPATCH(argmax_stub);
+// DEFINE_DISPATCH(argmin_stub);
 
 } // namespace raxis
