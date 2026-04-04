@@ -14,4 +14,5 @@
 
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/tensor_indexing.h>
+#include <raxis/tensor/tensor_shape.h>
 #include <raxis/tensor/factories.h>

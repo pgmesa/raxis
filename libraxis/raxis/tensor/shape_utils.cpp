@@ -4,6 +4,8 @@
 #include <vector>
 #include <string>
 #include <stdexcept>
+#include <numeric>
+#include <optional>
 
 #include <raxis/core/types.h>
 #include <raxis/util/exception.h>
@@ -71,6 +73,15 @@ IntArray broadcast_shapes(const IntArray& shape1, const IntArray& shape2) {
     return result_shape;
 }
 
+IntArray broadcast_shapes(const std::vector<IntArray>& shapes) {
+    RAXIS_CHECK(!shapes.empty(), "broadcast_shapes(): no shapes provided");
+    IntArray result = shapes[0];
+    for (size_t i = 1; i < shapes.size(); ++i) {
+        result = broadcast_shapes(result, shapes[i]);
+    }
+    return result;
+}
+
 int64_t wrap_dim(int64_t dim, int64_t ndim) {
     RAXIS_CHECK(ndim > 0 || dim == 0,
         "wrap_dim: cannot use dim with a 0-d tensor");
@@ -95,6 +106,123 @@ int64_t wrap_index(int64_t index, int64_t dim_size) {
     RAXIS_CHECK(index >= 0 && index < dim_size,
         "Index ", index, " is out of bounds for dimension with size ", dim_size);
     return index;
+}
+
+
+/// Resolve a proposed shape containing at most one -1 into concrete sizes.
+/// E.g. infer_size({2, -1, 4}, 24) → {2, 3, 4}
+IntArray resolve_shape(const IntArray& shape, int64_t numel) {
+    int64_t inferred_dim = -1;
+    int64_t product = 1;
+
+    for (int64_t i = 0; i < static_cast<int64_t>(shape.size()); ++i) {
+        if (shape[i] == -1) {
+            RAXIS_CHECK(inferred_dim == -1,
+                "only one dimension can be inferred (found -1 at dims ",
+                inferred_dim, " and ", i, ")");
+            inferred_dim = i;
+        } else {
+            RAXIS_CHECK(shape[i] >= 0,
+                "invalid shape dimension: ", shape[i]);
+            product *= shape[i];
+        }
+    }
+
+    IntArray result = shape;
+
+    if (inferred_dim != -1) {
+        RAXIS_CHECK(product != 0 && numel % product == 0,
+            "shape ", shape, " is invalid for input of size ", numel);
+        result[inferred_dim] = numel / product;
+    } else {
+        RAXIS_CHECK(product == numel,
+            "shape ", shape, " is invalid for input of size ", numel);
+    }
+
+    return result;
+}
+
+/// Try to compute strides for viewing `(oldshape, oldstride)` as `newshape`.
+/// Returns nullopt if the view is impossible (requires a copy).
+///
+/// Algorithm: walk both shapes right-to-left, grouping old dimensions into
+/// contiguous chunks. For each chunk, consume new dimensions until the
+/// element counts match. If they ever don't align, the view is impossible.
+std::optional<IntArray> compute_view_strides(
+    const IntArray& oldshape,
+    const IntArray& oldstride,
+    const IntArray& newshape
+) {
+    // Scalar tensor → any new shape gets all-ones strides
+    if (oldshape.empty()) {
+        return IntArray(newshape.size(), 1);
+    }
+
+    // Zero-element tensor: same shape → copy strides, else use contiguous
+    int64_t numel = std::accumulate(
+        oldshape.begin(), oldshape.end(), int64_t{1}, std::multiplies<>());
+
+    if (numel == 0) {
+        if (oldshape == newshape) {
+            return oldstride;
+        }
+        // Contiguous strides for the new shape
+        return compute_strides(newshape);
+    }
+
+    IntArray newstride(newshape.size());
+
+    int64_t view_d = static_cast<int64_t>(newshape.size()) - 1;
+
+    // Stride of the rightmost element in the current contiguous chunk
+    int64_t chunk_base_stride = oldstride.back();
+    // Accumulated numel within old and new chunks
+    int64_t tensor_numel = 1;
+    int64_t view_numel = 1;
+
+    for (int64_t tensor_d = static_cast<int64_t>(oldshape.size()) - 1;
+         tensor_d >= 0; --tensor_d)
+    {
+        tensor_numel *= oldshape[tensor_d];
+
+        // Detect chunk boundary:
+        //  - tensor_d == 0 (leftmost dim, always a boundary)
+        //  - next dim to the left is NOT contiguous with current chunk
+        //    (skip size-1 dims since their stride doesn't matter)
+        bool is_chunk_boundary = (tensor_d == 0) ||
+            (oldshape[tensor_d - 1] != 1 &&
+             oldstride[tensor_d - 1] != tensor_numel * chunk_base_stride);
+
+        if (!is_chunk_boundary) {
+            continue;
+        }
+
+        // Consume new dims right-to-left until view_numel matches tensor_numel
+        while (view_d >= 0 && (view_numel < tensor_numel || newshape[view_d] == 1)) {
+            newstride[view_d] = view_numel * chunk_base_stride;
+            view_numel *= newshape[view_d];
+            --view_d;
+        }
+
+        // If the chunks don't align, view is impossible
+        if (view_numel != tensor_numel) {
+            return std::nullopt;
+        }
+
+        // Start a new chunk
+        if (tensor_d > 0) {
+            chunk_base_stride = oldstride[tensor_d - 1];
+            tensor_numel = 1;
+            view_numel = 1;
+        }
+    }
+
+    // If we didn't consume all new dims, the view is impossible
+    if (view_d != -1) {
+        return std::nullopt;
+    }
+
+    return newstride;
 }
 
 }

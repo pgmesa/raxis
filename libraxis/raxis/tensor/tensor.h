@@ -107,10 +107,18 @@ public:
     Tensor alias() const;
     Tensor select(int64_t dim, int64_t index) const;
     Tensor slice(int64_t dim, const indexing::Slice& slice) const;
-    /// Assumes start/stop/step are already resolved
     Tensor slice(int64_t dim, int64_t start, int64_t stop, int64_t step = 1) const;
     Tensor unsqueeze(int64_t dim) const;
     Tensor squeeze(std::optional<int64_t> dim_opt = std::nullopt) const;
+    Tensor transpose(int64_t dim0, int64_t dim1) const;
+    Tensor permute(const IntArray& dims) const;
+    Tensor swapdims(int64_t dim0, int64_t dim1) const;
+    Tensor swapaxes(int64_t dim0, int64_t dim1) const;
+    Tensor movedim(const IntArray& src, const IntArray& dst) const;
+    Tensor movedim(int64_t src, int64_t dst) const;
+    Tensor view(const IntArray& shape) const;
+    Tensor reshape(const IntArray& shape) const;
+    Tensor broadcast_to(const IntArray& shape) const;
 
     // ========================= Indexing =========================
     Tensor index(const std::vector<indexing::TensorIndex>& indices) const;
@@ -285,11 +293,6 @@ private:
     std::shared_ptr<detail::TensorImpl> impl_;
 
     void ensure_defined(const char* context = nullptr) const;
-
-    Tensor make_view(
-        int64_t storage_offset,
-        const IntArray& shape,
-        const IntArray& strides) const;
 };
 
 } // namespace raxis

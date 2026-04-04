@@ -133,6 +133,24 @@ PYBIND11_MODULE(_C, c) {
             self.index_put_(raxis::python::py_index_to_tensor_indices(idx), value);
         })
 
+        // Shape / view operations
+        .def("transpose", &raxis::Tensor::transpose, py::arg("dim0"), py::arg("dim1"))
+        .def("permute", &raxis::Tensor::permute, py::arg("dims"))
+        .def("swapdims", &raxis::Tensor::swapdims, py::arg("dim0"), py::arg("dim1"))
+        .def("movedim", 
+            py::overload_cast<const raxis::IntArray&, 
+                const raxis::IntArray&>(&raxis::Tensor::movedim, py::const_), 
+            py::arg("source"), py::arg("destination"))
+        .def("movedim",
+            py::overload_cast<int64_t, int64_t>(
+                &raxis::Tensor::movedim, py::const_),
+            py::arg("source"), py::arg("destination"))
+        .def("view", &raxis::Tensor::view, py::arg("shape"))
+        .def("reshape", &raxis::Tensor::reshape,  py::arg("shape"))
+        .def("broadcast_to", &raxis::Tensor::broadcast_to, py::arg("shape"))
+        .def("contiguous", &raxis::Tensor::contiguous)
+        .def("is_contiguous", &raxis::Tensor::is_contiguous)
+
         // Normal basic operations
         .def("__add__",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::add, py::const_),
@@ -625,6 +643,24 @@ PYBIND11_MODULE(_C, c) {
         return raxis::full_like(other, fill_value, options);
     }, py::arg("other"), py::arg("fill_value"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
     
+
+    // Shape operations
+    c.def("transpose", &raxis::transpose, py::arg("input"), py::arg("dim0"), py::arg("dim1"));
+    c.def("permute", &raxis::permute, py::arg("input"), py::arg("dims"));
+    c.def("swapdims", &raxis::swapdims, py::arg("input"), py::arg("dim0"), py::arg("dim1"));
+    c.def("movedim",
+        py::overload_cast<const raxis::Tensor&, const raxis::IntArray&, const raxis::IntArray&>(&raxis::movedim),
+        py::arg("input"), py::arg("source"), py::arg("destination"));
+    c.def("movedim",
+        py::overload_cast<const raxis::Tensor&, int64_t, int64_t>(&raxis::movedim),
+        py::arg("input"), py::arg("source"), py::arg("destination"));
+    c.def("reshape", &raxis::reshape, py::arg("input"), py::arg("shape"));
+
+    c.def("broadcast_to", &raxis::broadcast_to, py::arg("input"), py::arg("shape"));
+    c.def("broadcast_tensors", &raxis::broadcast_tensors, py::arg("tensors"));
+    c.def("broadcast_shapes", 
+        py::overload_cast<const std::vector<raxis::IntArray>&>(&raxis::broadcast_shapes), 
+        py::arg("shapes"));
 
     // Basic operations
     c.def(

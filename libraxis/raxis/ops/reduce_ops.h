@@ -155,18 +155,4 @@ RAXIS_API Tensor amin(
     bool keepdim = false
 );
 
-// RAXIS_API std::pair<Tensor, Tensor> max(const Tensor& self, int64_t dim, bool keepdim = false);
-// RAXIS_API std::pair<Tensor, Tensor> min(const Tensor& self, int64_t dim, bool keepdim = false);
-
-// RAXIS_API Tensor argmax(
-//     const Tensor& self,
-//     std::optional<int64_t> dim = std::nullopt,
-//     bool keepdim = false
-// );
-// RAXIS_API Tensor argmin(
-//     const Tensor& self,
-//     std::optional<int64_t> dim = std::nullopt,
-//     bool keepdim = false
-// );
-
 } // namespace raxis

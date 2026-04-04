@@ -21,6 +21,7 @@
 #include <raxis/tensor/tensor_options.h>
 #include <raxis/tensor/factories.h>
 #include <raxis/tensor/tensor_indexing.h>
+#include <raxis/tensor/tensor_shape.h>
 
 
 namespace raxis {
@@ -162,150 +163,61 @@ std::string Tensor::to_string() const {
 }
 
 // ===================== View operations ======================
-Tensor Tensor::make_view(
-    int64_t new_storage_offset,
-    const IntArray& new_shape,
-    const IntArray& new_strides) const
-{
-    auto impl = std::make_shared<detail::TensorImpl>(
-        impl_->storage(),
-        new_storage_offset,
-        new_shape,
-        new_strides,
-        impl_->dtype()
-    );
-    return Tensor(std::move(impl));
-}
-
 Tensor Tensor::alias() const {
-    ensure_defined("alias");
-    return make_view(storage_offset(), shape(), strides());
-}
-
-Tensor Tensor::select(int64_t dim, int64_t index) const {
-    ensure_defined("select");
-
-    const int n = ndim();
-    RAXIS_CHECK(n > 0, "select() cannot be applied to a 0-d tensor");
-
-    dim = wrap_dim(dim, n);
-    index = wrap_index(index, shape()[dim]);
-
-    const auto& old_shape = shape();
-    const auto& old_strides = strides();
-
-    int64_t new_offset = storage_offset() + index * old_strides[dim];
-
-    IntArray new_shape;
-    IntArray new_strides;
-    new_shape.reserve(n - 1);
-    new_strides.reserve(n - 1);
-
-    for (int i = 0; i < n; ++i) {
-        if (i == dim) continue;
-        new_shape.push_back(old_shape[i]);
-        new_strides.push_back(old_strides[i]);
-    }
-
-    return make_view(new_offset, new_shape, new_strides);
-}
-
-Tensor Tensor::slice(int64_t dim, const indexing::Slice& slice) const {
-    ensure_defined("slice");
-    dim = wrap_dim(dim, ndim());
-    auto [start, stop, step] = slice.resolve(shape()[dim]);
-    return this->slice(dim, start, stop, step);
-}
-
-Tensor Tensor::slice(int64_t dim, int64_t start, int64_t stop, int64_t step) const {
-    ensure_defined("slice");
-
-    const int n = ndim();
-    RAXIS_CHECK(n > 0, "slice() cannot be applied to a 0-d tensor");
-    RAXIS_CHECK(step > 0, "slice(): step must be > 0, got ", step);
-
-    // Normalize dim
-    dim = wrap_dim(dim, n);
-    
-    // Compute new size along this dim
-    int64_t new_dim_size = 0;
-    if (stop > start) {
-        new_dim_size = (stop - start + step - 1) / step;   // ceil division
-    }
-
-    const auto& old_shape = shape();
-    const auto& old_strides = strides();
-
-    int64_t new_offset = storage_offset() + start * old_strides[dim];
-
-    IntArray new_shape(old_shape);
-    IntArray new_strides(old_strides);
-    new_shape[dim] = new_dim_size;
-    new_strides[dim] = old_strides[dim] * step;
-
-    return make_view(new_offset, new_shape, new_strides);
+    return ::raxis::alias(*this);
 }
 
 Tensor Tensor::unsqueeze(int64_t dim) const {
-    ensure_defined("unsqueeze");
-
-    const int n = ndim();
-    dim = wrap_dim_allow_upper(dim, n);
-
-    const auto& old_shape = shape();
-    const auto& old_strides = strides();
-
-    IntArray new_shape;
-    IntArray new_strides;
-    new_shape.reserve(n + 1);
-    new_strides.reserve(n + 1);
-
-    for (int i = 0; i < n + 1; ++i) {
-        if (i == dim) {
-            new_shape.push_back(1);
-            // Stride for a size-1 dim is arbitrary but we pick a sensible
-            // value: the stride of the next inner dimension (or 1).
-            int64_t s = (i < n) ? old_strides[i] : 1;
-            new_strides.push_back(s);
-        } else {
-            int src = (i < dim) ? i : i - 1;
-            new_shape.push_back(old_shape[src]);
-            new_strides.push_back(old_strides[src]);
-        }
-    }
-
-    return make_view(storage_offset(), new_shape, new_strides);
+    return ::raxis::unsqueeze(*this, dim);
 }
 
 Tensor Tensor::squeeze(std::optional<int64_t> dim_opt) const {
-    ensure_defined("squeeze");
+    return ::raxis::squeeze(*this, dim_opt);
+}
 
-    const int n = ndim();
-    const auto& old_shape   = shape();
-    const auto& old_strides = strides();
+Tensor Tensor::select(int64_t dim, int64_t index) const {
+    return ::raxis::select(*this, dim, index);
+}
 
-    IntArray new_shape;
-    IntArray new_strides;
+Tensor Tensor::slice(int64_t dim, const indexing::Slice& slice) const {
+    return ::raxis::slice(*this, dim, slice);
+}
 
-    if (!dim_opt.has_value()) {
-        // Squeeze all size-1 dims
-        for (int i = 0; i < n; ++i) {
-            if (old_shape[i] != 1) {
-                new_shape.push_back(old_shape[i]);
-                new_strides.push_back(old_strides[i]);
-            }
-        }
-    } else {
-        int64_t dim = wrap_dim(dim_opt.value(), n);
+Tensor Tensor::slice(int64_t dim, int64_t start, int64_t stop, int64_t step) const {
+    return ::raxis::slice(*this, dim, start, stop, step);
+}
 
-        for (int i = 0; i < n; ++i) {
-            if (i == dim && old_shape[i] == 1) continue;
-            new_shape.push_back(old_shape[i]);
-            new_strides.push_back(old_strides[i]);
-        }
-    }
 
-    return make_view(storage_offset(), new_shape, new_strides);
+Tensor Tensor::transpose(int64_t dim0, int64_t dim1) const {
+    return ::raxis::transpose(*this, dim0, dim1);
+}
+
+Tensor Tensor::permute(const IntArray& dims) const {
+    return ::raxis::permute(*this, dims);
+}
+
+Tensor Tensor::swapdims(int64_t dim0, int64_t dim1) const {
+    return ::raxis::swapdims(*this, dim0, dim1);
+}
+
+Tensor Tensor::movedim(const IntArray& src, const IntArray& dst) const {
+    return ::raxis::movedim(*this, src, dst);
+}
+
+Tensor Tensor::movedim(int64_t src, int64_t dst) const {
+    return ::raxis::movedim(*this, src, dst);
+}
+
+Tensor Tensor::view(const IntArray& shape) const {
+    return ::raxis::view(*this, shape);
+}
+
+Tensor Tensor::reshape(const IntArray& shape) const {
+    return ::raxis::reshape(*this, shape);
+}
+
+Tensor Tensor::broadcast_to(const IntArray& target_shape) const {
+    return ::raxis::broadcast_to(*this, target_shape);
 }
 
 // ========================= Indexing =========================
