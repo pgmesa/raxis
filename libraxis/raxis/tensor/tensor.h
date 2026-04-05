@@ -134,6 +134,8 @@ public:
 
     Tensor& fill_(Scalar value) const;
     Tensor& zero_() const;
+    Tensor& uniform_(double low = 0.0, double high = 1.0) const;
+    Tensor& normal_(double mean = 0.0, double std = 1.0) const;
 
     // =================== Reduction Operations ===================
     Tensor sum(std::optional<Dtype> dtype = std::nullopt) const;

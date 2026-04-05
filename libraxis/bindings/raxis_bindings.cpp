@@ -254,6 +254,12 @@ PYBIND11_MODULE(_C, c) {
             py::overload_cast<>(&raxis::Tensor::zero_, py::const_))
         .def("fill_", 
             py::overload_cast<raxis::Scalar>(&raxis::Tensor::fill_, py::const_))
+        .def("uniform_",
+            &raxis::Tensor::uniform_,
+            py::arg("low") = 0.0, py::arg("high") = 1.0)
+        .def("normal_",
+            &raxis::Tensor::normal_,
+            py::arg("mean") = 0.0, py::arg("std") = 1.0)
 
         .def("add",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::add, py::const_),
@@ -642,6 +648,28 @@ PYBIND11_MODULE(_C, c) {
         auto options = raxis::TensorOptions().dtype(dtype).device(device);
         return raxis::full_like(other, fill_value, options);
     }, py::arg("other"), py::arg("fill_value"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
+
+    c.def("rand", [](raxis::IntArray shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device);
+        return raxis::rand(shape, options);
+    }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
+
+    c.def("rand_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device);
+        return raxis::rand_like(other, options);
+    }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
+
+    c.def("randn", [](raxis::IntArray shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device);
+        return raxis::randn(shape, options);
+    }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
+
+    c.def("randn_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device);
+        return raxis::randn_like(other, options);
+    }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
+
+    c.def("manual_seed", &raxis::manual_seed, py::arg("seed"));
     
 
     // Shape operations

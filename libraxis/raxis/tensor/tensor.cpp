@@ -9,11 +9,7 @@
 #include <fmt/format.h>
 
 #include <raxis/format.h>
-#include <raxis/ops/copy.h>
-#include <raxis/ops/fill.h>
-#include <raxis/ops/binary_ops.h>
-#include <raxis/ops/unary_ops.h>
-#include <raxis/ops/reduce_ops.h>
+#include <raxis/ops.h>
 
 #include <raxis/tensor/shape_utils.h>
 #include <raxis/tensor/detail/tensor_impl.h>
@@ -268,6 +264,14 @@ Tensor& Tensor::fill_(Scalar value) const {
 
 Tensor& Tensor::zero_() const {
     return ::raxis::zero_(const_cast<Tensor&>(*this));
+}
+
+Tensor& Tensor::uniform_(double low, double high) const {
+    return ::raxis::uniform_(const_cast<Tensor&>(*this), low, high);
+}
+
+Tensor& Tensor::normal_(double mean, double std) const {
+    return ::raxis::normal_(const_cast<Tensor&>(*this), mean, std);
 }
 
 // =================== Reduction Operations ===================

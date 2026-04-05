@@ -60,6 +60,14 @@ RAXIS_API Tensor zeros_like(const Tensor& other, TensorOptions options = {});
 RAXIS_API Tensor ones(const IntArray& shape, TensorOptions options = {});
 RAXIS_API Tensor ones_like(const Tensor& other, TensorOptions options = {});
 
+/// Returns a tensor filled with U[0, 1)
+RAXIS_API Tensor rand(const IntArray& shape, TensorOptions options = {});
+RAXIS_API Tensor rand_like(const Tensor& other, TensorOptions options = {});
+
+/// Returns a tensor filled with N(0, 1)
+RAXIS_API Tensor randn(const IntArray& shape, TensorOptions options = {});
+RAXIS_API Tensor randn_like(const Tensor& other, TensorOptions options = {});
+
 RAXIS_API Tensor scalar_tensor(Scalar s, TensorOptions options = {});
 
 

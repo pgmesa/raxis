@@ -145,6 +145,38 @@ Tensor ones_like(const Tensor& other, TensorOptions options) {
     return ones(other.shape(), other.options().merge_in(options));
 }
 
+Tensor rand(const IntArray& shape, TensorOptions options) {
+    if (!options.has_dtype()) {
+        options = options.dtype(default_float_dtype());
+    }
+    RAXIS_CHECK(
+        options.dtype().is_floating(),
+        "rand requires a floating-point dtype, got ", options.dtype()
+    );
+    return empty(shape, options).uniform_(0.0, 1.0);
+}
+
+Tensor rand_like(const Tensor& other, TensorOptions options) {
+    auto merged = other.options().merge_in(options);
+    return rand(other.shape(), merged);
+}
+
+Tensor randn(const IntArray& shape, TensorOptions options) {
+    if (!options.has_dtype()) {
+        options = options.dtype(default_float_dtype());
+    }
+    RAXIS_CHECK(
+        options.dtype().is_floating(),
+        "randn requires a floating-point dtype, got ", options.dtype()
+    );
+    return empty(shape, options).normal_(0.0, 1.0);
+}
+
+Tensor randn_like(const Tensor& other, TensorOptions options) {
+    auto merged = other.options().merge_in(options);
+    return randn(other.shape(), merged);
+}
+
 Tensor scalar_tensor(Scalar s, TensorOptions options) {
     return empty({}, options).fill_(s);
 }

@@ -115,4 +115,25 @@ void cpu_kernel(TensorIterator& iter, func_t&& op, int64_t grain_size = detail::
     iter.cast_outputs();
 }
 
+template <typename func_t>
+void cpu_serial_kernel(TensorIterator& iter, func_t&& op, const Range& range) {
+    using traits = function_traits<func_t>;
+    
+    constexpr bool result_void = std::is_void_v<typename traits::result_type>;
+    RAXIS_INTERNAL_ASSERT(
+        iter.num_inputs() == traits::arity &&
+        ((result_void && iter.num_outputs() == 0) || (!result_void && iter.num_outputs() == 1))
+    );
+
+    iter.serial_for_each([&](char** data, const int64_t* strides, int64_t n) {
+        basic_loop(data, strides, 0, n, op);
+    }, range);
+    iter.cast_outputs();
 }
+
+template <typename func_t>
+void cpu_serial_kernel(TensorIterator& iter, func_t&& op) {
+    cpu_serial_kernel(iter, std::forward<func_t>(op), {0, iter.numel()});
+}
+
+} // namespace raxis
