@@ -637,7 +637,7 @@ void TensorIterator::coalesce_dimensions() {
 }
 
 void TensorIterator::for_each(loop2d_t loop, int64_t grain_size) const {
-    int num_threads = 1; // TODO: implement get_num_threads()
+    int num_threads = get_num_threads();
     int64_t numel = this->numel();
 
     if (numel == 0) {

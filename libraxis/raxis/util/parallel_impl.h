@@ -28,7 +28,7 @@ inline void parallel_for(
 
     if (!use_parallel) {
         detail::ThreadIdGuard tid_guard(0);
-        detail::ParallelRegionGuard region_guard(true);
+        detail::ParallelGuard region_guard(true);
         f(begin, end);
         return;
     }
@@ -36,7 +36,7 @@ inline void parallel_for(
     detail::invoke_parallel(
         begin, end, grain_size,
         [&](int64_t chunk_begin, int64_t chunk_end) {
-            detail::ParallelRegionGuard region_guard(true);
+            detail::ParallelGuard region_guard(true);
             f(chunk_begin, chunk_end);
         });
 #else
@@ -71,7 +71,7 @@ inline scalar_t parallel_reduce(
 
     if (!use_parallel) {
         detail::ThreadIdGuard tid_guard(0);
-        detail::ParallelRegionGuard region_guard(true);
+        detail::ParallelGuard region_guard(true);
         return f(begin, end, identity);
     }
 
@@ -81,7 +81,7 @@ inline scalar_t parallel_reduce(
         begin, end, grain_size,
         [&](int64_t chunk_begin, int64_t chunk_end) {
             const int tid = get_thread_num();
-            detail::ParallelRegionGuard region_guard(true);
+            detail::ParallelGuard region_guard(true);
             results[static_cast<size_t>(tid)] = f(chunk_begin, chunk_end, identity);
         });
 

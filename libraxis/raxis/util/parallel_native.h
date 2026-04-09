@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <functional>
 
-namespace raxis::internal {
+namespace raxis::detail {
 
 void invoke_parallel(
     int64_t begin,
@@ -13,4 +13,4 @@ void invoke_parallel(
     int64_t grain_size,
     const std::function<void(int64_t, int64_t)>& f);
 
-} // namespace raxis::internal
+} // namespace raxis::detail
