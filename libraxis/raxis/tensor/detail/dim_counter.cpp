@@ -8,8 +8,11 @@
 
 namespace raxis::detail {
 
-DimCounter::DimCounter(const IntArray& shape, Range range)
-  : shape(shape), range(range), values(shape.size()) , offset(range.begin) 
+DimCounter::DimCounter(IntArrayRef shape, Range range)
+  : shape(shape), 
+    range(range), 
+    values(shape.size()), 
+    offset(range.begin) 
 {
     std::fill(values.begin(), values.end(), 0);
     if (range.begin == 0) {

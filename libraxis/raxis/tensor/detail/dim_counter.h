@@ -4,20 +4,21 @@
 
 #include <raxis/core/types.h>
 #include <raxis/util/range.h>
+#include <raxis/util/small_buffer.h>
 
 
 namespace raxis::detail {
 
 struct DimCounter {
-    DimCounter(const IntArray& shape, Range range);
+    DimCounter(IntArrayRef shape, Range range);
 
     void increment(const std::array<int64_t, 2>& step);
     bool is_done() const;
     std::array<int64_t, 2> max_2d_step() const;
 
-    const IntArray& shape;
+    IntArrayRef shape;
     Range range;
-    std::vector<int64_t> values;
+    SmallBuffer<int64_t, 4> values;
     int64_t offset;
 };
 

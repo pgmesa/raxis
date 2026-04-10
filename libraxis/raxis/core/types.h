@@ -3,10 +3,13 @@
 #include <vector>
 #include <ostream>
 
+#include <raxis/util/array_ref.h>
+
 
 namespace raxis {
 
 using IntArray = std::vector<int64_t>;
+using IntArrayRef = ArrayRef<int64_t>;
 
 using index_t = int64_t;
 using IndexArray = std::vector<index_t>;

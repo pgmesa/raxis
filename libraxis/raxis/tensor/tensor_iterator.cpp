@@ -14,6 +14,8 @@
 #include <raxis/util/function_ref.h>
 #include <raxis/util/maybe_owned.h>
 #include <raxis/util/parallel.h>
+#include <raxis/util/small_buffer.h>
+#include <raxis/util/array_ref.h>
 
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/factories.h>
@@ -637,12 +639,11 @@ void TensorIterator::coalesce_dimensions() {
 }
 
 void TensorIterator::for_each(loop2d_t loop, int64_t grain_size) const {
-    int num_threads = get_num_threads();
     int64_t numel = this->numel();
 
     if (numel == 0) {
         return;
-    } else if (numel < grain_size || num_threads == 1) {
+    } else if (numel < grain_size || get_num_threads() == 1) {
         return serial_for_each(loop, {0, numel});
     } else {
         parallel_for(0, numel, grain_size, [&](int64_t begin, int64_t end) {
@@ -674,13 +675,13 @@ namespace detail {
 
 inline void get_data_ptrs(
     char** ptrs,
-    char** base_ptrs,
-    size_t noperands,
-    const IntArray& strides,
-    const IntArray& counter_values
+    ArrayRef<char*> base_ptrs,
+    IntArrayRef strides,
+    IntArrayRef counter_values
 ) {
+    size_t noperands = base_ptrs.size();
     size_t ndim = counter_values.size();
-    std::copy(base_ptrs, base_ptrs + noperands, ptrs);
+    std::copy(base_ptrs.begin(), base_ptrs.end(), ptrs);
     
     for (size_t dim = 0; dim < ndim; dim++) {
         int64_t value = counter_values[dim];
@@ -691,28 +692,29 @@ inline void get_data_ptrs(
 }
 
 void serial_for_each(
-    const IntArray& shape,
-    const IntArray& strides,
+    IntArrayRef shape,
+    IntArrayRef strides,
     char** base_ptrs,
     size_t noperands,
     TensorIterator::loop2d_t loop,
     Range range
 ) {
     size_t ndim = shape.size();
+    RAXIS_DEBUG_ASSERT(strides.size() == noperands * std::max(size_t{2}, ndim));
 
     if (ndim <= 1) {
         if (range.begin == 0) {
             loop(base_ptrs, strides.data(), range.size(), 1);
         } else {
-            std::vector<char*> ptrs(noperands);
-            get_data_ptrs(ptrs.data(), base_ptrs, noperands, strides, {range.begin});
+            SmallBuffer<char*, 4> ptrs(noperands);
+            get_data_ptrs(ptrs.data(), {base_ptrs, noperands}, strides, IntArrayRef(range.begin));
             loop(ptrs.data(), strides.data(), range.size(), 1);
         }
     } else {
-        std::vector<char*> ptrs(noperands);
+        SmallBuffer<char*, 4> ptrs(noperands);
         detail::DimCounter counter(shape, range);
         while(!counter.is_done()) {
-            get_data_ptrs(ptrs.data(), base_ptrs, noperands, strides, counter.values);
+            get_data_ptrs(ptrs.data(), {base_ptrs, noperands}, strides, counter.values);
             auto step = counter.max_2d_step();
             loop(ptrs.data(), strides.data(), step[0], step[1]);
             counter.increment(step);
@@ -728,8 +730,8 @@ void TensorIterator::serial_for_each(loop2d_t loop, Range range) const {
     const size_t noperands = num_operands();
     const int ndim = this->ndim();
 
-    std::vector<char*> ptrs(noperands);
-    std::vector<int64_t> strides(noperands * static_cast<size_t>(std::max(ndim, 2)));
+    SmallBuffer<char*, 4> ptrs(noperands);
+    SmallBuffer<int64_t, 8> strides(noperands * static_cast<size_t>(std::max(ndim, 2)));
 
     get_base_ptrs(ptrs.data(), operands_);
     get_strides(strides.data(), operands_, ndim);
