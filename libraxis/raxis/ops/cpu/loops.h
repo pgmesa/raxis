@@ -22,7 +22,7 @@ inline T load(const void* ptr) {
 template <typename traits, std::size_t... INDEX>
 typename traits::ArgsTuple
 dereference_impl(
-    char* const* data,
+    char* RAXIS_RESTRICT data[],
     const int64_t* strides,
     int64_t i,
     std::index_sequence<INDEX...>
@@ -38,7 +38,7 @@ dereference_impl(
 template <typename traits>
 typename traits::ArgsTuple
 dereference(
-    char* const* data,
+    char* RAXIS_RESTRICT data[],
     const int64_t* strides,
     int64_t i
 ) {
@@ -50,7 +50,7 @@ dereference(
 template <typename func_t,
     std::enable_if_t<!std::is_void_v<typename function_traits<func_t>::result_type>>* = nullptr>
 inline void execute_op(
-    char** data,
+    char* RAXIS_RESTRICT data[],
     const int64_t* strides,
     int64_t i,
     int64_t n,
@@ -69,7 +69,7 @@ inline void execute_op(
 template <typename func_t,
     std::enable_if_t<std::is_void_v<typename function_traits<func_t>::result_type>>* = nullptr>
 inline void execute_op(
-    char** data,
+    char* RAXIS_RESTRICT data[],
     const int64_t* strides,
     int64_t i,
     int64_t n,
