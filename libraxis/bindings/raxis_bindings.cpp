@@ -698,7 +698,9 @@ PYBIND11_MODULE(_C, c) {
         return raxis::broadcast_to(input, shape);
     }, py::arg("input"), py::arg("shape"));
 
-    c.def("broadcast_tensors", &raxis::broadcast_tensors, py::arg("tensors"));
+    c.def("broadcast_tensors",  [](std::vector<raxis::Tensor> tensors) {
+        return raxis::broadcast_tensors(tensors);
+    }, py::arg("tensors"));
     c.def("broadcast_shapes", [](std::vector<raxis::Vec> shapes) {
         std::vector<raxis::IntArrayRef> refs;
         refs.reserve(shapes.size());

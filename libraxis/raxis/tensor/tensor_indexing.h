@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <raxis/export.h>
+#include <raxis/util/array_ref.h>
 
 
 namespace raxis {

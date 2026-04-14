@@ -7,6 +7,7 @@
 #include <raxis/tensor/tensor.h>
 #include <raxis/core/scalar.h>
 #include <raxis/util/exception.h>
+#include <raxis/util/array_ref.h>
 
 
 namespace raxis::indexing {
