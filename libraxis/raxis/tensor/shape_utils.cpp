@@ -13,7 +13,7 @@
 
 namespace raxis {
 
-int64_t compute_numel(const IntArray& shape) noexcept {
+int64_t compute_numel(IntArrayRef shape) noexcept {
     int64_t n = 1;
     for (int64_t d: shape) 
         n *= d;
@@ -23,7 +23,7 @@ int64_t compute_numel(const IntArray& shape) noexcept {
 // Shape: (3, 4), Strides: (8, 2)
 // Memory needed: max element offset + 1
 // = (3-1)*8 + (4-1)*2 + 1 = 16 + 6 + 1 = 23 elements
-int64_t compute_numel_from_strides(const IntArray& shape, const IntArray& strides) {
+int64_t compute_numel_from_strides(IntArrayRef shape, IntArrayRef strides) {
     if (shape.empty()) return 1;
     
     int64_t max_offset = 0;
@@ -37,8 +37,8 @@ int64_t compute_numel_from_strides(const IntArray& shape, const IntArray& stride
     return max_offset + 1;
 }
 
-IntArray compute_strides(const IntArray& shape) {
-    IntArray strides(shape.size());
+DimVector compute_strides(IntArrayRef shape) {
+    DimVector strides(shape.size());
     
     int64_t s = 1;
     int ndim = static_cast<int>(shape.size());
@@ -49,14 +49,16 @@ IntArray compute_strides(const IntArray& shape) {
     return strides;
 }
 
-IntArray broadcast_shapes(const IntArray& shape1, const IntArray& shape2) {
-    if (shape1 == shape2) return shape1;
+DimVector broadcast_shapes(IntArrayRef shape1, IntArrayRef shape2) {
+    if (shape1 == shape2) {
+        return DimVector(shape1);
+    }
 
     size_t ndim1 = shape1.size();
     size_t ndim2 = shape2.size();
     size_t target_ndim = std::max(ndim1, ndim2);
     
-    IntArray result_shape(target_ndim);
+    DimVector result_shape(target_ndim);
 
     for (size_t i = 0; i < target_ndim; i++) {
         size_t ridx = 1 + i;
@@ -73,9 +75,9 @@ IntArray broadcast_shapes(const IntArray& shape1, const IntArray& shape2) {
     return result_shape;
 }
 
-IntArray broadcast_shapes(const std::vector<IntArray>& shapes) {
+DimVector broadcast_shapes(ArrayRef<IntArrayRef> shapes) {
     RAXIS_CHECK(!shapes.empty(), "broadcast_shapes(): no shapes provided");
-    IntArray result = shapes[0];
+    DimVector result(shapes[0]);
     for (size_t i = 1; i < shapes.size(); ++i) {
         result = broadcast_shapes(result, shapes[i]);
     }
@@ -111,7 +113,7 @@ int64_t wrap_index(int64_t index, int64_t dim_size) {
 
 /// Resolve a proposed shape containing at most one -1 into concrete sizes.
 /// E.g. infer_size({2, -1, 4}, 24) → {2, 3, 4}
-IntArray resolve_shape(const IntArray& shape, int64_t numel) {
+DimVector resolve_shape(IntArrayRef shape, int64_t numel) {
     int64_t inferred_dim = -1;
     int64_t product = 1;
 
@@ -128,7 +130,7 @@ IntArray resolve_shape(const IntArray& shape, int64_t numel) {
         }
     }
 
-    IntArray result = shape;
+    DimVector result(shape);
 
     if (inferred_dim != -1) {
         RAXIS_CHECK(product != 0 && numel % product == 0,
@@ -148,29 +150,29 @@ IntArray resolve_shape(const IntArray& shape, int64_t numel) {
 /// Algorithm: walk both shapes right-to-left, grouping old dimensions into
 /// contiguous chunks. For each chunk, consume new dimensions until the
 /// element counts match. If they ever don't align, the view is impossible.
-std::optional<IntArray> compute_view_strides(
-    const IntArray& oldshape,
-    const IntArray& oldstride,
-    const IntArray& newshape
+std::optional<DimVector> compute_view_strides(
+    IntArrayRef oldshape,
+    IntArrayRef oldstride,
+    IntArrayRef newshape
 ) {
-    // Scalar tensor → any new shape gets all-ones strides
+    // Scalar tensor -> any new shape gets all-ones strides
     if (oldshape.empty()) {
-        return IntArray(newshape.size(), 1);
+        return DimVector(newshape.size(), 1);
     }
 
-    // Zero-element tensor: same shape → copy strides, else use contiguous
+    // Zero-element tensor: same shape -> copy strides, else use contiguous
     int64_t numel = std::accumulate(
         oldshape.begin(), oldshape.end(), int64_t{1}, std::multiplies<>());
 
     if (numel == 0) {
         if (oldshape == newshape) {
-            return oldstride;
+            return DimVector(oldstride);
         }
         // Contiguous strides for the new shape
         return compute_strides(newshape);
     }
 
-    IntArray newstride(newshape.size());
+    DimVector newstride(newshape.size());
 
     int64_t view_d = static_cast<int64_t>(newshape.size()) - 1;
 

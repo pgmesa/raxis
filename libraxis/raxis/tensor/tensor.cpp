@@ -44,12 +44,12 @@ void* Tensor::mutable_data_ptr() const {
     return impl_->mutable_data();
 }
     
-const IntArray& Tensor::shape() const { 
+IntArrayRef Tensor::shape() const { 
     ensure_defined("shape");
     return impl_->shape(); 
 }
 
-const IntArray& Tensor::strides() const { 
+IntArrayRef Tensor::strides() const { 
     ensure_defined("strides");
     return impl_->strides(); 
 }
@@ -64,13 +64,13 @@ int Tensor::ndim() const {
     return impl_->ndim();
 }
 
-IntArray Tensor::byte_strides() const {
+DimVector Tensor::byte_strides() const {
     ensure_defined("byte_strides");
-    IntArray byte_strides;
+    DimVector byte_strides;
     byte_strides.reserve(ndim());
 
     const int64_t itemsize = static_cast<int64_t>(dtype().itemsize());
-    const IntArray& step_strides = strides();
+    IntArrayRef step_strides = strides();
     for (const int64_t s : step_strides)
         byte_strides.push_back(s * itemsize);
 
@@ -114,8 +114,8 @@ Scalar Tensor::item() const {
 
 bool Tensor::is_contiguous() const {
     ensure_defined("is_contiguous");
-    const IntArray& sh = shape();
-    const IntArray& st = strides();
+    IntArrayRef sh = shape();
+    IntArrayRef st = strides();
     if (sh.empty()) return true;
     
     int64_t expected_stride = 1;
@@ -188,7 +188,7 @@ Tensor Tensor::transpose(int64_t dim0, int64_t dim1) const {
     return ::raxis::transpose(*this, dim0, dim1);
 }
 
-Tensor Tensor::permute(const IntArray& dims) const {
+Tensor Tensor::permute(IntArrayRef dims) const {
     return ::raxis::permute(*this, dims);
 }
 
@@ -196,7 +196,7 @@ Tensor Tensor::swapdims(int64_t dim0, int64_t dim1) const {
     return ::raxis::swapdims(*this, dim0, dim1);
 }
 
-Tensor Tensor::movedim(const IntArray& src, const IntArray& dst) const {
+Tensor Tensor::movedim(IntArrayRef src, IntArrayRef dst) const {
     return ::raxis::movedim(*this, src, dst);
 }
 
@@ -204,28 +204,28 @@ Tensor Tensor::movedim(int64_t src, int64_t dst) const {
     return ::raxis::movedim(*this, src, dst);
 }
 
-Tensor Tensor::view(const IntArray& shape) const {
+Tensor Tensor::view(IntArrayRef shape) const {
     return ::raxis::view(*this, shape);
 }
 
-Tensor Tensor::reshape(const IntArray& shape) const {
+Tensor Tensor::reshape(IntArrayRef shape) const {
     return ::raxis::reshape(*this, shape);
 }
 
-Tensor Tensor::broadcast_to(const IntArray& target_shape) const {
+Tensor Tensor::broadcast_to(IntArrayRef target_shape) const {
     return ::raxis::broadcast_to(*this, target_shape);
 }
 
 // ========================= Indexing =========================
-Tensor Tensor::index(const std::vector<indexing::TensorIndex>& indices) const {
+Tensor Tensor::index(ArrayRef<indexing::TensorIndex> indices) const {
     return indexing::get_item(*this, indices);
 }
 
-void Tensor::index_put_(const std::vector<indexing::TensorIndex>& indices, const Tensor& value) {
+void Tensor::index_put_(ArrayRef<indexing::TensorIndex> indices, const Tensor& value) {
     indexing::set_item(*this, indices, value);
 }
 
-void Tensor::index_put_(const std::vector<indexing::TensorIndex>& indices, Scalar value) {
+void Tensor::index_put_(ArrayRef<indexing::TensorIndex> indices, Scalar value) {
     indexing::set_item(*this, indices, value);
 }
 
@@ -280,7 +280,7 @@ Tensor Tensor::sum(std::optional<Dtype> dtype) const {
 }
 
 Tensor Tensor::sum(
-    const IntArray& dim, 
+    IntArrayRef dim, 
     bool keepdim, 
     std::optional<Dtype> dtype
 ) const {
@@ -292,7 +292,7 @@ Tensor Tensor::nansum(std::optional<Dtype> dtype) const {
 }
 
 Tensor Tensor::nansum(
-    const IntArray& dim, 
+    IntArrayRef dim, 
     bool keepdim, 
     std::optional<Dtype> dtype
 ) const {
@@ -304,7 +304,7 @@ Tensor Tensor::mean(std::optional<Dtype> dtype) const {
 }
 
 Tensor Tensor::mean(
-    const IntArray& dim, 
+    IntArrayRef dim, 
     bool keepdim, 
     std::optional<Dtype> dtype
 ) const {
@@ -316,7 +316,7 @@ Tensor Tensor::nanmean(std::optional<Dtype> dtype) const {
 }
 
 Tensor Tensor::nanmean(
-    const IntArray& dim, 
+    IntArrayRef dim, 
     bool keepdim, 
     std::optional<Dtype> dtype
 ) const {
@@ -328,7 +328,7 @@ Tensor Tensor::prod(std::optional<Dtype> dtype) const {
 }
 
 Tensor Tensor::prod(
-    const IntArray& dim, 
+    IntArrayRef dim, 
     bool keepdim, 
     std::optional<Dtype> dtype
 ) const {
@@ -344,11 +344,11 @@ Tensor Tensor::min() const {
     return ::raxis::min(*this);
 }
 
-Tensor Tensor::amax(const IntArray& dim, bool keepdim) const {
+Tensor Tensor::amax(IntArrayRef dim, bool keepdim) const {
     return ::raxis::amax(*this, dim, keepdim);
 }
 
-Tensor Tensor::amin(const IntArray& dim, bool keepdim) const {
+Tensor Tensor::amin(IntArrayRef dim, bool keepdim) const {
     return ::raxis::amin(*this, dim, keepdim);
 }
 

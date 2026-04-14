@@ -26,6 +26,9 @@ public:
     constexpr explicit ArrayRef(const T& one) noexcept
         : data_(&one), size_(1) {}
 
+    constexpr ArrayRef(std::initializer_list<T> il) noexcept
+        : data_(std::begin(il)), size_(il.size()) {}
+
     template <
       typename Container,
       typename U = decltype(std::declval<Container>().data()),

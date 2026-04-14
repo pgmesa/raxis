@@ -64,14 +64,16 @@ struct TensorDataContainer {
 
         sizes_.reserve(first.sizes_.size() + 1);
         sizes_.push_back(static_cast<int64_t>(init_list.size()));
-        sizes_.insert(sizes_.end(), first.sizes_.begin(), first.sizes_.end());
+        for (int64_t s : first.sizes_) {
+            sizes_.push_back(s);
+        }
 
         init_list_ = init_list;
     }
 
     bool is_scalar() const { return is_scalar_; }
     Dtype dtype() const { return dtype_; }
-    const IntArray& sizes() const { return sizes_; }
+    IntArrayRef sizes() const { return sizes_; }
 
     const Scalar& scalar() const {
         RAXIS_INTERNAL_ASSERT(is_scalar_, "scalar() called on non-scalar container");
@@ -92,7 +94,7 @@ struct TensorDataContainer {
 private:
     bool is_scalar_ = true;
     Dtype dtype_ = dtypes::Undefined;
-    IntArray sizes_;
+    DimVector sizes_;
 
     // Active when is_scalar_ == true
     Scalar scalar_;

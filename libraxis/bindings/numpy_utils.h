@@ -41,8 +41,8 @@ inline Dtype dtype_from_numpy(py::dtype dt) {
 }
 
 Tensor tensor_from_numpy(py::array arr) {
-    IntArray shape(arr.ndim());
-    IntArray strides(arr.ndim());
+    DimVector shape(arr.ndim());
+    DimVector strides(arr.ndim());
     for (int i = 0; i < arr.ndim(); ++i) {
         shape[i] = arr.shape(i);
         strides[i] = arr.strides(i) / arr.itemsize(); // byte strides → element strides
@@ -66,9 +66,9 @@ Tensor tensor_from_numpy(py::array arr) {
 }
 
 py::array tensor_to_numpy(py::object self, const Tensor& a) {
-    auto& shape_ = a.shape();
+    IntArrayRef shape_ = a.shape();
     std::vector<ssize_t> shape(shape_.begin(), shape_.end());
-    auto strides_ = a.byte_strides();
+    DimVector strides_ = a.byte_strides();
     std::vector<ssize_t> strides(strides_.begin(), strides_.end());
 
     return py::array(

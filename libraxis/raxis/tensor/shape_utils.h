@@ -10,18 +10,18 @@
 
 namespace raxis {
 
-RAXIS_API int64_t compute_numel(const IntArray& shape) noexcept;
-RAXIS_API int64_t compute_numel_from_strides(const IntArray& shape, const IntArray& strides);
-RAXIS_API IntArray compute_strides(const IntArray& shape);
-RAXIS_API IntArray broadcast_shapes(const IntArray& shape1, const IntArray& shape2);
-RAXIS_API IntArray broadcast_shapes(const std::vector<IntArray>& shapes);
+RAXIS_API int64_t compute_numel(IntArrayRef shape) noexcept;
+RAXIS_API int64_t compute_numel_from_strides(IntArrayRef shape, IntArrayRef strides);
+RAXIS_API DimVector compute_strides(IntArrayRef shape);
+RAXIS_API DimVector broadcast_shapes(IntArrayRef shape1, IntArrayRef shape2);
+RAXIS_API DimVector broadcast_shapes(ArrayRef<IntArrayRef> shapes);
 
-RAXIS_API std::optional<IntArray> compute_view_strides(
-    const IntArray& oldshape,
-    const IntArray& oldstride,
-    const IntArray& newshape
+RAXIS_API std::optional<DimVector> compute_view_strides(
+    IntArrayRef oldshape,
+    IntArrayRef oldstride,
+    IntArrayRef newshape
 );
-RAXIS_API IntArray resolve_shape(const IntArray& shape, int64_t numel);
+RAXIS_API DimVector resolve_shape(IntArrayRef shape, int64_t numel);
 
 RAXIS_API int64_t wrap_dim(int64_t dim, int64_t ndim);
 RAXIS_API int64_t wrap_dim_allow_upper(int64_t dim, int64_t ndim);

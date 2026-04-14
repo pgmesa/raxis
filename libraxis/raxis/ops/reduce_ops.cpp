@@ -24,7 +24,7 @@ namespace raxis {
 Tensor& sum_out(
     Tensor& result,
     const Tensor& self,
-    const IntArray& dim,
+    IntArrayRef dim,
     bool keepdim,
     std::optional<Dtype> opt_dtype
 ) {
@@ -42,7 +42,7 @@ Tensor& sum_out(
 
 Tensor sum(
     const Tensor& self, 
-    const IntArray& dim,
+    IntArrayRef dim,
     bool keepdim,
     std::optional<Dtype> opt_dtype
 ) {
@@ -59,7 +59,7 @@ Tensor sum(const Tensor& self, std::optional<Dtype> dtype) {
 Tensor& nansum_out(
     Tensor& result,
     const Tensor& self,
-    const IntArray& dim,
+    IntArrayRef dim,
     bool keepdim,
     std::optional<Dtype> opt_dtype
 ) {
@@ -82,7 +82,7 @@ Tensor& nansum_out(
 
 Tensor nansum(
     const Tensor& self, 
-    const IntArray& dim,
+    IntArrayRef dim,
     bool keepdim,
     std::optional<Dtype> opt_dtype
 ) {
@@ -99,7 +99,7 @@ Tensor nansum(const Tensor& self, std::optional<Dtype> dtype) {
 Tensor& mean_out(
     Tensor& result,
     const Tensor& self,
-    const IntArray& dim,
+    IntArrayRef dim,
     bool keepdim,
     std::optional<Dtype> opt_dtype)
 {
@@ -137,7 +137,7 @@ Tensor& mean_out(
 
 Tensor mean(
     const Tensor& self,
-    const IntArray& dim,
+    IntArrayRef dim,
     bool keepdim,
     std::optional<Dtype> opt_dtype)
 {
@@ -154,7 +154,7 @@ Tensor mean(const Tensor& self, std::optional<Dtype> dtype) {
 Tensor& nanmean_out(
     Tensor& result,
     const Tensor& self,
-    const IntArray& dim,
+    IntArrayRef dim,
     bool keepdim,
     std::optional<Dtype> opt_dtype)
 {
@@ -172,7 +172,7 @@ Tensor& nanmean_out(
 
 Tensor nanmean(
     const Tensor& self,
-    const IntArray& dim,
+    IntArrayRef dim,
     bool keepdim,
     std::optional<Dtype> opt_dtype)
 {
@@ -189,7 +189,7 @@ Tensor nanmean(const Tensor& self, std::optional<Dtype> dtype) {
 Tensor& prod_out(
     Tensor& result,
     const Tensor& self,
-    const IntArray& dim,
+    IntArrayRef dim,
     bool keepdim,
     std::optional<Dtype> opt_dtype
 ) {
@@ -207,7 +207,7 @@ Tensor& prod_out(
 
 Tensor prod(
     const Tensor& self, 
-    const IntArray& dim,
+    IntArrayRef dim,
     bool keepdim,
     std::optional<Dtype> opt_dtype
 ) {
@@ -237,24 +237,22 @@ Tensor min(const Tensor& self) {
     return result;
 }
 
-Tensor amax(const Tensor& self, const IntArray& dim, bool keepdim) {
+Tensor amax(const Tensor& self, IntArrayRef dim, bool keepdim) {
     if (self.numel() == 0) {
         zero_numel_check_dims(self, dim, "amax()");
     }
     Tensor result;
-    auto iter = make_reduction("amax", self, result,
-        std::optional<IntArray>(dim), keepdim, self.dtype());
+    auto iter = make_reduction("amax", self, result, dim, keepdim, self.dtype());
     max_values_stub(iter.device_type(), iter);
     return result;
 }
 
-Tensor amin(const Tensor& self, const IntArray& dim, bool keepdim) {
+Tensor amin(const Tensor& self, IntArrayRef dim, bool keepdim) {
     if (self.numel() == 0) {
         zero_numel_check_dims(self, dim, "amin()");
     }
     Tensor result;
-    auto iter = make_reduction("amin", self, result,
-        std::optional<IntArray>(dim), keepdim, self.dtype());
+    auto iter = make_reduction("amin", self, result, dim, keepdim, self.dtype());
     min_values_stub(iter.device_type(), iter);
     return result;
 }

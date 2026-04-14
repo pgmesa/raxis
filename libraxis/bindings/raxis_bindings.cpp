@@ -103,6 +103,7 @@ PYBIND11_MODULE(_C, c) {
         .def_property_readonly("device", &raxis::Tensor::device, "Device")
         .def("numel", &raxis::Tensor::numel)
         .def("dim", &raxis::Tensor::ndim)
+        .def_property_readonly("ndim", &raxis::Tensor::ndim)
         .def("tolist", [](const raxis::Tensor& self) -> py::object {
             return raxis::python::tensor_to_list(self);
         })
@@ -137,17 +138,24 @@ PYBIND11_MODULE(_C, c) {
         .def("transpose", &raxis::Tensor::transpose, py::arg("dim0"), py::arg("dim1"))
         .def("permute", &raxis::Tensor::permute, py::arg("dims"))
         .def("swapdims", &raxis::Tensor::swapdims, py::arg("dim0"), py::arg("dim1"))
-        .def("movedim", 
-            py::overload_cast<const raxis::IntArray&, 
-                const raxis::IntArray&>(&raxis::Tensor::movedim, py::const_), 
-            py::arg("source"), py::arg("destination"))
         .def("movedim",
             py::overload_cast<int64_t, int64_t>(
                 &raxis::Tensor::movedim, py::const_),
             py::arg("source"), py::arg("destination"))
-        .def("view", &raxis::Tensor::view, py::arg("shape"))
-        .def("reshape", &raxis::Tensor::reshape,  py::arg("shape"))
-        .def("broadcast_to", &raxis::Tensor::broadcast_to, py::arg("shape"))
+        
+        .def("movedim", [](const raxis::Tensor& self, raxis::VecOrInt source, raxis::VecOrInt destination) {
+            return self.movedim(source, destination);
+        }, py::arg("source"), py::arg("destination"))
+        .def("view", [](const raxis::Tensor& self, raxis::Vec shape) {
+            return self.view(shape);
+        }, py::arg("shape"))
+        .def("reshape", [](const raxis::Tensor& self, raxis::Vec shape) {
+            return self.reshape(shape);
+        }, py::arg("shape"))
+        .def("broadcast_to", [](const raxis::Tensor& self, raxis::Vec shape) {
+            return self.broadcast_to(shape);
+        }, py::arg("shape"))
+
         .def("contiguous", &raxis::Tensor::contiguous)
         .def("is_contiguous", &raxis::Tensor::is_contiguous)
 
@@ -493,7 +501,7 @@ PYBIND11_MODULE(_C, c) {
         // Reduction methods
         .def("sum", [](
                 const raxis::Tensor& self, 
-                std::optional<raxis::DimArray> dim,
+                std::optional<raxis::Vec> dim,
                 bool keepdim,
                 std::optional<raxis::Dtype> dtype
             ) -> raxis::Tensor {
@@ -505,7 +513,7 @@ PYBIND11_MODULE(_C, c) {
         )
         .def("nansum", [](
                 const raxis::Tensor& self, 
-                std::optional<raxis::DimArray> dim,
+                std::optional<raxis::Vec> dim,
                 bool keepdim,
                 std::optional<raxis::Dtype> dtype
             ) -> raxis::Tensor {
@@ -518,7 +526,7 @@ PYBIND11_MODULE(_C, c) {
 
         .def("mean", [](
                 const raxis::Tensor& self, 
-                std::optional<raxis::DimArray> dim,
+                std::optional<raxis::Vec> dim,
                 bool keepdim,
                 std::optional<raxis::Dtype> dtype
             ) -> raxis::Tensor {
@@ -530,7 +538,7 @@ PYBIND11_MODULE(_C, c) {
         )
         .def("nanmean", [](
                 const raxis::Tensor& self, 
-                std::optional<raxis::DimArray> dim,
+                std::optional<raxis::Vec> dim,
                 bool keepdim,
                 std::optional<raxis::Dtype> dtype
             ) -> raxis::Tensor {
@@ -543,7 +551,7 @@ PYBIND11_MODULE(_C, c) {
 
         .def("prod", [](
                 const raxis::Tensor& self, 
-                std::optional<raxis::DimArray> dim,
+                std::optional<raxis::Vec> dim,
                 bool keepdim,
                 std::optional<raxis::Dtype> dtype
             ) -> raxis::Tensor {
@@ -559,22 +567,22 @@ PYBIND11_MODULE(_C, c) {
 
         .def("amax", [](
                 const raxis::Tensor& self, 
-                raxis::DimArray dim,
+                raxis::Vec dim,
                 bool keepdim
             ) -> raxis::Tensor {
                 return self.amax(dim, keepdim);
             },
-            py::arg("dim") = raxis::DimArray{},
+            py::arg("dim") = raxis::Vec{},
             py::arg("keepdim") = false
         )
         .def("amin", [](
                 const raxis::Tensor& self, 
-                raxis::DimArray dim,
+                raxis::Vec dim,
                 bool keepdim
             ) -> raxis::Tensor {
                 return self.amin(dim, keepdim);
             },
-            py::arg("dim") = raxis::DimArray{},
+            py::arg("dim") = raxis::Vec{},
             py::arg("keepdim") = false
         )
         
@@ -609,7 +617,7 @@ PYBIND11_MODULE(_C, c) {
         return raxis::python::tensor_from_numpy(arr);
     });
 
-    c.def("empty", [](raxis::IntArray shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
+    c.def("empty", [](raxis::VecOrInt shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
         auto options = raxis::TensorOptions().dtype(dtype).device(device);
         return raxis::empty(shape, options);
     }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
@@ -619,7 +627,7 @@ PYBIND11_MODULE(_C, c) {
         return raxis::empty_like(other, options);
     }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
 
-    c.def("zeros", [](raxis::IntArray shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
+    c.def("zeros", [](raxis::VecOrInt shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
         auto options = raxis::TensorOptions().dtype(dtype).device(device);
         return raxis::zeros(shape, options);
     }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
@@ -629,7 +637,7 @@ PYBIND11_MODULE(_C, c) {
         return raxis::zeros_like(other, options);
     }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
 
-    c.def("ones", [](raxis::IntArray shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
+    c.def("ones", [](raxis::VecOrInt shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
         auto options = raxis::TensorOptions().dtype(dtype).device(device);
         return raxis::ones(shape, options);
     }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
@@ -639,7 +647,7 @@ PYBIND11_MODULE(_C, c) {
         return raxis::ones_like(other, options);
     }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
 
-    c.def("full", [](raxis::IntArray shape, raxis::Scalar fill_value, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
+    c.def("full", [](raxis::VecOrInt shape, raxis::Scalar fill_value, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
         auto options = raxis::TensorOptions().dtype(dtype).device(device);
         return raxis::full(shape, fill_value, options);
     }, py::arg("shape"), py::arg("fill_value"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
@@ -649,7 +657,7 @@ PYBIND11_MODULE(_C, c) {
         return raxis::full_like(other, fill_value, options);
     }, py::arg("other"), py::arg("fill_value"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
 
-    c.def("rand", [](raxis::IntArray shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
+    c.def("rand", [](raxis::VecOrInt shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
         auto options = raxis::TensorOptions().dtype(dtype).device(device);
         return raxis::rand(shape, options);
     }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
@@ -659,7 +667,7 @@ PYBIND11_MODULE(_C, c) {
         return raxis::rand_like(other, options);
     }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
 
-    c.def("randn", [](raxis::IntArray shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
+    c.def("randn", [](raxis::VecOrInt shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
         auto options = raxis::TensorOptions().dtype(dtype).device(device);
         return raxis::randn(shape, options);
     }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
@@ -677,18 +685,28 @@ PYBIND11_MODULE(_C, c) {
     c.def("permute", &raxis::permute, py::arg("input"), py::arg("dims"));
     c.def("swapdims", &raxis::swapdims, py::arg("input"), py::arg("dim0"), py::arg("dim1"));
     c.def("movedim",
-        py::overload_cast<const raxis::Tensor&, const raxis::IntArray&, const raxis::IntArray&>(&raxis::movedim),
-        py::arg("input"), py::arg("source"), py::arg("destination"));
-    c.def("movedim",
         py::overload_cast<const raxis::Tensor&, int64_t, int64_t>(&raxis::movedim),
         py::arg("input"), py::arg("source"), py::arg("destination"));
-    c.def("reshape", &raxis::reshape, py::arg("input"), py::arg("shape"));
+    
+    c.def("movedim", [](const raxis::Tensor& input, raxis::VecOrInt source, raxis::VecOrInt destination) {
+        return raxis::movedim(input, source, destination);
+    }, py::arg("input"), py::arg("source"), py::arg("destination"));
+    c.def("reshape", [](const raxis::Tensor& input, raxis::Vec shape) {
+        return raxis::reshape(input, shape);
+    }, py::arg("input"), py::arg("shape"));
+    c.def("broadcast_to", [](const raxis::Tensor& input, raxis::Vec shape) {
+        return raxis::broadcast_to(input, shape);
+    }, py::arg("input"), py::arg("shape"));
 
-    c.def("broadcast_to", &raxis::broadcast_to, py::arg("input"), py::arg("shape"));
     c.def("broadcast_tensors", &raxis::broadcast_tensors, py::arg("tensors"));
-    c.def("broadcast_shapes", 
-        py::overload_cast<const std::vector<raxis::IntArray>&>(&raxis::broadcast_shapes), 
-        py::arg("shapes"));
+    c.def("broadcast_shapes", [](std::vector<raxis::Vec> shapes) {
+        std::vector<raxis::IntArrayRef> refs;
+        refs.reserve(shapes.size());
+        for (const auto& s : shapes) {
+            refs.emplace_back(s);
+        }
+        return raxis::broadcast_shapes(refs);
+    }, py::arg("shapes"));
 
     // Basic operations
     c.def(
@@ -852,7 +870,7 @@ PYBIND11_MODULE(_C, c) {
     // Reduction Ops
     c.def("sum", [](
             const raxis::Tensor& tensor, 
-            std::optional<raxis::DimArray> dim,
+            std::optional<raxis::Vec> dim,
             bool keepdim,
             std::optional<raxis::Dtype> dtype
         ) -> raxis::Tensor {
@@ -865,7 +883,7 @@ PYBIND11_MODULE(_C, c) {
     );
     c.def("nansum", [](
             const raxis::Tensor& tensor, 
-            std::optional<raxis::DimArray> dim,
+            std::optional<raxis::Vec> dim,
             bool keepdim,
             std::optional<raxis::Dtype> dtype
         ) -> raxis::Tensor {
@@ -879,7 +897,7 @@ PYBIND11_MODULE(_C, c) {
 
     c.def("mean", [](
             const raxis::Tensor& tensor, 
-            std::optional<raxis::DimArray> dim,
+            std::optional<raxis::Vec> dim,
             bool keepdim,
             std::optional<raxis::Dtype> dtype
         ) -> raxis::Tensor {
@@ -892,7 +910,7 @@ PYBIND11_MODULE(_C, c) {
     );
     c.def("nanmean", [](
             const raxis::Tensor& tensor, 
-            std::optional<raxis::DimArray> dim,
+            std::optional<raxis::Vec> dim,
             bool keepdim,
             std::optional<raxis::Dtype> dtype
         ) -> raxis::Tensor {
@@ -906,7 +924,7 @@ PYBIND11_MODULE(_C, c) {
 
     c.def("prod", [](
             const raxis::Tensor& tensor, 
-            std::optional<raxis::DimArray> dim,
+            std::optional<raxis::Vec> dim,
             bool keepdim,
             std::optional<raxis::Dtype> dtype
         ) -> raxis::Tensor {
@@ -925,24 +943,24 @@ PYBIND11_MODULE(_C, c) {
 
     c.def("amax", [](
             const raxis::Tensor& tensor, 
-            raxis::DimArray dim,
+            raxis::Vec dim,
             bool keepdim
         ) -> raxis::Tensor {
             return raxis::amax(tensor, dim, keepdim);
         },
         py::arg("tensor"),
-        py::arg("dim") = raxis::DimArray{},
+        py::arg("dim") = raxis::Vec{},
         py::arg("keepdim") = false
     );
     c.def("amin", [](
             const raxis::Tensor& tensor, 
-            raxis::DimArray dim,
+            raxis::Vec dim,
             bool keepdim
         ) -> raxis::Tensor {
             return raxis::amin(tensor, dim, keepdim);
         },
         py::arg("tensor"),
-        py::arg("dim") = raxis::DimArray{},
+        py::arg("dim") = raxis::Vec{},
         py::arg("keepdim") = false
     );
 

@@ -14,7 +14,7 @@ namespace raxis {
 
 using DimMask = TensorIterator::DimMask;
 
-DimMask make_dim_mask(const std::optional<IntArray>& opt_dims, int64_t ndim) {
+DimMask make_dim_mask(const std::optional<IntArrayRef>& opt_dims, int64_t ndim) {
     DimMask mask;
 
     if (!opt_dims.has_value() || opt_dims->empty()) {
@@ -33,8 +33,8 @@ DimMask make_dim_mask(const std::optional<IntArray>& opt_dims, int64_t ndim) {
     return mask;
 }
 
-IntArray shape_from_dim_mask(const IntArray& input_shape, const DimMask& mask, bool keepdim) {
-    IntArray shape;
+DimVector shape_from_dim_mask(IntArrayRef input_shape, const DimMask& mask, bool keepdim) {
+    DimVector shape;
     for (int64_t dim = 0; dim < static_cast<int64_t>(input_shape.size()); ++dim) {
         if (mask.test(dim)) {
             if (keepdim) {
@@ -72,7 +72,7 @@ Dtype get_dtype_from_result(Tensor& result, std::optional<Dtype> dtype) {
 }
 
 inline Tensor create_reduction_result(
-  const Tensor& self, std::optional<IntArray> dim, bool keepdim, Dtype dtype
+  const Tensor& self, std::optional<IntArrayRef> dim, bool keepdim, Dtype dtype
 ) {
     DimMask mask = make_dim_mask(dim, self.ndim());
     auto shape = shape_from_dim_mask(self.shape(), mask, keepdim);
@@ -89,11 +89,11 @@ Tensor review_reduce_result(
         return result;
     }
     // Build new shape and strides by re-inserting size-1 / stride-0 dims
-    IntArray shape;
-    IntArray strides;
+    DimVector shape;
+    DimVector strides;
     
-    const IntArray& result_shape = result.shape();
-    const IntArray& result_strides = result.strides();
+    IntArrayRef result_shape = result.shape();
+    IntArrayRef result_strides = result.strides();
     
     int64_t result_idx = 0;
     for (int64_t dim = 0; dim < ndim; ++dim) {
@@ -121,13 +121,13 @@ TensorIterator make_reduction(
     const char* name,
     const Tensor& self,
     Tensor& result,
-    const std::optional<IntArray>& opt_dims,
+    const std::optional<IntArrayRef>& opt_dims,
     bool keepdim,
     Dtype out_dtype)
 {
     int64_t ndim = self.ndim();
     DimMask mask = make_dim_mask(opt_dims, ndim);
-    IntArray out_shape = shape_from_dim_mask(self.shape(), mask, keepdim);
+    DimVector out_shape = shape_from_dim_mask(self.shape(), mask, keepdim);
 
     // Allocate or validate the output tensor
     if (!result.defined()) {
@@ -163,7 +163,7 @@ inline void zero_numel_check_dims(const Tensor& self, int64_t dim, const char* f
     }
 }
 
-inline void zero_numel_check_dims(const Tensor& self, const IntArray& dim, const char* fn_name) {
+inline void zero_numel_check_dims(const Tensor& self, IntArrayRef dim, const char* fn_name) {
     RAXIS_CHECK(!dim.empty(), fn_name,
         ": Expected reduction dim to be specified for input.numel() == 0.");
     for (int64_t d : dim) {

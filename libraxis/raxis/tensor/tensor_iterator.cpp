@@ -16,6 +16,7 @@
 #include <raxis/util/parallel.h>
 #include <raxis/util/small_buffer.h>
 #include <raxis/util/array_ref.h>
+#include <raxis/util/small_vector.h>
 
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/factories.h>
@@ -125,15 +126,17 @@ void TensorIterator::build(TensorIteratorConfig& config) {
     compute_shape(config);
     // Compute the result dtype and device
     compute_types(config);
-    // Compute each tensor's stride after broadcasting
-    compute_strides(config);
 
-    // Re-order dimensions to improve coalescing
-    reorder_dimensions();
-    // Allocate the output tensor if it's not provided
-    allocate_outputs();
-    // Coalesce adjacent dimensions when possible
-    coalesce_dimensions();
+    if (!fast_setup()) {
+        // Compute each tensor's stride after broadcasting
+        compute_strides(config);
+        // Re-order dimensions to improve coalescing
+        reorder_dimensions();
+        // Allocate the output tensor if it's not provided
+        allocate_outputs();
+        // Coalesce adjacent dimensions when possible
+        coalesce_dimensions();
+    }
 }
 
 void TensorIterator::populate_operands(TensorIteratorConfig& config) {
@@ -141,8 +144,8 @@ void TensorIterator::populate_operands(TensorIteratorConfig& config) {
     size_t num_operands = config.tensors_.size();
     
     for (size_t idx = 0; idx < num_operands; idx++) {
-        auto& arr = config.tensors_[idx];
-        operands_.emplace_back(std::move(arr));
+        auto& tensor = config.tensors_[idx];
+        operands_.emplace_back(std::move(tensor));
         
         // check if tensor is an output
         if (idx >= num_outputs_) continue;
@@ -180,7 +183,7 @@ void TensorIterator::compute_shape(const TensorIteratorConfig& config) {
         // Outputs don't participate in shape computation
         if (op.is_output) continue;
         
-        IntArray shape = op.tensor().shape();
+        IntArrayRef shape = op.tensor().shape();
         if (shape.empty()) has_scalars = true;
         else has_tensors = true;
 
@@ -188,7 +191,7 @@ void TensorIterator::compute_shape(const TensorIteratorConfig& config) {
             all_ops_same_shape_ = false;
 
         if (shape_.empty()) {
-            shape_ = shape;
+            shape_ = DimVector(shape);
         } else if (shape != shape_) {
             all_ops_same_shape_ = false;
             shape_ = broadcast_shapes(shape_, op.tensor().shape());
@@ -203,7 +206,7 @@ void TensorIterator::compute_shape(const TensorIteratorConfig& config) {
             
         if (shape_.empty()) {
             // No inputs (e.g. fill_), infer shape from output
-            shape_ = output.shape();
+            shape_ = DimVector(output.shape());
         } else if (!is_reduction_) {
             RAXIS_CHECK(output.shape() == shape_,
              "Invalid shape encountered in output ", output.shape(), 
@@ -216,8 +219,8 @@ void TensorIterator::compute_strides(const TensorIteratorConfig& config) {
     for (Operand& op: operands_) {
         if (!op.tensor().defined()) continue;
 
-        const IntArray& original_shape = config.static_shape_? shape_ : op.tensor().shape();
-        const IntArray& original_stride = op.tensor().strides();
+        IntArrayRef original_shape = config.static_shape_? shape_ : op.tensor().shape();
+        IntArrayRef original_stride = op.tensor().strides();
         int64_t itemsize = static_cast<int64_t>(op.tensor().dtype().itemsize());
         
         int original_ndim = static_cast<int>(original_shape.size());
@@ -429,9 +432,9 @@ Dtype TensorIterator::compute_common_dtype() {
     return compute_promoted_dtype(state);
 }
 
-void TensorIterator::permute_dimensions(const IntArray& perm) {
-    auto reorder = [perm](const IntArray& data) {
-        IntArray res(data.size(), 0);
+void TensorIterator::permute_dimensions(IntArrayRef perm) {
+    auto reorder = [perm]<typename Vec>(const Vec& data) {
+        Vec res(data.size(), 0);
         for (size_t dim = 0; dim < perm.size(); dim++) {
             res[dim] = data[perm[dim]];
         }
@@ -445,6 +448,43 @@ void TensorIterator::permute_dimensions(const IntArray& perm) {
             op.stride_bytes = reorder(op.stride_bytes);
         }
     }
+}
+
+bool TensorIterator::fast_setup() {
+    if (is_reduction_ || !all_ops_same_shape_) {
+        return false;
+    }
+
+    // Check all defined operands are contiguous
+    // Undefined outputs are skipped, they will be allocated contiguously
+    for (const Operand& op : operands_) {
+        if (!op.tensor().defined()) {
+            continue;
+        }
+        if (!op.tensor().is_contiguous()) {
+            return false;
+        }
+    }
+
+    // Allocate undefined outputs as contiguous
+    for (int i = 0; i < num_outputs_; i++) {
+        Operand& op = operands_[i];
+        if (!op.tensor().defined()) {
+            op.set_tensor(MaybeOwned<Tensor>::owned(empty(shape_, op.target_dtype)));
+        }
+        op.current_dtype = op.target_dtype;
+    }
+
+    // Collapse to 1D: shape = [numel], stride = [itemsize] for each operand
+    int64_t n = numel();
+    shape_ = {n};
+    for (Operand& op : operands_) {
+        int64_t itemsize = static_cast<int64_t>(op.tensor().dtype().itemsize());
+        op.stride_bytes = {itemsize};
+    }
+
+    has_coalesced_dimensions_ = true;
+    return true;
 }
 
 void TensorIterator::reorder_dimensions() {
@@ -519,8 +559,8 @@ void TensorIterator::reorder_dimensions() {
     permute_dimensions(perm_);
 }
 
-IntArray TensorIterator::compatible_stride(int64_t element_size) const {
-    IntArray stride;
+TensorIterator::StrideVector TensorIterator::compatible_stride(int64_t element_size) const {
+    StrideVector stride;
     int64_t next_stride = element_size;
     for (size_t dim = 0; dim < ndim(); dim++) {
         stride.push_back(next_stride);
@@ -529,20 +569,20 @@ IntArray TensorIterator::compatible_stride(int64_t element_size) const {
     return stride;
 }
 
-IntArray TensorIterator::invert_perm(const IntArray& input) const {
+DimVector TensorIterator::invert_perm(IntArrayRef input) const {
     // Invert the permutation caused by reorder_dimensions. This is not valid
     // after coalesce_dimensions is called
     RAXIS_INTERNAL_ASSERT(!has_coalesced_dimensions_);
     RAXIS_INTERNAL_ASSERT(input.size() == perm_.size());
 
-    IntArray res(input.size());
+    DimVector res(input.size());
     for (size_t dim = 0; dim < ndim(); dim++) {
         res[perm_[dim]] = input[dim];
     }
     return res;
 }
 
-void TensorIterator::set_output(int64_t output_idx, const IntArray& shape, const IntArray& strides) {
+void TensorIterator::set_output(int64_t output_idx, IntArrayRef shape, IntArrayRef strides) {
     Operand& op = operands_[output_idx];
     if (op.tensor().defined()) return;
     
@@ -599,7 +639,7 @@ void TensorIterator::coalesce_dimensions() {
             return true;
         }
         for (int i = 0; i < num_operands(); i++) {
-            IntArray& stride = operands_[i].stride_bytes;
+            auto& stride = operands_[i].stride_bytes;
             if (size0 * stride[dim0] != stride[dim1]) {
                 return false;
             }
@@ -652,13 +692,13 @@ void TensorIterator::for_each(loop2d_t loop, int64_t grain_size) const {
     }
 }
 
-void get_base_ptrs(char** ptrs, const std::vector<Operand>& operands) {
+void get_base_ptrs(char** ptrs, ArrayRef<Operand> operands) {
     for (int idx = 0; idx < operands.size(); idx++) {
         ptrs[idx] = static_cast<char*>(operands[idx].tensor().mutable_data_ptr());
     }
 }
 
-void get_strides(int64_t* strides, const std::vector<Operand>& operands, int ndim) {
+void get_strides(int64_t* strides, ArrayRef<Operand> operands, int ndim) {
     int noperands = static_cast<int>(operands.size());
     for (int dim = 0; dim < ndim; dim++) {
         for (int idx = 0; idx < noperands; idx++) {
@@ -707,7 +747,7 @@ void serial_for_each(
             loop(base_ptrs, strides.data(), range.size(), 1);
         } else {
             SmallBuffer<char*, 4> ptrs(noperands);
-            get_data_ptrs(ptrs.data(), {base_ptrs, noperands}, strides, IntArrayRef(range.begin));
+            get_data_ptrs(ptrs.data(), {base_ptrs, noperands}, strides, {range.begin});
             loop(ptrs.data(), strides.data(), range.size(), 1);
         }
     } else {

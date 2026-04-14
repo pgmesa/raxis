@@ -14,82 +14,103 @@ namespace py = pybind11;
 
 
 namespace raxis {
-    struct DimArray : IntArray {
-        using IntArray::IntArray;
-        using IntArray::operator=;
+
+    struct Vec : DimVector {
+        using DimVector::DimVector;
+        using DimVector::operator=;
     };
+
+    struct VecOrInt : DimVector {
+        using DimVector::DimVector;
+        using DimVector::operator=;
+    };
+
 }
 
 namespace pybind11::detail {
 
 template <>
-struct type_caster<raxis::IntArray> {
+struct type_caster<raxis::DimVector> {
 public:
-    PYBIND11_TYPE_CASTER(raxis::IntArray, _("list[int] | tuple[int, ...]"));
+    PYBIND11_TYPE_CASTER(raxis::DimVector, _("tuple[int, ...]"));
 
-    // Python -> C++
+    bool load(handle src, bool) {
+        return false;
+    }
+
+    static handle cast(const raxis::DimVector& src, return_value_policy, handle) {
+        py::tuple tup(src.size());
+        for (size_t i = 0; i < src.size(); ++i) {
+            tup[i] = py::int_(src[i]);
+        }
+        return tup.release();
+    }
+};
+
+template <>
+struct type_caster<raxis::IntArrayRef> {
+public:
+    PYBIND11_TYPE_CASTER(raxis::IntArrayRef, _("list[int] | tuple[int, ...]"));
+
+    // No load, ArrayRef is non-owning, never constructed from Python
+    bool load(handle, bool) {
+        return false;
+    }
+
+    static handle cast(raxis::IntArrayRef src, return_value_policy, handle) {
+        py::tuple tup(src.size());
+        for (size_t i = 0; i < src.size(); ++i) {
+            tup[i] = py::int_(src[i]);
+        }
+        return tup.release();
+    }
+};
+
+template <>
+struct type_caster<raxis::Vec> {
+public:
+    PYBIND11_TYPE_CASTER(raxis::Vec, _("list[int] | tuple[int, ...]"));
+
     bool load(handle src, bool) {
         value.clear();
-
         if (py::isinstance<py::sequence>(src)) {
             for (auto item : py::reinterpret_borrow<py::sequence>(src)) {
                 value.push_back(py::cast<int64_t>(item));
             }
             return true;
         }
-
         return false;
     }
 
-    // C++ -> Python
-    static handle cast(
-        const raxis::IntArray& src,
-        return_value_policy,
-        handle
-    ) {
-        py::list lst;
-        for (auto v : src) {
-            lst.append(py::int_(v));
-        }
-        return lst.release();
+    static handle cast(const raxis::Vec& src, return_value_policy policy, handle parent) {
+        return type_caster<raxis::DimVector>::cast(src, policy, parent);
     }
 };
-
 
 template <>
-struct type_caster<raxis::DimArray> {
+struct type_caster<raxis::VecOrInt> {
 public:
-    PYBIND11_TYPE_CASTER(raxis::DimArray, _("list[int] | tuple[int, ...] | int"));
+    PYBIND11_TYPE_CASTER(raxis::VecOrInt, _("list[int] | tuple[int, ...] | int"));
 
     bool load(handle src, bool) {
-        raxis::DimArray arr;
+        value.clear();
         if (py::isinstance<py::int_>(src)) {
-            arr.push_back(py::cast<int64_t>(src));
-            value = std::move(arr);
+            value.push_back(py::cast<int64_t>(src));
             return true;
         }
-
         if (py::isinstance<py::sequence>(src)) {
             for (auto item : py::reinterpret_borrow<py::sequence>(src)) {
-                arr.push_back(py::cast<int64_t>(item));
+                value.push_back(py::cast<int64_t>(item));
             }
-            value = std::move(arr);
             return true;
         }
-
         return false;
     }
 
-    static handle cast(
-        const raxis::DimArray& src,
-        return_value_policy policy,
-        handle parent
-    ) {
-        return type_caster<raxis::IntArray>::cast(
-            static_cast<const raxis::IntArray&>(src), policy, parent);
+    static handle cast(const raxis::VecOrInt& src, return_value_policy policy, handle parent) {
+        return type_caster<raxis::DimVector>::cast(src, policy, parent);
     }
 };
-
 
 template <>
 struct type_caster<raxis::Scalar> {

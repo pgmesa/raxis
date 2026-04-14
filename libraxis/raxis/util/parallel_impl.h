@@ -1,6 +1,7 @@
 #pragma once
 
 #include <raxis/util/exception.h>
+#include <raxis/util/small_vector.h>
 #include <raxis/util/parallel_guard.h>
 
 
@@ -75,7 +76,7 @@ inline scalar_t parallel_reduce(
         return f(begin, end, identity);
     }
 
-    std::vector<scalar_t> results(static_cast<size_t>(max_threads), identity);
+    SmallVector<scalar_t, 64> results(static_cast<size_t>(max_threads), identity);
 
     detail::invoke_parallel(
         begin, end, grain_size,

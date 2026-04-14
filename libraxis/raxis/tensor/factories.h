@@ -21,8 +21,8 @@ using Deleter = std::function<void(void*)>;
 
 RAXIS_API Tensor from_blob(
     void* data, 
-    const IntArray& shape, 
-    std::optional<IntArray> strides,
+    IntArrayRef shape, 
+    std::optional<DimVector> strides,
     Dtype dtype, 
     Device device = DeviceType::CPU
 );
@@ -30,8 +30,8 @@ RAXIS_API Tensor from_blob(
 RAXIS_API Tensor from_blob(
     void* data,
     DeleterFnPtr deleter,
-    const IntArray& shape,
-    std::optional<IntArray> strides,
+    IntArrayRef shape,
+    std::optional<DimVector> strides,
     Dtype dtype,
     Device device = DeviceType::CPU
 );
@@ -40,32 +40,32 @@ RAXIS_API Tensor from_blob(
     void* data,
     void* ctx,
     DeleterFnPtr deleter,
-    const IntArray& shape,
-    std::optional<IntArray> strides,
+    IntArrayRef shape,
+    std::optional<DimVector> strides,
     Dtype dtype,
     Device device = DeviceType::CPU
 );
 
-RAXIS_API Tensor empty(const IntArray& shape, TensorOptions options = {});
+RAXIS_API Tensor empty(IntArrayRef shape, TensorOptions options = {});
 RAXIS_API Tensor empty_like(const Tensor& other, TensorOptions options = {});
 RAXIS_API Tensor empty_strided(
-    const IntArray& shape, const IntArray& strides, TensorOptions options = {});
+    IntArrayRef shape, IntArrayRef strides, TensorOptions options = {});
 
-RAXIS_API Tensor full(const IntArray& shape, Scalar value, TensorOptions options = {});
+RAXIS_API Tensor full(IntArrayRef shape, Scalar value, TensorOptions options = {});
 RAXIS_API Tensor full_like(const Tensor& other, Scalar value, TensorOptions options = {});
 
-RAXIS_API Tensor zeros(const IntArray& shape, TensorOptions options = {});
+RAXIS_API Tensor zeros(IntArrayRef shape, TensorOptions options = {});
 RAXIS_API Tensor zeros_like(const Tensor& other, TensorOptions options = {});
 
-RAXIS_API Tensor ones(const IntArray& shape, TensorOptions options = {});
+RAXIS_API Tensor ones(IntArrayRef shape, TensorOptions options = {});
 RAXIS_API Tensor ones_like(const Tensor& other, TensorOptions options = {});
 
 /// Returns a tensor filled with U[0, 1)
-RAXIS_API Tensor rand(const IntArray& shape, TensorOptions options = {});
+RAXIS_API Tensor rand(IntArrayRef shape, TensorOptions options = {});
 RAXIS_API Tensor rand_like(const Tensor& other, TensorOptions options = {});
 
 /// Returns a tensor filled with N(0, 1)
-RAXIS_API Tensor randn(const IntArray& shape, TensorOptions options = {});
+RAXIS_API Tensor randn(IntArrayRef shape, TensorOptions options = {});
 RAXIS_API Tensor randn_like(const Tensor& other, TensorOptions options = {});
 
 RAXIS_API Tensor scalar_tensor(Scalar s, TensorOptions options = {});
@@ -94,8 +94,8 @@ inline Dtype compute_desired_dtype(Dtype inferred) {
 }
 
 RAXIS_API Tensor tensor_from_scalars(
-    const std::vector<Scalar>& data,
-    const IntArray& shape,
+    ArrayRef<Scalar> data,
+    IntArrayRef shape,
     TensorOptions options = {}
 );
 
@@ -104,13 +104,13 @@ RAXIS_API Tensor tensor(
 
 // Typed flat data + optional reshape
 template <typename T>
-Tensor tensor(const std::vector<T>& data, TensorOptions options = {}) {
-    IntArray shape = {static_cast<int64_t>(data.size())};
+Tensor tensor(ArrayRef<T> data, TensorOptions options = {}) {
+    DimVector shape = {static_cast<int64_t>(data.size())};
     return tensor(data, shape, options);
 }
 
 template <typename T>
-Tensor tensor(const std::vector<T>& data, const IntArray& shape, TensorOptions options = {}) {
+Tensor tensor(ArrayRef<T> data, IntArrayRef shape, TensorOptions options = {}) {
     int64_t expected = compute_numel(shape);
     RAXIS_CHECK(
         static_cast<int64_t>(data.size()) == expected,

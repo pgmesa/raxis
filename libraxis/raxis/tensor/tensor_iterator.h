@@ -15,6 +15,7 @@
 #include <raxis/util/exception.h>
 #include <raxis/util/function_ref.h>
 #include <raxis/util/maybe_owned.h>
+#include <raxis/util/small_vector.h>
 
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/shape_utils.h>
@@ -35,7 +36,9 @@ constexpr int64_t GRAIN_SIZE = 32768;
 } // namespace detail
 
 struct Operand {
-    IntArray stride_bytes;
+    using StrideVector = SmallVector<int64_t, 6>;
+
+    StrideVector stride_bytes;
     bool is_output = false;
     bool is_read_write = false;
 
@@ -177,8 +180,8 @@ public:
         return *this;
     }
 
-    TensorIteratorConfig& declare_static_shape(const IntArray& shape) {
-        static_shape_ = shape;
+    TensorIteratorConfig& declare_static_shape(IntArrayRef shape) {
+        static_shape_ = DimVector(shape);
         return *this;
     }
 
@@ -195,10 +198,10 @@ public:
     TensorIterator build();
 
 private:
-    std::vector<MaybeOwned<Tensor>> tensors_;
+    SmallVector<MaybeOwned<Tensor>, 4> tensors_;
     int num_outputs_ = 0;
     int num_inputs_ = 0;
-    std::optional<IntArray> static_shape_ = std::nullopt;
+    std::optional<DimVector> static_shape_ = std::nullopt;
     std::optional<Dtype> static_dtype_ = std::nullopt;
     std::optional<Device> static_device_ = std::nullopt;
     bool allow_cpu_scalars_ = false;
@@ -256,6 +259,8 @@ inline TensorIteratorConfig unary_float_op_config() {
 struct TensorIterator {
 public:
     using DimMask = std::bitset<64>;
+    using PtrVector = SmallVector<char*, 4>;
+    using StrideVector = SmallVector<int64_t, 6>;
 
     int ndim() const {
         return static_cast<int>(shape_.size());
@@ -339,24 +344,24 @@ public:
     /// Create a strides array for a Tensor with shape of this iterator. The
     /// parameter `element_size` specifies the size of Tensor's data type in
     /// bytes (e.g. `4` for `float`)
-    IntArray compatible_stride(int64_t element_size) const;
+    StrideVector compatible_stride(int64_t element_size) const;
 
     /// Inverts the re-ordering done by reorder_dimensions. This can only be
     /// called *before* coalesce_dimensions() is called.
-    IntArray invert_perm(const IntArray& input) const;
+    DimVector invert_perm(IntArrayRef input) const;
 
-    void set_output(int64_t output_idx, const IntArray& sizes, const IntArray& strides);
+    void set_output(int64_t output_idx, IntArrayRef sizes, IntArrayRef strides);
 
     // Copies from temporary outputs back to the original outputs
     // NOTE: only used on CPU
     void cast_outputs();
 
 private:
-    std::vector<Operand> operands_;
+    SmallVector<Operand, 4> operands_;
     int num_outputs_ = 0;
     
-    IntArray shape_;
-    IntArray perm_;
+    DimVector shape_;
+    DimVector perm_;
 
     bool all_ops_same_shape_ = false;
     bool all_ops_are_scalars_ = false;
@@ -380,8 +385,9 @@ private:
     void compute_types(const TensorIteratorConfig&);
     Dtype compute_common_dtype();
     void compute_strides(const TensorIteratorConfig&);
+    bool fast_setup();
     void reorder_dimensions();
-    void permute_dimensions(const IntArray& perm);
+    void permute_dimensions(IntArrayRef perm);
     void allocate_outputs();
     void coalesce_dimensions();
 
@@ -394,7 +400,7 @@ private:
             ) {
                 // Adapt 1D signature to 2D
                 const int64_t* outer_strides = &strides[noperands];
-                std::vector<char*> data(base, base + noperands);
+                PtrVector data(base, base + noperands);
                 for (int outer = 0; outer < size1; outer++) {
                     if (outer > 0) {
                         for (int idx = 0; idx < noperands; idx++) {

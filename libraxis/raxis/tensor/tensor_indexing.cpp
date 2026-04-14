@@ -65,7 +65,7 @@ std::ostream& operator<<(std::ostream& os, const TensorIndex& idx) {
 namespace {
 
 /// Count how many dimensions the indices actually consume.
-int64_t count_specified_dims(const std::vector<TensorIndex>& indices) {
+int64_t count_specified_dims(ArrayRef<TensorIndex> indices) {
     int64_t count = 0;
     for (const auto& idx : indices) {
         switch (idx.type()) {
@@ -85,7 +85,7 @@ int64_t count_specified_dims(const std::vector<TensorIndex>& indices) {
 }
 
 /// Check if any index requires advanced (copy-based) indexing.
-bool needs_advanced_indexing(const std::vector<TensorIndex>& indices) {
+bool needs_advanced_indexing(ArrayRef<TensorIndex> indices) {
     for (const auto& idx : indices) {
         if (idx.is_tensor() || idx.is_boolean()) {
             return true;
@@ -98,10 +98,7 @@ bool needs_advanced_indexing(const std::vector<TensorIndex>& indices) {
 } // anonymous namespace
 
 
-Tensor get_item(
-    const Tensor& self,
-    const std::vector<TensorIndex>& indices
-) {
+Tensor get_item(const Tensor& self, ArrayRef<TensorIndex> indices) {
     RAXIS_CHECK(self.defined(), "Cannot index an undefined tensor");
     RAXIS_CHECK(!indices.empty(), "Empty index list is not valid");
 
@@ -129,7 +126,7 @@ Tensor get_item(
         " (got ", specified, " index dimensions)");
 
     // Expand Ellipsis into full-dim slices
-    std::vector<TensorIndex> expanded_buf;
+    SmallVector<TensorIndex, 5> expanded_buf;
     if (num_ellipsis == 1) {
         int64_t expand_count = self.ndim() - specified;
 
@@ -191,20 +188,12 @@ Tensor get_item(
     return result;
 }
 
-void set_item(
-    const Tensor& self,
-    const std::vector<TensorIndex>& indices,
-    const Tensor& value
-) {
+void set_item(const Tensor& self, ArrayRef<TensorIndex> indices, const Tensor& value) {
     Tensor view = get_item(self, indices);
     view.copy_(value);
 }
 
-void set_item(
-    const Tensor& self,
-    const std::vector<TensorIndex>& indices,
-    Scalar value
-) {
+void set_item(const Tensor& self, ArrayRef<TensorIndex> indices, Scalar value) {
     Tensor view = get_item(self, indices);
     view.fill_(value);
 }

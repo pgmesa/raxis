@@ -18,8 +18,8 @@ namespace raxis::detail {
 TensorImpl::TensorImpl(
     DataPtr data,
     size_t nbytes,
-    const IntArray& shape,
-    std::optional<IntArray> strides,
+    IntArrayRef shape,
+    std::optional<IntArrayRef> strides,
     Dtype dtype
 ) : storage_(std::make_shared<StorageImpl>(std::move(data), nbytes)),
     storage_offset_(0),
@@ -31,8 +31,8 @@ TensorImpl::TensorImpl(
 TensorImpl::TensorImpl(
     std::shared_ptr<StorageImpl> storage,
     int64_t storage_offset,
-    const IntArray& shape,
-    const IntArray& strides,
+    IntArrayRef shape,
+    IntArrayRef strides,
     Dtype dtype
 ) : storage_(std::move(storage)),
     storage_offset_(storage_offset),
@@ -60,11 +60,11 @@ bool TensorImpl::is_wrapped_number() const {
     return is_wrapped_number_;
 }
 
-const IntArray& TensorImpl::shape() const {
+IntArrayRef TensorImpl::shape() const {
     return shape_;
 }
 
-const IntArray& TensorImpl::strides() const {
+IntArrayRef TensorImpl::strides() const {
     return strides_;
 }
 

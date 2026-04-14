@@ -7,8 +7,6 @@
 #include <vector>
 
 #include <raxis/export.h>
-#include <raxis/core/types.h>
-
 
 
 namespace raxis {
@@ -76,7 +74,7 @@ std::ostream& operator<<(std::ostream& os, const Slice& s);
 // =====================================================================
 // TensorIndex is used for converting C++ tensor indices such as
 // `{None, "...", Ellipsis, 0, true, Slice(1, None, 2), tensor({1, 2})}`
-// into its equivalent `std::vector<TensorIndex>`, so that further tensor
+// into its equivalent `vector<TensorIndex>`, so that further tensor
 // indexing operations can be performed using the supplied indices.
 //
 // There is one-to-one correspondence between Python and C++ tensor 
@@ -148,21 +146,9 @@ private:
 
 std::ostream& operator<<(std::ostream& os, const TensorIndex& idx);
 
-RAXIS_API Tensor get_item(
-    const Tensor& self,
-    const std::vector<TensorIndex>& indices
-);
+RAXIS_API Tensor get_item(const Tensor& self, ArrayRef<TensorIndex> indices);
 
-RAXIS_API void set_item(
-    const Tensor& self,
-    const std::vector<TensorIndex>& indices,
-    const Tensor& value
-);
-
-RAXIS_API void set_item(
-    const Tensor& self,
-    const std::vector<TensorIndex>& indices,
-    Scalar value
-);
+RAXIS_API void set_item(const Tensor& self, ArrayRef<TensorIndex> indices, const Tensor& value);
+RAXIS_API void set_item(const Tensor& self, ArrayRef<TensorIndex> indices, Scalar value);
 
 } // namespace raxis::indexing

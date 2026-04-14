@@ -43,7 +43,7 @@ RAXIS_API Tensor sum(
 
 RAXIS_API Tensor sum(
     const Tensor& self,
-    const IntArray& dim,
+    IntArrayRef dim,
     bool keepdim = false,
     std::optional<Dtype> dtype = std::nullopt
 );
@@ -51,7 +51,7 @@ RAXIS_API Tensor sum(
 RAXIS_API Tensor& sum_out(
     Tensor& result,
     const Tensor& self,
-    const IntArray& dim,
+    IntArrayRef dim,
     bool keepdim = false,
     std::optional<Dtype> dtype = std::nullopt
 );
@@ -64,7 +64,7 @@ RAXIS_API Tensor nansum(
 
 RAXIS_API Tensor nansum(
     const Tensor& self,
-    const IntArray& dim,
+    IntArrayRef dim,
     bool keepdim = false,
     std::optional<Dtype> dtype = std::nullopt
 );
@@ -72,7 +72,7 @@ RAXIS_API Tensor nansum(
 RAXIS_API Tensor& nansum_out(
     Tensor& result,
     const Tensor& self,
-    const IntArray& dim,
+    IntArrayRef dim,
     bool keepdim = false,
     std::optional<Dtype> dtype = std::nullopt
 );
@@ -85,7 +85,7 @@ RAXIS_API Tensor mean(
 
 RAXIS_API Tensor mean(
     const Tensor& self,
-    const IntArray& dim,
+    IntArrayRef dim,
     bool keepdim = false,
     std::optional<Dtype> dtype = std::nullopt
 );
@@ -93,7 +93,7 @@ RAXIS_API Tensor mean(
 RAXIS_API Tensor& mean_out(
     Tensor& result,
     const Tensor& self,
-    const IntArray& dim,
+    IntArrayRef dim,
     bool keepdim = false,
     std::optional<Dtype> dtype = std::nullopt
 );
@@ -106,7 +106,7 @@ RAXIS_API Tensor nanmean(
 
 RAXIS_API Tensor nanmean(
     const Tensor& self,
-    const IntArray& dim,
+    IntArrayRef dim,
     bool keepdim = false,
     std::optional<Dtype> dtype = std::nullopt
 );
@@ -114,7 +114,7 @@ RAXIS_API Tensor nanmean(
 RAXIS_API Tensor& nanmean_out(
     Tensor& result,
     const Tensor& self,
-    const IntArray& dim,
+    IntArrayRef dim,
     bool keepdim = false,
     std::optional<Dtype> dtype = std::nullopt
 );
@@ -127,7 +127,7 @@ RAXIS_API Tensor prod(
 
 RAXIS_API Tensor prod(
     const Tensor& self,
-    const IntArray& dim,
+    IntArrayRef dim,
     bool keepdim = false,
     std::optional<Dtype> dtype = std::nullopt
 );
@@ -135,7 +135,7 @@ RAXIS_API Tensor prod(
 RAXIS_API Tensor& prod_out(
     Tensor& result,
     const Tensor& self,
-    const IntArray& dim,
+    IntArrayRef dim,
     bool keepdim = false,
     std::optional<Dtype> dtype = std::nullopt
 );
@@ -146,12 +146,12 @@ RAXIS_API Tensor min(const Tensor& self);
 
 RAXIS_API Tensor amax(
     const Tensor& self,
-    const IntArray& dim = {},
+    IntArrayRef dim = {},
     bool keepdim = false
 );
 RAXIS_API Tensor amin(
     const Tensor& self, 
-    const IntArray& dim = {},
+    IntArrayRef dim = {},
     bool keepdim = false
 );
 

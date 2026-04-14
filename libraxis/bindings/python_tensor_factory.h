@@ -65,7 +65,7 @@ inline Dtype py_scalar_dtype(const py::handle& obj) {
 
 /// Infer the shape of a (potentially nested) Python list/tuple.
 /// Validates that the structure is rectangular (not ragged).
-inline void infer_shape(const py::handle& obj, IntArray& shape, int64_t depth) {
+inline void infer_shape(const py::handle& obj, DimVector& shape, int64_t depth) {
     if (py::isinstance<py::list>(obj) || py::isinstance<py::tuple>(obj)) {
         auto seq = py::reinterpret_borrow<py::sequence>(obj);
         auto len = static_cast<int64_t>(seq.size());
@@ -133,7 +133,7 @@ inline Tensor tensor_from_python(
                         && !py::isinstance<py::tuple>(data);
 
     // Infer shape
-    IntArray shape;
+    DimVector shape;
     if (!is_scalar_input) {
         infer_shape(data, shape, 0);
     }

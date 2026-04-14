@@ -14,21 +14,23 @@ struct fmt::formatter<raxis::Tensor> : fmt::formatter<std::string_view> {
     }
 };
 
+template <typename Container>
+struct fmt::formatter<Container,
+    std::enable_if_t<raxis::is_printable_container<Container>::value, char>> {
 
-template <>
-struct fmt::formatter<raxis::IntArray> {
     constexpr auto parse(fmt::format_parse_context& ctx) {
         return ctx.begin();
     }
 
     template <typename FormatContext>
-    auto format(const raxis::IntArray& v, FormatContext& ctx) const {
+    auto format(const Container& c, FormatContext& ctx) const {
         auto out = ctx.out();
         *out++ = '[';
-        for (size_t i = 0; i < v.size(); ++i) {
-            out = fmt::format_to(out, "{}", v[i]);
-            if (i + 1 < v.size())
-                out = fmt::format_to(out, ", ");
+        bool first = true;
+        for (const auto& v : c) {
+            if (!first) out = fmt::format_to(out, ", ");
+            out = fmt::format_to(out, "{}", v);
+            first = true;
         }
         *out++ = ']';
         return out;

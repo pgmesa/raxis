@@ -27,8 +27,8 @@ namespace detail {
     
 inline std::shared_ptr<TensorImpl> make_tensor_impl(
     DataPtr data, 
-    const IntArray& shape, 
-    std::optional<IntArray> strides, 
+    IntArrayRef shape, 
+    std::optional<DimVector> strides, 
     Dtype dtype
 ) {
     size_t nbytes = strides 
@@ -45,8 +45,8 @@ inline std::shared_ptr<TensorImpl> make_tensor_impl(
 
 Tensor from_blob(
     void* data, 
-    const IntArray& shape, 
-    std::optional<IntArray> strides,
+    IntArrayRef shape, 
+    std::optional<DimVector> strides,
     Dtype dtype, 
     Device device
 ) {
@@ -59,8 +59,8 @@ Tensor from_blob(
 Tensor from_blob(
     void* data,
     DeleterFnPtr deleter,
-    const IntArray& shape,
-    std::optional<IntArray> strides,
+    IntArrayRef shape,
+    std::optional<DimVector> strides,
     Dtype dtype,
     Device device
 ) {
@@ -73,8 +73,8 @@ Tensor from_blob(
     void* data,
     void* ctx,
     DeleterFnPtr deleter,
-    const IntArray& shape,
-    std::optional<IntArray> strides,
+    IntArrayRef shape,
+    std::optional<DimVector> strides,
     Dtype dtype,
     Device device
 ) {
@@ -83,7 +83,7 @@ Tensor from_blob(
     );
 }
 
-Tensor empty(const IntArray& shape, TensorOptions options) {
+Tensor empty(IntArrayRef shape, TensorOptions options) {
     Dtype dtype = options.dtype();
     size_t nbytes = static_cast<size_t>(compute_numel(shape)) * dtype.itemsize();
     auto data_ptr = get_allocator(options.device().type())->allocate(nbytes);
@@ -92,7 +92,7 @@ Tensor empty(const IntArray& shape, TensorOptions options) {
     );
 }
 
-Tensor empty_strided(const IntArray& shape, const IntArray& strides, TensorOptions options) {
+Tensor empty_strided(IntArrayRef shape, IntArrayRef strides, TensorOptions options) {
     RAXIS_CHECK(shape.size() == strides.size(), 
         "Shape and strides must have the same number of dimensions");
     Dtype dtype = options.dtype();
@@ -107,7 +107,7 @@ Tensor empty_like(const Tensor& other, TensorOptions options) {
     return empty(other.shape(), other.options().merge_in(options));
 }
 
-Tensor full(const IntArray& shape, Scalar value, TensorOptions options) {
+Tensor full(IntArrayRef shape, Scalar value, TensorOptions options) {
     if (!options.has_dtype()) {
         options = options.dtype(value.dtype());
     }
@@ -122,7 +122,7 @@ Tensor full_like(const Tensor& other, Scalar value, TensorOptions options) {
     return full(other.shape(), value, other.options().merge_in(options));
 }
 
-Tensor zeros(const IntArray& shape, TensorOptions options) {
+Tensor zeros(IntArrayRef shape, TensorOptions options) {
     Tensor out = empty(shape, options);
     if (out.numel() > 0) {
         out.zero_();
@@ -134,7 +134,7 @@ Tensor zeros_like(const Tensor& other, TensorOptions options) {
     return zeros(other.shape(), other.options().merge_in(options));
 }
 
-Tensor ones(const IntArray& shape, TensorOptions options) {
+Tensor ones(IntArrayRef shape, TensorOptions options) {
     if (!options.has_dtype()) {
         options = options.dtype(default_float_dtype());
     }
@@ -145,7 +145,7 @@ Tensor ones_like(const Tensor& other, TensorOptions options) {
     return ones(other.shape(), other.options().merge_in(options));
 }
 
-Tensor rand(const IntArray& shape, TensorOptions options) {
+Tensor rand(IntArrayRef shape, TensorOptions options) {
     if (!options.has_dtype()) {
         options = options.dtype(default_float_dtype());
     }
@@ -161,7 +161,7 @@ Tensor rand_like(const Tensor& other, TensorOptions options) {
     return rand(other.shape(), merged);
 }
 
-Tensor randn(const IntArray& shape, TensorOptions options) {
+Tensor randn(IntArrayRef shape, TensorOptions options) {
     if (!options.has_dtype()) {
         options = options.dtype(default_float_dtype());
     }
@@ -182,8 +182,8 @@ Tensor scalar_tensor(Scalar s, TensorOptions options) {
 }
 
 Tensor tensor_from_scalars(
-    const std::vector<Scalar>& data,
-    const IntArray& shape,
+    ArrayRef<Scalar> data,
+    IntArrayRef shape,
     TensorOptions options
 ) {
     // Allocate on CPU, bulk-write, then move to target device

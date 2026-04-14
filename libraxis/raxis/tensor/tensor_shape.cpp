@@ -15,8 +15,8 @@ namespace raxis {
 Tensor make_view(
     const Tensor& self,
     int64_t new_storage_offset,
-    const IntArray& new_shape,
-    const IntArray& new_strides
+    IntArrayRef new_shape,
+    IntArrayRef new_strides
 ) {
     auto impl_ = self.unsafe_get_tensor_impl();
     auto impl = std::make_shared<detail::TensorImpl>(
@@ -45,8 +45,8 @@ Tensor select(const Tensor& self, int64_t dim, int64_t index) {
 
     int64_t new_offset = self.storage_offset() + index * old_strides[dim];
 
-    IntArray new_shape;
-    IntArray new_strides;
+    DimVector new_shape;
+    DimVector new_strides;
     new_shape.reserve(n - 1);
     new_strides.reserve(n - 1);
 
@@ -84,8 +84,8 @@ Tensor slice(const Tensor& self, int64_t dim, int64_t start, int64_t stop, int64
 
     int64_t new_offset = self.storage_offset() + start * old_strides[dim];
 
-    IntArray new_shape(old_shape);
-    IntArray new_strides(old_strides);
+    DimVector new_shape(old_shape);
+    DimVector new_strides(old_strides);
     new_shape[dim] = new_dim_size;
     new_strides[dim] = old_strides[dim] * step;
 
@@ -99,8 +99,8 @@ Tensor unsqueeze(const Tensor& self, int64_t dim) {
     const auto& old_shape = self.shape();
     const auto& old_strides = self.strides();
 
-    IntArray new_shape;
-    IntArray new_strides;
+    DimVector new_shape;
+    DimVector new_strides;
     new_shape.reserve(n + 1);
     new_strides.reserve(n + 1);
 
@@ -126,8 +126,8 @@ Tensor squeeze(const Tensor& self, std::optional<int64_t> dim_opt) {
     const auto& old_shape = self.shape();
     const auto& old_strides = self.strides();
 
-    IntArray new_shape;
-    IntArray new_strides;
+    DimVector new_shape;
+    DimVector new_strides;
 
     if (!dim_opt.has_value()) {
         // Squeeze all size-1 dims
@@ -157,15 +157,15 @@ Tensor transpose(const Tensor& self, int64_t dim0, int64_t dim1) {
 
     if (dim0 == dim1) return alias(self);
 
-    IntArray new_shape(self.shape());
-    IntArray new_strides(self.strides());
+    DimVector new_shape(self.shape());
+    DimVector new_strides(self.strides());
     std::swap(new_shape[dim0], new_shape[dim1]);
     std::swap(new_strides[dim0], new_strides[dim1]);
 
     return make_view(self, self.storage_offset(), new_shape, new_strides);
 }
 
-Tensor permute(const Tensor& self, const IntArray& dims) {
+Tensor permute(const Tensor& self, IntArrayRef dims) {
     const int n = self.ndim();
     RAXIS_CHECK(static_cast<int>(dims.size()) == n,
         "permute(): number of dims (", dims.size(),
@@ -174,9 +174,9 @@ Tensor permute(const Tensor& self, const IntArray& dims) {
     const auto& old_shape = self.shape();
     const auto& old_strides = self.strides();
 
-    IntArray new_shape(n);
-    IntArray new_strides(n);
-    std::vector<bool> seen(n, false);
+    DimVector new_shape(n);
+    DimVector new_strides(n);
+    SmallVector<bool, 5> seen(n, false);
 
     for (int i = 0; i < n; ++i) {
         int64_t d = wrap_dim(dims[i], n);
@@ -193,7 +193,7 @@ Tensor swapdims(const Tensor& self, int64_t dim0, int64_t dim1) {
     return transpose(self, dim0, dim1);
 }
 
-Tensor movedim(const Tensor& self, const IntArray& src, const IntArray& dst) {
+Tensor movedim(const Tensor& self, IntArrayRef src, IntArrayRef dst) {
     const int n = self.ndim();
     RAXIS_CHECK(src.size() == dst.size(),
         "movedim(): source (", src.size(), " dims) and destination (",
@@ -202,15 +202,15 @@ Tensor movedim(const Tensor& self, const IntArray& src, const IntArray& dst) {
     if (n == 0) return alias(self);
 
     // Normalize and validate
-    IntArray norm_src(src.size());
-    IntArray norm_dst(src.size());
+    DimVector norm_src(src.size());
+    DimVector norm_dst(src.size());
 
     for (size_t i = 0; i < src.size(); ++i) {
         norm_src[i] = wrap_dim(src[i], n);
         norm_dst[i] = wrap_dim(dst[i], n);
     }
 
-    auto has_duplicates = [](IntArray v) {
+    auto has_duplicates = [](DimVector v) {
         std::sort(v.begin(), v.end());
         return std::adjacent_find(v.begin(), v.end()) != v.end();
     };
@@ -219,9 +219,9 @@ Tensor movedim(const Tensor& self, const IntArray& src, const IntArray& dst) {
 
     // Build permutation order
     // 1) Place known mappings: order[dst[i]] = src[i]
-    IntArray order(n);
-    IntArray src_remaining(n);
-    IntArray dst_remaining(n);
+    DimVector order(n);
+    DimVector src_remaining(n);
+    DimVector dst_remaining(n);
     std::iota(src_remaining.begin(), src_remaining.end(), 0);
     std::iota(dst_remaining.begin(), dst_remaining.end(), 0);
 
@@ -245,11 +245,11 @@ Tensor movedim(const Tensor& self, const IntArray& src, const IntArray& dst) {
 }
 
 Tensor movedim(const Tensor& self, int64_t src, int64_t dst) {
-    return movedim(self, IntArray{src}, IntArray{dst});
+    return movedim(self, {src}, {dst});
 }
 
-Tensor view(const Tensor& self, const IntArray& new_shape) {
-    IntArray resolved = resolve_shape(new_shape, self.numel());
+Tensor view(const Tensor& self, IntArrayRef new_shape) {
+    DimVector resolved = resolve_shape(new_shape, self.numel());
     auto new_strides = compute_view_strides(self.shape(), self.strides(), resolved);
 
     RAXIS_CHECK(new_strides.has_value(),
@@ -260,8 +260,8 @@ Tensor view(const Tensor& self, const IntArray& new_shape) {
     return make_view(self, self.storage_offset(), resolved, *new_strides);
 }
 
-Tensor reshape(const Tensor& self, const IntArray& new_shape) {
-    IntArray resolved = resolve_shape(new_shape, self.numel());
+Tensor reshape(const Tensor& self, IntArrayRef new_shape) {
+    DimVector resolved = resolve_shape(new_shape, self.numel());
     auto new_strides = compute_view_strides(self.shape(), self.strides(), resolved);
 
     if (new_strides.has_value()) {
@@ -272,7 +272,7 @@ Tensor reshape(const Tensor& self, const IntArray& new_shape) {
     return self.contiguous().view(resolved);
 }
 
-Tensor broadcast_to(const Tensor& self, const IntArray& target_shape) {
+Tensor broadcast_to(const Tensor& self, IntArrayRef target_shape) {
     int64_t ndim_old = static_cast<int64_t>(self.shape().size());
     int64_t ndim_new = static_cast<int64_t>(target_shape.size());
 
@@ -283,8 +283,8 @@ Tensor broadcast_to(const Tensor& self, const IntArray& target_shape) {
     const auto& old_shape   = self.shape();
     const auto& old_strides = self.strides();
 
-    IntArray new_shape(ndim_new);
-    IntArray new_strides(ndim_new);
+    DimVector new_shape(ndim_new);
+    DimVector new_strides(ndim_new);
 
     for (int64_t i = ndim_new - 1; i >= 0; --i) {
         int64_t old_idx = i - (ndim_new - ndim_old);
@@ -310,16 +310,16 @@ Tensor broadcast_to(const Tensor& self, const IntArray& target_shape) {
     return make_view(self, self.storage_offset(), new_shape, new_strides);
 }
 
-std::vector<Tensor> broadcast_tensors(const std::vector<Tensor>& tensors) {
+std::vector<Tensor> broadcast_tensors(ArrayRef<Tensor> tensors) {
     RAXIS_CHECK(!tensors.empty(), "broadcast_tensors(): no tensors provided");
 
     // Compute common shape
-    std::vector<IntArray> shapes;
+    std::vector<IntArrayRef> shapes;
     shapes.reserve(tensors.size());
     for (const auto& t : tensors) {
         shapes.push_back(t.shape());
     }
-    IntArray common = broadcast_shapes(shapes);
+    DimVector common = broadcast_shapes(shapes);
 
     // Expand each tensor to the common shape
     std::vector<Tensor> result;

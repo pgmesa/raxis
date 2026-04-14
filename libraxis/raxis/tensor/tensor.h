@@ -85,9 +85,9 @@ public:
 
     int64_t numel() const;
     int ndim() const;
-    const IntArray& shape() const;
-    const IntArray& strides() const;
-    IntArray byte_strides() const;
+    IntArrayRef shape() const;
+    IntArrayRef strides() const;
+    DimVector byte_strides() const;
     int64_t storage_offset() const;
     Dtype dtype() const;
     Device device() const;
@@ -111,19 +111,19 @@ public:
     Tensor unsqueeze(int64_t dim) const;
     Tensor squeeze(std::optional<int64_t> dim_opt = std::nullopt) const;
     Tensor transpose(int64_t dim0, int64_t dim1) const;
-    Tensor permute(const IntArray& dims) const;
+    Tensor permute(IntArrayRef dims) const;
     Tensor swapdims(int64_t dim0, int64_t dim1) const;
     Tensor swapaxes(int64_t dim0, int64_t dim1) const;
-    Tensor movedim(const IntArray& src, const IntArray& dst) const;
+    Tensor movedim(IntArrayRef src, IntArrayRef dst) const;
     Tensor movedim(int64_t src, int64_t dst) const;
-    Tensor view(const IntArray& shape) const;
-    Tensor reshape(const IntArray& shape) const;
-    Tensor broadcast_to(const IntArray& shape) const;
+    Tensor view(IntArrayRef shape) const;
+    Tensor reshape(IntArrayRef shape) const;
+    Tensor broadcast_to(IntArrayRef shape) const;
 
     // ========================= Indexing =========================
-    Tensor index(const std::vector<indexing::TensorIndex>& indices) const;
-    void index_put_(const std::vector<indexing::TensorIndex>& indices, const Tensor& value);
-    void index_put_(const std::vector<indexing::TensorIndex>& indices, Scalar value);
+    Tensor index(ArrayRef<indexing::TensorIndex> indices) const;
+    void index_put_(ArrayRef<indexing::TensorIndex> indices, const Tensor& value);
+    void index_put_(ArrayRef<indexing::TensorIndex> indices, Scalar value);
 
     // ======================== Copy & Fill =======================
     Tensor clone() const;
@@ -140,40 +140,40 @@ public:
     // =================== Reduction Operations ===================
     Tensor sum(std::optional<Dtype> dtype = std::nullopt) const;
     Tensor sum(
-        const IntArray& dim, 
+        IntArrayRef dim, 
         bool keepdim = false, 
         std::optional<Dtype> dtype = std::nullopt) const;
         
     Tensor nansum(std::optional<Dtype> dtype = std::nullopt) const;
     Tensor nansum(
-        const IntArray& dim, 
+        IntArrayRef dim, 
         bool keepdim = false, 
         std::optional<Dtype> dtype = std::nullopt) const;
 
     Tensor mean(std::optional<Dtype> dtype = std::nullopt) const;
     Tensor mean(
-        const IntArray& dim, 
+        IntArrayRef dim, 
         bool keepdim = false, 
         std::optional<Dtype> dtype = std::nullopt) const;
         
     Tensor nanmean(std::optional<Dtype> dtype = std::nullopt) const;
     Tensor nanmean(
-        const IntArray& dim, 
+        IntArrayRef dim, 
         bool keepdim = false, 
         std::optional<Dtype> dtype = std::nullopt) const;
 
 
     Tensor prod(std::optional<Dtype> dtype = std::nullopt) const;
     Tensor prod(
-        const IntArray& dim, 
+        IntArrayRef dim, 
         bool keepdim = false, 
         std::optional<Dtype> dtype = std::nullopt) const;
 
     Tensor max() const;
     Tensor min() const;
 
-    Tensor amax(const IntArray& dim = {}, bool keepdim = false) const;
-    Tensor amin(const IntArray& dim = {}, bool keepdim = false) const;
+    Tensor amax(IntArrayRef dim = {}, bool keepdim = false) const;
+    Tensor amin(IntArrayRef dim = {}, bool keepdim = false) const;
 
     // ===================== Binary Operations ====================
     Tensor add(const Tensor& other) const;

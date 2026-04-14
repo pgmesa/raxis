@@ -18,15 +18,15 @@ public:
     TensorImpl(
         DataPtr data,
         size_t nbytes,
-        const IntArray& shape,
-        std::optional<IntArray> strides,
+        IntArrayRef shape,
+        std::optional<IntArrayRef> strides,
         Dtype dtype);
 
     TensorImpl(
         std::shared_ptr<StorageImpl> storage,
         int64_t storage_offset,
-        const IntArray& shape,
-        const IntArray& strides,
+        IntArrayRef shape,
+        IntArrayRef strides,
         Dtype dtype);
 
     TensorImpl() = delete;
@@ -42,8 +42,8 @@ public:
     void set_wrapped_number(bool);
     bool is_wrapped_number() const;
 
-    const IntArray& shape() const;
-    const IntArray& strides() const;
+    IntArrayRef shape() const;
+    IntArrayRef strides() const;
     Dtype dtype() const;
     Device device() const;
     int ndim() const;
@@ -56,8 +56,8 @@ private:
     std::shared_ptr<StorageImpl> storage_;
     int64_t storage_offset_ = 0;
 
-    IntArray shape_;
-    IntArray strides_;
+    DimVector shape_;
+    DimVector strides_;
     Dtype dtype_;
 
     int64_t numel_;
