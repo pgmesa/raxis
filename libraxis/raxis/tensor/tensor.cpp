@@ -257,6 +257,9 @@ Tensor Tensor::to(Device new_device) const {
     return *this;
 }
 
+Tensor Tensor::cpu() const {
+    return *this;
+}
 
 Tensor& Tensor::fill_(Scalar value) const {
     return ::raxis::fill_(const_cast<Tensor&>(*this), value);

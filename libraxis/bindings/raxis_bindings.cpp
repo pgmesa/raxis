@@ -144,14 +144,16 @@ PYBIND11_MODULE(_C, c) {
         })
 
         // Shape / view operations
+        .def("squeeze", &raxis::Tensor::squeeze, py::arg("dim") = py::none())
+        .def("unsqueeze", &raxis::Tensor::unsqueeze, py::arg("dim"))
         .def("transpose", &raxis::Tensor::transpose, py::arg("dim0"), py::arg("dim1"))
-        .def("permute", &raxis::Tensor::permute, py::arg("dims"))
+        .def("permute", [](const raxis::Tensor& self, raxis::Vec dims) {
+            return self.permute(dims);
+        }, py::arg("dims"))
         .def("swapdims", &raxis::Tensor::swapdims, py::arg("dim0"), py::arg("dim1"))
         .def("movedim",
-            py::overload_cast<int64_t, int64_t>(
-                &raxis::Tensor::movedim, py::const_),
+            py::overload_cast<int64_t, int64_t>(&raxis::Tensor::movedim, py::const_),
             py::arg("source"), py::arg("destination"))
-        
         .def("movedim", [](const raxis::Tensor& self, raxis::VecOrInt source, raxis::VecOrInt destination) {
             return self.movedim(source, destination);
         }, py::arg("source"), py::arg("destination"))
@@ -266,6 +268,7 @@ PYBIND11_MODULE(_C, c) {
             py::arg("dtype"))
         .def("detach",
             py::overload_cast<>(&raxis::Tensor::clone, py::const_))
+        .def("cpu", &raxis::Tensor::cpu)
 
         .def("zero_", 
             py::overload_cast<>(&raxis::Tensor::zero_, py::const_))
@@ -510,7 +513,7 @@ PYBIND11_MODULE(_C, c) {
         // Reduction methods
         .def("sum", [](
                 const raxis::Tensor& self, 
-                std::optional<raxis::Vec> dim,
+                std::optional<raxis::VecOrInt> dim,
                 bool keepdim,
                 std::optional<raxis::Dtype> dtype
             ) -> raxis::Tensor {
@@ -522,7 +525,7 @@ PYBIND11_MODULE(_C, c) {
         )
         .def("nansum", [](
                 const raxis::Tensor& self, 
-                std::optional<raxis::Vec> dim,
+                std::optional<raxis::VecOrInt> dim,
                 bool keepdim,
                 std::optional<raxis::Dtype> dtype
             ) -> raxis::Tensor {
@@ -535,7 +538,7 @@ PYBIND11_MODULE(_C, c) {
 
         .def("mean", [](
                 const raxis::Tensor& self, 
-                std::optional<raxis::Vec> dim,
+                std::optional<raxis::VecOrInt> dim,
                 bool keepdim,
                 std::optional<raxis::Dtype> dtype
             ) -> raxis::Tensor {
@@ -547,7 +550,7 @@ PYBIND11_MODULE(_C, c) {
         )
         .def("nanmean", [](
                 const raxis::Tensor& self, 
-                std::optional<raxis::Vec> dim,
+                std::optional<raxis::VecOrInt> dim,
                 bool keepdim,
                 std::optional<raxis::Dtype> dtype
             ) -> raxis::Tensor {
@@ -560,7 +563,7 @@ PYBIND11_MODULE(_C, c) {
 
         .def("prod", [](
                 const raxis::Tensor& self, 
-                std::optional<raxis::Vec> dim,
+                std::optional<raxis::VecOrInt> dim,
                 bool keepdim,
                 std::optional<raxis::Dtype> dtype
             ) -> raxis::Tensor {
@@ -576,7 +579,7 @@ PYBIND11_MODULE(_C, c) {
 
         .def("amax", [](
                 const raxis::Tensor& self, 
-                raxis::Vec dim,
+                raxis::VecOrInt dim,
                 bool keepdim
             ) -> raxis::Tensor {
                 return self.amax(dim, keepdim);
@@ -586,7 +589,7 @@ PYBIND11_MODULE(_C, c) {
         )
         .def("amin", [](
                 const raxis::Tensor& self, 
-                raxis::Vec dim,
+                raxis::VecOrInt dim,
                 bool keepdim
             ) -> raxis::Tensor {
                 return self.amin(dim, keepdim);
@@ -690,6 +693,8 @@ PYBIND11_MODULE(_C, c) {
     
 
     // Shape operations
+    c.def("squeeze", &raxis::squeeze, py::arg("input"), py::arg("dim") = py::none());
+    c.def("unsqueeze", &raxis::unsqueeze, py::arg("input"), py::arg("dim"));
     c.def("transpose", &raxis::transpose, py::arg("input"), py::arg("dim0"), py::arg("dim1"));
     c.def("permute", &raxis::permute, py::arg("input"), py::arg("dims"));
     c.def("swapdims", &raxis::swapdims, py::arg("input"), py::arg("dim0"), py::arg("dim1"));
@@ -881,7 +886,7 @@ PYBIND11_MODULE(_C, c) {
     // Reduction Ops
     c.def("sum", [](
             const raxis::Tensor& tensor, 
-            std::optional<raxis::Vec> dim,
+            std::optional<raxis::VecOrInt> dim,
             bool keepdim,
             std::optional<raxis::Dtype> dtype
         ) -> raxis::Tensor {
@@ -894,7 +899,7 @@ PYBIND11_MODULE(_C, c) {
     );
     c.def("nansum", [](
             const raxis::Tensor& tensor, 
-            std::optional<raxis::Vec> dim,
+            std::optional<raxis::VecOrInt> dim,
             bool keepdim,
             std::optional<raxis::Dtype> dtype
         ) -> raxis::Tensor {
@@ -908,7 +913,7 @@ PYBIND11_MODULE(_C, c) {
 
     c.def("mean", [](
             const raxis::Tensor& tensor, 
-            std::optional<raxis::Vec> dim,
+            std::optional<raxis::VecOrInt> dim,
             bool keepdim,
             std::optional<raxis::Dtype> dtype
         ) -> raxis::Tensor {
@@ -921,7 +926,7 @@ PYBIND11_MODULE(_C, c) {
     );
     c.def("nanmean", [](
             const raxis::Tensor& tensor, 
-            std::optional<raxis::Vec> dim,
+            std::optional<raxis::VecOrInt> dim,
             bool keepdim,
             std::optional<raxis::Dtype> dtype
         ) -> raxis::Tensor {
@@ -935,7 +940,7 @@ PYBIND11_MODULE(_C, c) {
 
     c.def("prod", [](
             const raxis::Tensor& tensor, 
-            std::optional<raxis::Vec> dim,
+            std::optional<raxis::VecOrInt> dim,
             bool keepdim,
             std::optional<raxis::Dtype> dtype
         ) -> raxis::Tensor {
@@ -954,7 +959,7 @@ PYBIND11_MODULE(_C, c) {
 
     c.def("amax", [](
             const raxis::Tensor& tensor, 
-            raxis::Vec dim,
+            raxis::VecOrInt dim,
             bool keepdim
         ) -> raxis::Tensor {
             return raxis::amax(tensor, dim, keepdim);
@@ -965,7 +970,7 @@ PYBIND11_MODULE(_C, c) {
     );
     c.def("amin", [](
             const raxis::Tensor& tensor, 
-            raxis::Vec dim,
+            raxis::VecOrInt dim,
             bool keepdim
         ) -> raxis::Tensor {
             return raxis::amin(tensor, dim, keepdim);

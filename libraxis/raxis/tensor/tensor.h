@@ -113,7 +113,6 @@ public:
     Tensor transpose(int64_t dim0, int64_t dim1) const;
     Tensor permute(IntArrayRef dims) const;
     Tensor swapdims(int64_t dim0, int64_t dim1) const;
-    Tensor swapaxes(int64_t dim0, int64_t dim1) const;
     Tensor movedim(IntArrayRef src, IntArrayRef dst) const;
     Tensor movedim(int64_t src, int64_t dst) const;
     Tensor view(IntArrayRef shape) const;
@@ -131,6 +130,7 @@ public:
     Tensor& copy_(const Tensor& other) const;
     Tensor to(Dtype dtype) const;
     Tensor to(Device device) const;
+    Tensor cpu() const;
 
     Tensor& fill_(Scalar value) const;
     Tensor& zero_() const;
