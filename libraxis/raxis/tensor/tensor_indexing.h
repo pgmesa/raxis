@@ -42,11 +42,11 @@ enum class TensorIndexType : uint8_t {
 //
 // Represents a Python-style slice  start:stop:step .
 //
-//  Slice()              →  :       (entire dimension)
-//  Slice(1, 5)          →  1:5
-//  Slice(1, None)       →  1:      (from 1 to end)
-//  Slice(None, 3)       →  :3      (from start to 3)
-//  Slice(0, 10, 2)      →  0:10:2
+//  Slice()              ->  :       (entire dimension)
+//  Slice(1, 5)          ->  1:5
+//  Slice(1, None)       ->  1:      (from 1 to end)
+//  Slice(None, 3)       ->  :3      (from start to 3)
+//  Slice(0, 10, 2)      ->  0:10:2
 
 struct RAXIS_API ResolvedSlice {
     int64_t start;

@@ -76,7 +76,7 @@ PYBIND11_MODULE(_C, c) {
         })
         .def("__hash__", [](const raxis::Device& d) { });
 
-    // Implicit conversion from str → Device (so device="cuda:0" works)
+    // Implicit conversion from str -> Device (so device="cuda:0" works)
     py::implicitly_convertible<std::string, raxis::Device>();
 
     // Constants

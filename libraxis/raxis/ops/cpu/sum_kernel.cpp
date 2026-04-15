@@ -170,9 +170,9 @@ std::array<scalar_t, nrows> multi_row_sum(
         // Cascade: flush lower levels into higher levels when appropriate.
         // This is like carry propagation in binary addition.
         // After processing i elements:
-        //   - flush level 0 → level 1 always (every level_step elements)
-        //   - flush level 1 → level 2 every level_step^2 elements
-        //   - flush level 2 → level 3 every level_step^3 elements
+        //   - flush level 0 -> level 1 always (every level_step elements)
+        //   - flush level 1 -> level 2 every level_step^2 elements
+        //   - flush level 2 -> level 3 every level_step^3 elements
         for (int64_t lev = 1; lev < num_levels; ++lev) {
             for (int64_t k = 0; k < nrows; ++k) {
                 acc[lev][k] += acc[lev - 1][k];

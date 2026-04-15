@@ -20,8 +20,8 @@ namespace raxis {
 // original value was boolean, integral, or floating-point.  This tag is used
 // during type promotion so that, for example:
 //
-//     int_tensor + Scalar(3)   → stays int   (3 is integral)
-//     int_tensor + Scalar(3.0) → promotes to float
+//     int_tensor + Scalar(3)   -> stays int   (3 is integral)
+//     int_tensor + Scalar(3.0) -> promotes to float
 
 class Scalar {
 public:

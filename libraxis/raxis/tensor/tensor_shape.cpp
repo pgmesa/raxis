@@ -290,7 +290,7 @@ Tensor broadcast_to(const Tensor& self, IntArrayRef target_shape) {
         int64_t old_idx = i - (ndim_new - ndim_old);
 
         if (old_idx < 0) {
-            // Prepended dimension — broadcast from implicit size 1
+            // Prepended dimension, broadcast from implicit size 1
             new_shape[i]   = target_shape[i];
             new_strides[i] = 0;
         } else if (old_shape[old_idx] == target_shape[i]) {

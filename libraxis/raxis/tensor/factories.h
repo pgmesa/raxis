@@ -77,11 +77,11 @@ RAXIS_API Tensor scalar_tensor(Scalar s, TensorOptions options = {});
 //
 // Accepts nested braced-init-lists, scalars, and std::vector<T>.
 //
-//   raxis::tensor({{1, 2}, {3, 4}})                        → int64, shape {2,2}
-//   raxis::tensor({{1.0, 2.0}}, dtypes::Float64)           → float64, shape {1,2}
-//   raxis::tensor(3.14f)                                   → float32, shape {}
-//   raxis::tensor(std::vector<float>{1,2,3})               → float32, shape {3}
-//   raxis::tensor(std::vector<int>{1,2,3,4}, {{2,2}})      → int32, shape {2,2}
+//   raxis::tensor({{1, 2}, {3, 4}})                        -> int64, shape {2,2}
+//   raxis::tensor({{1.0, 2.0}}, dtypes::Float64)           -> float64, shape {1,2}
+//   raxis::tensor(3.14f)                                   -> float32, shape {}
+//   raxis::tensor(std::vector<float>{1,2,3})               -> float32, shape {3}
+//   raxis::tensor(std::vector<int>{1,2,3,4}, {{2,2}})      -> int32, shape {2,2}
 
 inline Dtype compute_desired_dtype(Dtype inferred) {
     if (inferred.is_integral(/*include_bool=*/false)) {
@@ -127,7 +127,7 @@ Tensor tensor(ArrayRef<T> data, IntArrayRef shape, TensorOptions options = {}) {
     TensorOptions cpu_opts = options.device(DeviceType::CPU);
     Tensor out = empty(shape, cpu_opts);
 
-    // Type-dispatch: cast source T → target dtype element by element
+    // Type-dispatch: cast source T -> target dtype element by element
     Dtype dst_dtype = out.dtype();
     dst_dtype.dispatch_all_types([&]<typename dest_T>(std::type_identity<dest_T>) {
         dest_T* dst = out.mutable_data_ptr<dest_T>();

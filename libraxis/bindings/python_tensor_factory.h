@@ -163,7 +163,7 @@ inline Tensor tensor_from_python(
         flatten_py_data(data, flat, inferred_dtype, dtype_set);
     }
 
-    // Handle empty tensor: tensor([]) → shape {0}, use default dtype
+    // Handle empty tensor: tensor([]) -> shape {0}, use default dtype
     if (!dtype_set) {
         inferred_dtype = default_dtype();
     }

@@ -38,7 +38,7 @@ PromotionState update_promotion_state(const Tensor& tensor, const PromotionState
     Dtype current = tensor.dtype();
 
     // Wrapped scalars get remapped to the default dtype so they
-    // don't force precision (e.g., Python float64 → default float32)
+    // don't force precision (e.g., Python float64 -> default float32)
     bool wrapped = tensor.is_wrapped_number();
     if (wrapped && current.is_floating()) {
         current = default_float_dtype();

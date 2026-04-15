@@ -45,7 +45,7 @@ Tensor tensor_from_numpy(py::array arr) {
     DimVector strides(arr.ndim());
     for (int i = 0; i < arr.ndim(); ++i) {
         shape[i] = arr.shape(i);
-        strides[i] = arr.strides(i) / arr.itemsize(); // byte strides → element strides
+        strides[i] = arr.strides(i) / arr.itemsize(); // byte strides -> element strides
     }
     
     Dtype dtype = dtype_from_numpy(arr.dtype());

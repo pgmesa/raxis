@@ -112,7 +112,7 @@ int64_t wrap_index(int64_t index, int64_t dim_size) {
 
 
 /// Resolve a proposed shape containing at most one -1 into concrete sizes.
-/// E.g. infer_size({2, -1, 4}, 24) → {2, 3, 4}
+/// E.g. infer_size({2, -1, 4}, 24) -> {2, 3, 4}
 DimVector resolve_shape(IntArrayRef shape, int64_t numel) {
     int64_t inferred_dim = -1;
     int64_t product = 1;

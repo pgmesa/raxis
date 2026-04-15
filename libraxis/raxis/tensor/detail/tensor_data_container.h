@@ -21,9 +21,9 @@ namespace raxis::detail {
 // convert arbitrarily nested braced-init-lists into a flat buffer of
 // scalars plus a shape:
 //
-//     raxis::tensor({{1, 2}, {3, 4}})   →  shape={2,2}, data=[1,2,3,4]
-//     raxis::tensor({1.0, 2.0, 3.0})    →  shape={3},   data=[1,2,3]
-//     raxis::tensor(42)                 →  shape={},    data=[42]
+//     raxis::tensor({{1, 2}, {3, 4}})   ->  shape={2,2}, data=[1,2,3,4]
+//     raxis::tensor({1.0, 2.0, 3.0})    ->  shape={3},   data=[1,2,3]
+//     raxis::tensor(42)                 ->  shape={},    data=[42]
 
 
 struct TensorDataContainer {
@@ -40,7 +40,7 @@ struct TensorDataContainer {
         : is_scalar_(false)
     {
         if (init_list.size() == 0) {
-            // e.g. tensor({}) → shape {0}, dtype from default
+            // e.g. tensor({}) -> shape {0}, dtype from default
             sizes_.push_back(0);
             dtype_ = default_dtype();
             return;

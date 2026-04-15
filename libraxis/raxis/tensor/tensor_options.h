@@ -64,7 +64,7 @@ struct RAXIS_API TensorOptions {
     /// This enables a single implicit conversion step:
     ///   raxis::zeros({3, 3}, DeviceType::CUDA);
     ///
-    /// Without this, DeviceType → Device → TensorOptions would require two
+    /// Without this, DeviceType -> Device -> TensorOptions would require two
     /// user-defined implicit conversions, which C++ does not allow.
     template <typename... Args,
               typename = std::enable_if_t<std::is_constructible_v<Device, Args&&...>>>

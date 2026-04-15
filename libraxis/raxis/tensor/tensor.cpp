@@ -253,7 +253,7 @@ Tensor Tensor::to(Device new_device) const {
 
     RAXIS_CHECK(false, 
         "Cross-device transfer not yet implemented: ",
-        device(), " → ", new_device);
+        device(), " -> ", new_device);
     return *this;
 }
 

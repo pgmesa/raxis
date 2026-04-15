@@ -141,7 +141,7 @@ void set_num_threads(int nthreads) {
     if (!num_intraop_threads.compare_exchange_strong(no_value, nthreads)) {
         int stored = num_intraop_threads.load();
         if (stored <= 0) {
-            // Pool already created — report actual size
+            // Pool already created, report actual size
             stored = static_cast<int>(get_intraop_pool().size()) + 1;
         }
         RAXIS_CHECK(stored == nthreads,
