@@ -377,9 +377,9 @@ def _str(tensor) -> str:
     # Empty tensor
     if tensor.numel() == 0:
         tensor_str = "[]"
-        # Show shape explicitly if not 1D (matches PyTorch/NumPy behavior)
+        # Show shape explicitly if not 1D (matches PyTorch behavior)
         if tensor.dim() != 1:
-            suffixes.insert(0, f"size={tuple(tensor.shape)}")
+            suffixes.insert(0, f"shape={tuple(tensor.shape)}")
     else:
         tensor_str = _tensor_str(tensor, indent)
 
