@@ -116,10 +116,19 @@ PYBIND11_MODULE(_C, c) {
             return raxis::python::tensor_to_numpy(self, a);
         })
 
-        .def("__array__", [](py::object self) {
+        .def("__array__", [](py::object self, py::object dtype, py::object copy) {
             auto& a = self.cast<raxis::Tensor&>();
-            return raxis::python::tensor_to_numpy(self, a);
-        })
+            py::array arr = raxis::python::tensor_to_numpy(self, a);
+
+            if (!dtype.is_none()) {
+                arr = arr.attr("astype")(dtype, py::arg("copy") = false);
+            }
+            if (!copy.is_none() && copy.cast<bool>()) {
+                arr = arr.attr("copy")();
+            }
+
+            return arr;
+        }, py::arg("dtype") = py::none(), py::arg("copy") = py::none())
 
         .def("__len__", [](const raxis::Tensor& self) {
             return self.shape()[0];
