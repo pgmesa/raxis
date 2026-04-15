@@ -110,7 +110,7 @@ void cpu_kernel(TensorIterator& iter, func_t&& op, int64_t grain_size = detail::
     
     iter.for_each([&](char** data, const int64_t* strides, int64_t size) {
         // Process 1D slices. This is all that iter.for_each is ever sending to the loop lambda
-        execute_op(data, strides, 0, size, op);
+        basic_loop(data, strides, 0, size, op);
     }, grain_size);
     iter.cast_outputs();
 }
@@ -125,8 +125,8 @@ void cpu_serial_kernel(TensorIterator& iter, func_t&& op, const Range& range) {
         ((result_void && iter.num_outputs() == 0) || (!result_void && iter.num_outputs() == 1))
     );
 
-    iter.serial_for_each([&](char** data, const int64_t* strides, int64_t n) {
-        basic_loop(data, strides, 0, n, op);
+    iter.serial_for_each([&](char** data, const int64_t* strides, int64_t size) {
+        basic_loop(data, strides, 0, size, op);
     }, range);
     iter.cast_outputs();
 }
