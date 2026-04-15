@@ -1069,6 +1069,13 @@ class TestItem:
         assert r.item() == t.item()
         assert type(r.item()) is type(t.item())
 
+    def test_item_nd(self, device):
+        assert (raxis.tensor([[[2.32]]]).item() - 2.32) < 1e-5
+
+    def test_item_error(self, device):
+        with pytest.raises(RuntimeError):
+            raxis.tensor([1.0, 2.0]).item()
+
 
 # ===========================================================================
 # tolist() and numpy() ROUND-TRIP

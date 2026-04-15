@@ -105,6 +105,7 @@ TensorOptions Tensor::options() const {
 }
 
 Scalar Tensor::item() const {
+    RAXIS_CHECK(numel() == 1, "a Tensor with 2 elements cannot be converted to Scalar");
     return dtype().dispatch_all_types(
         [&]<typename scalar_t>(std::type_identity<scalar_t>) -> Scalar {
             return Scalar(data_ptr<scalar_t>()[0]);
