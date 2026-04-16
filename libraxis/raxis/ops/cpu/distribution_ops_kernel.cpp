@@ -2,10 +2,12 @@
 #include <raxis/ops/dispatch_stub.h>
 #include <raxis/ops/cpu/loops.h>
 #include <raxis/ops/distribution_ops.h>
+#include <raxis/ops/numeric_utils.h>
 
 #include <raxis/core/generator.h>
 
 #include <raxis/tensor/tensor_iterator.h>
+
 
 #include <cmath>
 #include <random>
@@ -64,9 +66,24 @@ void normal_kernel(TensorIterator& iter, double mean, double std_val, Generator&
     });
 }
 
+void randint_kernel(TensorIterator& iter, int64_t low, uint64_t range, Generator& gen) {
+    iter.dtype().dispatch_integral_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+        std::lock_guard<std::mutex> lock(gen.mutex());
+        auto& engine = gen.engine();
+
+        cpu_serial_kernel(iter, [&]() -> scalar_t {
+            auto val = low + static_cast<int64_t>(
+                uniform_int_from<uint64_t>(engine, range)
+            );
+            return static_cast<scalar_t>(val);
+        });
+    }, /*include_bool=*/true);
+}
+
 } // namespace
 
 REGISTER_CPU_DISPATCH(uniform_stub, &uniform_kernel);
 REGISTER_CPU_DISPATCH(normal_stub,  &normal_kernel);
+REGISTER_CPU_DISPATCH(randint_stub, &randint_kernel);
 
 } // namespace raxis

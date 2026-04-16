@@ -177,6 +177,22 @@ Tensor randn_like(const Tensor& other, TensorOptions options) {
     return randn(other.shape(), merged);
 }
 
+Tensor randint(int64_t low, int64_t high, IntArrayRef shape, TensorOptions options) {
+    if (!options.has_dtype()) {
+        options = options.dtype(default_int_dtype());
+    }
+    RAXIS_CHECK(
+        options.dtype().is_integral(true),
+        "randint requires an integral or bool dtype, got ", options.dtype()
+    );
+    return empty(shape, options).randint_(low, high);
+}
+
+Tensor randint_like(const Tensor& other, int64_t low, int64_t high, TensorOptions options) {
+    auto merged = other.options().merge_in(options);
+    return randint(low, high, other.shape(), merged);
+}
+
 Tensor scalar_tensor(Scalar s, TensorOptions options) {
     return empty({}, options).fill_(s);
 }

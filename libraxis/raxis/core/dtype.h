@@ -226,6 +226,10 @@ public:
             case DtypeKind::Bool:
                 if (include_bool) return func(std::type_identity<bool>{});
                 break;
+            case DtypeKind::Uint8:
+                return func(std::type_identity<uint8_t>{});
+            case DtypeKind::Uint16:
+                return func(std::type_identity<uint16_t>{});
             case DtypeKind::Int32:
                 return func(std::type_identity<int32_t>{});
             case DtypeKind::Int64:

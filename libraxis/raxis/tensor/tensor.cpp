@@ -278,6 +278,10 @@ Tensor& Tensor::normal_(double mean, double std) const {
     return ::raxis::normal_(const_cast<Tensor&>(*this), mean, std);
 }
 
+Tensor& Tensor::randint_(int64_t low, int64_t high) const {
+    return ::raxis::randint_(const_cast<Tensor&>(*this), low, high);
+}
+
 // =================== Reduction Operations ===================
 Tensor Tensor::sum(std::optional<Dtype> dtype) const {
     return ::raxis::sum(*this, dtype);

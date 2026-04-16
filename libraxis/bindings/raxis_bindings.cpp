@@ -280,6 +280,9 @@ PYBIND11_MODULE(_C, c) {
         .def("normal_",
             &raxis::Tensor::normal_,
             py::arg("mean") = 0.0, py::arg("std") = 1.0)
+        .def("randint_",
+            &raxis::Tensor::randint_,
+            py::arg("low"), py::arg("high"))
 
         .def("add",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::add, py::const_),
@@ -688,6 +691,16 @@ PYBIND11_MODULE(_C, c) {
         auto options = raxis::TensorOptions().dtype(dtype).device(device);
         return raxis::randn_like(other, options);
     }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
+
+    c.def("randint", [](int64_t low, int64_t high, raxis::VecOrInt shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device);
+        return raxis::randint(low, high, shape, options);
+    }, py::arg("low"), py::arg("high"), py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
+
+    c.def("randint_like", [](const raxis::Tensor& other, int64_t low, int64_t high, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device);
+        return raxis::randint_like(other, low, high, options);
+    }, py::arg("other"), py::arg("low"), py::arg("high"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
 
     c.def("manual_seed", &raxis::manual_seed, py::arg("seed"));
     

@@ -68,6 +68,10 @@ RAXIS_API Tensor rand_like(const Tensor& other, TensorOptions options = {});
 RAXIS_API Tensor randn(IntArrayRef shape, TensorOptions options = {});
 RAXIS_API Tensor randn_like(const Tensor& other, TensorOptions options = {});
 
+/// Returns an integer tensor filled with U[low, high)
+RAXIS_API Tensor randint(int64_t low, int64_t high, IntArrayRef shape, TensorOptions options = {});
+RAXIS_API Tensor randint_like(const Tensor& other, int64_t low, int64_t high, TensorOptions options = {});
+
 RAXIS_API Tensor scalar_tensor(Scalar s, TensorOptions options = {});
 
 
