@@ -1101,3 +1101,93 @@ class TestRoundTrips:
         data = randf(5, 10)
         r_np = raxis.from_numpy(data).numpy()
         np.testing.assert_allclose(r_np, data, atol=1e-6)
+
+
+# ===========================================================================
+# FACTORIES
+# ===========================================================================
+
+class TestFactories:
+
+    @pytest.mark.parametrize("factory,expected", [
+        ("zeros", 0.0),
+        ("ones",  1.0),
+    ])
+    def test_constant_factories(self, factory, expected, device):
+        r = getattr(raxis, factory)((3, 4))
+        t = getattr(torch, factory)((3, 4))
+        check_match(r, t, context=f"{factory}")
+
+    def test_full(self, device):
+        r = raxis.full((3, 4), 7.5)
+        t = torch.full((3, 4), 7.5)
+        check_match(r, t, context="full")
+
+    def test_empty_shape(self, device):
+        r = raxis.empty((5, 3))
+        assert tuple(r.shape) == (5, 3)
+
+    @pytest.mark.parametrize("factory", ["zeros_like", "ones_like", "empty_like"])
+    def test_like_shape_and_dtype(self, factory, device):
+        src = raxis.tensor([[1.0, 2.0], [3.0, 4.0]])
+        out = getattr(raxis, factory)(src)
+        assert tuple(out.shape) == (2, 2)
+        assert out.dtype == src.dtype
+
+    @pytest.mark.parametrize("factory", ["zeros_like", "ones_like"])
+    def test_like_dtype_override(self, factory, device):
+        src = raxis.tensor([1.0, 2.0])
+        out = getattr(raxis, factory)(src, dtype=raxis.int32)
+        assert out.dtype == raxis.int32
+
+    def test_full_like(self, device):
+        src = raxis.tensor([1.0, 2.0, 3.0])
+        r = raxis.full_like(src, 42.0)
+        t = torch.full_like(torch.tensor([1.0, 2.0, 3.0]), 42.0)
+        check_match(r, t, context="full_like")
+
+    def test_rand_range(self, device):
+        raxis.manual_seed(42)
+        r = raxis.rand((1000,))
+        r_np = np.array(r)
+        assert r_np.min() >= 0.0
+        assert r_np.max() <= 1.0
+        assert tuple(r.shape) == (1000,)
+
+    def test_randn_stats(self, device):
+        raxis.manual_seed(42)
+        r = raxis.randn((10000,))
+        r_np = np.array(r)
+        assert abs(r_np.mean()) < 0.1
+        assert abs(r_np.std() - 1.0) < 0.1
+
+    def test_randint_range(self, device):
+        raxis.manual_seed(42)
+        r = raxis.randint(0, 10, (1000,))
+        r_np = np.array(r)
+        assert r_np.min() >= 0
+        assert r_np.max() < 10
+
+    def test_rand_like(self, device):
+        src = raxis.ones((5, 5))
+        raxis.manual_seed(42)
+        r = raxis.rand_like(src)
+        assert tuple(r.shape) == (5, 5)
+        assert r.dtype == src.dtype
+        r_np = np.array(r)
+        assert r_np.min() >= 0.0
+        assert r_np.max() <= 1.0
+
+    def test_randn_like(self, device):
+        src = raxis.ones((5, 5))
+        r = raxis.randn_like(src)
+        assert tuple(r.shape) == (5, 5)
+        assert r.dtype == src.dtype
+
+    def test_randint_like(self, device):
+        src = raxis.ones((5, 5), dtype=raxis.int64)
+        r = raxis.randint_like(src, 0, 100)
+        assert tuple(r.shape) == (5, 5)
+        r_np = np.array(r)
+        assert r_np.min() >= 0
+        assert r_np.max() < 100
