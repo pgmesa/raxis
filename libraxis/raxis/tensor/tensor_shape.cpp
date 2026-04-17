@@ -245,7 +245,7 @@ Tensor movedim(const Tensor& self, IntArrayRef src, IntArrayRef dst) {
 }
 
 Tensor movedim(const Tensor& self, int64_t src, int64_t dst) {
-    return movedim(self, {src}, {dst});
+    return movedim(self, IntArrayRef(src), IntArrayRef(dst));
 }
 
 Tensor view(const Tensor& self, IntArrayRef new_shape) {
