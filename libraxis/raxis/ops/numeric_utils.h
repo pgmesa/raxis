@@ -9,17 +9,17 @@
 namespace raxis {
 
 template <typename T, std::enable_if_t<std::is_integral_v<T>, int> = 0>
-inline bool _isnan(T /*val*/) {
+bool _isnan(T /*val*/) {
     return false;
 }
 
 template <typename T, std::enable_if_t<std::is_floating_point_v<T>, int> = 0>
-inline bool _isnan(T val) {
+bool _isnan(T val) {
     return std::isnan(val);
 }
 
 template <typename T>
-inline T max_impl (T a, T b) {
+T max_impl (T a, T b) {
     if (_isnan<T>(a) || _isnan<T>(b)) {
         return std::numeric_limits<T>::quiet_NaN();
     } else {
@@ -28,7 +28,7 @@ inline T max_impl (T a, T b) {
 }
 
 template <typename T>
-inline T min_impl (T a, T b) {
+T min_impl (T a, T b) {
     if (_isnan<T>(a) || _isnan<T>(b)) {
         return std::numeric_limits<T>::quiet_NaN();
     } else {
