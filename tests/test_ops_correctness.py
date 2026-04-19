@@ -108,8 +108,13 @@ def try_requires_grad(r, t):
 # ===========================================================================
 
 # -- Shapes per category --
-UNARY_SHAPES  = [(5,), (10, 20), (3, 10, 20)]
-BINARY_SHAPES = [(1,), (100,), (10, 20), (5, 10, 20), (2, 3, 4, 5)]
+UNARY_SHAPES = [(5,), (10, 20), (3, 10, 20), (500, 200), (100, 100, 10),
+                # parallelization threshold
+                (256, 128), (512, 256), (100, 100, 100)]
+
+BINARY_SHAPES = [(1,), (100,), (10, 20), (5, 10, 20), (2, 3, 4, 5), (500, 200),
+                 # parallelization threshold
+                 (256, 128), (512, 256)]
 
 BROADCAST_CASES = [
     ((10, 20), (1, 20),       "row broadcast"),
@@ -121,7 +126,15 @@ BROADCAST_CASES = [
     ((3, 4, 5), (4, 1),       "inner dim"),
     ((1,), (10, 20),          "scalar-like"),
     ((10, 1, 5), (1, 4, 1),   "3d mutual"),
+    # parallelization threshold
+    ((256, 128), (1, 128),    "large row broadcast"),
+    ((256, 128), (256, 1),    "large col broadcast"),
+    ((64, 64, 64), (64,),     "large trailing dim"),
 ]
+
+REDUCE_ALL_SHAPES = [(10,), (10, 20), (5, 10, 20),
+                     # parallelization threshold
+                     (256, 128), (512, 256)]
 
 REDUCE_DIM_CASES = [
     ((10, 20),    0,      False),
@@ -131,7 +144,23 @@ REDUCE_DIM_CASES = [
     ((5, 10, 20), 2,      False),
     ((5, 10, 20), (0, 2), False),
     ((5, 10, 20), -1,     True),
+    ((200, 300),   0,     False),
+    ((200, 300),   1,     False),
+    # parallelization threshold
+    ((256, 128),   0,     False),
+    ((256, 128),   1,     False),
+    ((256, 128),   0,     True),
+    ((64, 64, 64), 2,     False),
+    ((64, 64, 64), (0, 2), False),
 ]
+
+CMP_SHAPES = [(10, 20), (3, 10, 20),
+              # parallelization threshold
+              (256, 128)]
+
+ELEMENTWISE_BINARY_SHAPES = [(10, 20), (5, 10, 20),
+                             # parallelization threshold
+                             (256, 128)]
 
 # -- Unary ops --
 # (name, method, data_fn)
@@ -287,7 +316,7 @@ class TestUnaryInplaceOps:
 class TestComparisonOps:
 
     @pytest.mark.parametrize("op", CMP_OPS)
-    @pytest.mark.parametrize("shape", [(10, 20), (3, 10, 20)])
+    @pytest.mark.parametrize("shape", CMP_SHAPES)
     def test_tensor_tensor(self, op, shape, device):
         a, b = randf(*shape, seed=1), randf(*shape, seed=2)
         r_a, t_a = make_pair(a, device)
@@ -339,7 +368,7 @@ class TestBinaryElementwise:
     # -- maximum / minimum --
 
     @pytest.mark.parametrize("op", ["maximum", "minimum"])
-    @pytest.mark.parametrize("shape", [(10, 20), (5, 10, 20)])
+    @pytest.mark.parametrize("shape", ELEMENTWISE_BINARY_SHAPES)
     def test_forward(self, op, shape, device):
         a, b = randf(*shape, seed=1), randf(*shape, seed=2)
         r_a, t_a = make_pair(a, device)
@@ -739,7 +768,7 @@ class TestReductionAll:
         "name,method,data_fn", REDUCE_ALL_OPS,
         ids=[o[0] for o in REDUCE_ALL_OPS]
     )
-    @pytest.mark.parametrize("shape", [(10,), (10, 20), (5, 10, 20)])
+    @pytest.mark.parametrize("shape", REDUCE_ALL_SHAPES)
     def test_forward(self, name, method, data_fn, shape, device):
         data = data_fn(*shape)
         r, t = make_pair(data, device)
@@ -749,7 +778,7 @@ class TestReductionAll:
         "name,method,data_fn", REDUCE_ALL_OPS,
         ids=[o[0] for o in REDUCE_ALL_OPS]
     )
-    @pytest.mark.parametrize("shape", [(10,), (10, 20)])
+    @pytest.mark.parametrize("shape", REDUCE_ALL_SHAPES)
     def test_backward(self, name, method, data_fn, shape, device):
         data = data_fn(*shape)
         r, t = make_pair(data, device)
@@ -792,11 +821,8 @@ class TestReductionDim:
         "name,method,data_fn", REDUCE_DIM_OPS,
         ids=[o[0] for o in REDUCE_DIM_OPS]
     )
-    @pytest.mark.parametrize("shape,dim,keepdim", [
-        ((10, 20), 0, False),
-        ((10, 20), 1, True),
-        ((5, 10, 20), -1, False),
-    ])
+    @pytest.mark.parametrize("shape,dim,keepdim", REDUCE_DIM_CASES,
+                             ids=[f"{s}_d{d}_k{k}" for s, d, k in REDUCE_DIM_CASES])
     def test_backward(self, name, method, data_fn, shape, dim, keepdim, device):
         data = data_fn(*shape)
         r, t = make_pair(data, device)
@@ -821,11 +847,8 @@ class TestReductionDim:
             return fn(dim=dim, keepdim=keepdim)
 
     @pytest.mark.parametrize("op", ["nansum", "nanmean"])
-    @pytest.mark.parametrize("shape,dim,keepdim", [
-        ((10, 20),    0,  False),
-        ((10, 20),    1,  False),
-        ((5, 10, 20), -1, True),
-    ])
+    @pytest.mark.parametrize("shape,dim,keepdim", REDUCE_DIM_CASES,
+                             ids=[f"{s}_d{d}_k{k}" for s, d, k in REDUCE_DIM_CASES])
     def test_nan_reduce_dim(self, op, shape, dim, keepdim, device):
         data = randf(*shape)
         rng = np.random.RandomState(42)
@@ -893,11 +916,11 @@ class TestShapeOps:
         r, t = make_pair(data, device)
         check_match(r.swapdims(0, 2), t.swapdims(0, 2), context="swapdims")
 
-    # @pytest.mark.parametrize("src,dst", [(0, 1), (2, 0), (-1, 0)])
-    # def test_movedim(self, src, dst, device):
-    #     data = randf(3, 5, 7)
-    #     r, t = make_pair(data, device)
-    #     check_match(r.movedim(src, dst), t.movedim(src, dst), context=f"movedim({src},{dst})")
+    @pytest.mark.parametrize("src,dst", [(0, 1), (2, 0), (-1, 0)])
+    def test_movedim(self, src, dst, device):
+        data = randf(3, 5, 7)
+        r, t = make_pair(data, device)
+        check_match(r.movedim(src, dst), t.movedim(src, dst), context=f"movedim({src},{dst})")
 
     def test_squeeze_all(self, device):
         r, t = make_pair(randf(1, 5, 1, 3), device)
