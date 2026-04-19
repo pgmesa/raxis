@@ -32,8 +32,8 @@ Config parse_args(int argc, char** argv) {
         }
         else if (arg == "-h" || arg == "--help") {
             std::cout << "Usage: " << argv[0] << " [options]\n"
-                      << "  --dtype1 <type>   Dtype for arr1 (default: float32)\n"
-                      << "  --dtype2 <type>   Dtype for arr2 (default: float32)\n"
+                      << "  --dtype1 <type>   Dtype for tensor1 (default: float32)\n"
+                      << "  --dtype2 <type>   Dtype for tensor2 (default: float32)\n"
                       << "Valid types: bool, uint8, uint16, int32, int64, float32, float64\n";
             std::exit(0);
         }

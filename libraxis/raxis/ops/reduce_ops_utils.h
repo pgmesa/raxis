@@ -143,14 +143,10 @@ TensorIterator make_reduction(
     Tensor viewed_result = review_reduce_result(result, ndim, mask, keepdim);
 
     // Build the iterator configured for reduction
-    auto iter = TensorIteratorConfig()
-        .check_all_same_dtype(false)
-        .is_reduction(true)
-        .add_owned_output(viewed_result)
-        .add_owned_input(self.dtype() == out_dtype ? self : self.to(out_dtype))
-        .build();
-    
-    return iter;
+    return TensorIterator::reduce_op(
+        viewed_result, 
+        self.dtype() == out_dtype ? self : self.to(out_dtype)
+    );
 }
 
 inline void zero_numel_check_dims(const Tensor& self, int64_t dim, const char* fn_name){

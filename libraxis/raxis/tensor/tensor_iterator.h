@@ -38,6 +38,9 @@ constexpr int64_t GRAIN_SIZE = 32768;
 struct Operand {
     using StrideVector = SmallVector<int64_t, 6>;
 
+    /// The data pointer. This may be different from tensor->data_ptr() if the
+    /// iterator is split.
+    void* data = nullptr;
     StrideVector stride_bytes;
     bool is_output = false;
     bool is_read_write = false;
@@ -261,6 +264,9 @@ public:
     using DimMask = std::bitset<64>;
     using PtrVector = SmallVector<char*, 4>;
     using StrideVector = SmallVector<int64_t, 6>;
+    // Type-erased 2D loop
+    using loop2d_t = function_ref<
+        void(char** data, const int64_t* strides, int64_t size0, int64_t size1)>;
 
     int ndim() const {
         return static_cast<int>(shape_.size());
@@ -311,11 +317,30 @@ public:
         return get_tensor(idx);
     }
 
+    const Tensor& get_input(int64_t idx = 0) const {
+        assert(idx >= 0 && idx < num_inputs());
+        return get_tensor(num_outputs_ + idx);
+    }
+
+    IntArrayRef shape() const {
+        return shape_;
+    }
+
+    int64_t element_size(int64_t arg) const {
+        return static_cast<int64_t>(dtype(arg).itemsize());
+    }
+
+    bool is_dim_reduced(int dim) const;
+
+    PtrVector get_base_ptrs() const;
+    StrideVector get_strides() const;
+
+    void narrow(int dim, int64_t start, int64_t size);
+
     void build(TensorIteratorConfig& config);
     void print_state(std::ostream& os = std::cout) const;
 
-    // Type-erased 2D loop
-    using loop2d_t = function_ref<void(char** data, const int64_t* strides, int64_t size0, int64_t size1)>;
+    static TensorIterator reduce_op(Tensor& out, const Tensor& a);
     
     // Templated 1D loop (inlined, optimizable)
     template <typename loop1d_t,
@@ -362,6 +387,10 @@ private:
     
     DimVector shape_;
     DimVector perm_;
+    /// The index offsets into the original tensors for each dimension.
+    /// This is only non-zero when you narrow() a TensorIterator (e.g.,
+    /// when you make sub-TensorIterators).
+    DimVector view_offsets_;
 
     bool all_ops_same_shape_ = false;
     bool all_ops_are_scalars_ = false;
@@ -413,4 +442,27 @@ private:
     }
 };
 
-}
+namespace detail {
+
+void get_base_ptrs(char** ptrs, ArrayRef<Operand> operands);
+void get_strides(int64_t* strides, ArrayRef<Operand> operands, int ndim);
+
+void get_data_ptrs(
+    char** ptrs,
+    ArrayRef<char*> base_ptrs,
+    IntArrayRef strides,
+    IntArrayRef counter_values
+);
+
+void serial_for_each(
+    IntArrayRef shape,
+    IntArrayRef strides,
+    char** base_ptrs,
+    size_t noperands,
+    TensorIterator::loop2d_t loop,
+    Range range
+);
+
+} // namespace detail
+
+} // namespace raxis

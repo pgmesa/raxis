@@ -16,5 +16,4 @@ endfunction()
 
 # Build each example
 add_example(example_add    example_add.cpp)
-# add_example(example_matmul example_matmul.cpp)
-# add_example(example_torch_matmul example_torch_matmul.cpp)
+add_example(example_reduction example_reduction.cpp)

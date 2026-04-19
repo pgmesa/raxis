@@ -150,9 +150,7 @@ bool Tensor::is_wrapped_number() const {
 }
 
 std::string Tensor::to_string() const {
-    if (!defined()) 
-        return "raxis(undefined tensor!)";
-
+    ensure_defined("to_string");
     return fmt::format(
         "raxis(shape={}, strides={}, dtype={}, device='{}')", 
         impl_->shape(), impl_->strides(), impl_->dtype().name(), impl_->device().str()

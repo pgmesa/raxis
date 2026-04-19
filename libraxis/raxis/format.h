@@ -30,7 +30,7 @@ struct fmt::formatter<Container,
         for (const auto& v : c) {
             if (!first) out = fmt::format_to(out, ", ");
             out = fmt::format_to(out, "{}", v);
-            first = true;
+            first = false;
         }
         *out++ = ']';
         return out;

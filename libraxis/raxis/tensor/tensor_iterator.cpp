@@ -27,6 +27,10 @@
 
 namespace raxis {
 
+using loop2d_t = TensorIterator::loop2d_t;
+using PtrVector = TensorIterator::PtrVector;
+using StrideVector = TensorIterator::StrideVector;
+
 void Operand::set_tensor(MaybeOwned<Tensor>&& new_tensor) {
     RAXIS_INTERNAL_ASSERT(!original_tensor_, "Cannot set tensor on an exchanged tensor");
     tensor_ = std::move(new_tensor);
@@ -137,6 +141,18 @@ void TensorIterator::build(TensorIteratorConfig& config) {
         // Coalesce adjacent dimensions when possible
         coalesce_dimensions();
     }
+
+    for (auto& op : operands_) {
+        RAXIS_INTERNAL_ASSERT(op.tensor().defined());
+        op.data = static_cast<char*>(op.tensor().mutable_data_ptr());
+    }
+
+    // zero out offsets
+    // If the tensor is a scalar, we leave room for it
+    // So index translations in reduction can access
+    // a valid value for the offset
+    int64_t ndim_offsets = (ndim() ? ndim() : 1);
+    view_offsets_ = DimVector(ndim_offsets, 0);
 }
 
 void TensorIterator::populate_operands(TensorIteratorConfig& config) {
@@ -176,12 +192,9 @@ void TensorIterator::compute_shape(const TensorIteratorConfig& config) {
     bool has_scalars = false;
     bool has_tensors = false;
 
-    // First pass: compute shape from inputs (with broadcasting)
+    // First pass: compute shape from inputs and defined outputs (with broadcasting)
     for (Operand& op: operands_) {
         if (!op.tensor().defined()) continue;
-        
-        // Outputs don't participate in shape computation
-        if (op.is_output) continue;
         
         IntArrayRef shape = op.tensor().shape();
         if (shape.empty()) has_scalars = true;
@@ -198,21 +211,6 @@ void TensorIterator::compute_shape(const TensorIteratorConfig& config) {
         }
     }
     all_ops_are_scalars_ = !has_tensors;
-
-    // Ensure defined outputs have the correct shape
-    for (size_t i = 0; i < num_outputs_; i++) {
-        const Tensor& output = operands_[i].tensor();
-        if (!output.defined()) continue;
-            
-        if (shape_.empty()) {
-            // No inputs (e.g. fill_), infer shape from output
-            shape_ = DimVector(output.shape());
-        } else if (!is_reduction_) {
-            RAXIS_CHECK(output.shape() == shape_,
-             "Invalid shape encountered in output ", output.shape(), 
-             ", expected ", shape_);
-        }
-    }
 }
 
 void TensorIterator::compute_strides(const TensorIteratorConfig& config) {
@@ -559,7 +557,7 @@ void TensorIterator::reorder_dimensions() {
     permute_dimensions(perm_);
 }
 
-TensorIterator::StrideVector TensorIterator::compatible_stride(int64_t element_size) const {
+StrideVector TensorIterator::compatible_stride(int64_t element_size) const {
     StrideVector stride;
     int64_t next_stride = element_size;
     for (size_t dim = 0; dim < ndim(); dim++) {
@@ -678,6 +676,52 @@ void TensorIterator::coalesce_dimensions() {
     has_coalesced_dimensions_ = true;
 }
 
+
+TensorIterator TensorIterator::reduce_op(Tensor& out, const Tensor& a) {
+    RAXIS_INTERNAL_ASSERT(out.defined());
+    return TensorIteratorConfig()
+        .is_reduction(true)
+        .promote_inputs_to_common_dtype(true)
+        .add_owned_output(out)
+        .add_owned_input(a)
+        .build();
+}
+
+bool TensorIterator::is_dim_reduced(int dim) const {
+    for (const auto& op : operands_) {
+        if (op.is_output && op.stride_bytes[dim] == 0 && shape_[dim] > 1) {
+            return true;
+        }
+    }
+    return false;
+}
+
+PtrVector TensorIterator::get_base_ptrs() const {
+    SmallVector<char*, 4> ptrs(num_operands());
+    detail::get_base_ptrs(ptrs.data(), operands_);
+    return ptrs;
+}
+
+StrideVector TensorIterator::get_strides() const {
+    int dim = ndim();
+    StrideVector strides(num_operands() * static_cast<size_t>(std::max(dim, 2)));
+    detail::get_strides(strides.data(), operands_, dim);
+    return strides;
+}
+
+void TensorIterator::narrow(int dim, int64_t start, int64_t size) {
+    RAXIS_INTERNAL_ASSERT(dim < ndim() && size >= 1);
+    shape_[dim] = size;
+    view_offsets_[dim] += start;
+    for (auto& op : operands_) {
+        op.data = ((char*)op.data) + op.stride_bytes[dim] * start;
+    }
+    if (size == 1 && !is_reduction_) {
+        coalesce_dimensions();
+    }
+}
+
+
 void TensorIterator::for_each(loop2d_t loop, int64_t grain_size) const {
     int64_t numel = this->numel();
 
@@ -692,9 +736,30 @@ void TensorIterator::for_each(loop2d_t loop, int64_t grain_size) const {
     }
 }
 
+void TensorIterator::serial_for_each(loop2d_t loop, Range range) const {
+    if (range.size() == 0) return;
+
+    const size_t noperands = num_operands();
+    const int ndim = this->ndim();
+
+    SmallBuffer<char*, 4> ptrs(noperands);
+    SmallBuffer<int64_t, 8> strides(noperands * static_cast<size_t>(std::max(ndim, 2)));
+
+    detail::get_base_ptrs(ptrs.data(), operands_);
+    detail::get_strides(strides.data(), operands_, ndim);
+
+    detail::serial_for_each(shape_, strides, ptrs.data(), noperands, loop, range);
+}
+
+namespace {
+
+} // namespace 
+
+namespace detail {
+
 void get_base_ptrs(char** ptrs, ArrayRef<Operand> operands) {
     for (int idx = 0; idx < operands.size(); idx++) {
-        ptrs[idx] = static_cast<char*>(operands[idx].tensor().mutable_data_ptr());
+        ptrs[idx] = static_cast<char*>(operands[idx].data);
     }
 }
 
@@ -711,9 +776,7 @@ void get_strides(int64_t* strides, ArrayRef<Operand> operands, int ndim) {
     }
 }
 
-namespace detail {
-
-inline void get_data_ptrs(
+void get_data_ptrs(
     char** ptrs,
     ArrayRef<char*> base_ptrs,
     IntArrayRef strides,
@@ -736,7 +799,7 @@ void serial_for_each(
     IntArrayRef strides,
     char** base_ptrs,
     size_t noperands,
-    TensorIterator::loop2d_t loop,
+    loop2d_t loop,
     Range range
 ) {
     size_t ndim = shape.size();
@@ -763,28 +826,6 @@ void serial_for_each(
 }
 
 } // namespace detail
-
-void TensorIterator::serial_for_each(loop2d_t loop, Range range) const {
-    if (range.size() == 0) return;
-
-    const size_t noperands = num_operands();
-    const int ndim = this->ndim();
-
-    SmallBuffer<char*, 4> ptrs(noperands);
-    SmallBuffer<int64_t, 8> strides(noperands * static_cast<size_t>(std::max(ndim, 2)));
-
-    get_base_ptrs(ptrs.data(), operands_);
-    get_strides(strides.data(), operands_, ndim);
-
-    detail::serial_for_each(shape_, strides, ptrs.data(), noperands, loop, range);
-}
-
-
-void TensorIterator::parallel_reduce(loop2d_t loop) const {
-    // TODO
-    serial_for_each(loop, {0, numel()});
-}
-
 
 void TensorIterator::print_state(std::ostream& os) const {
     os << "=== TensorIterator state ===\n";
