@@ -443,17 +443,7 @@ private:
 };
 
 namespace detail {
-
-void get_base_ptrs(char** ptrs, ArrayRef<Operand> operands);
-void get_strides(int64_t* strides, ArrayRef<Operand> operands, int ndim);
-
-void get_data_ptrs(
-    char** ptrs,
-    ArrayRef<char*> base_ptrs,
-    IntArrayRef strides,
-    IntArrayRef counter_values
-);
-
+    
 void serial_for_each(
     IntArrayRef shape,
     IntArrayRef strides,

@@ -27,6 +27,20 @@
 
 namespace raxis {
 
+namespace {
+
+void get_base_ptrs(char** ptrs, ArrayRef<Operand> operands);
+void get_strides(int64_t* strides, ArrayRef<Operand> operands, int ndim);
+void get_data_ptrs(
+    char** ptrs,
+    ArrayRef<char*> base_ptrs,
+    IntArrayRef strides,
+    IntArrayRef counter_values
+);
+    
+} // namespace
+
+
 using loop2d_t = TensorIterator::loop2d_t;
 using PtrVector = TensorIterator::PtrVector;
 using StrideVector = TensorIterator::StrideVector;
@@ -698,14 +712,14 @@ bool TensorIterator::is_dim_reduced(int dim) const {
 
 PtrVector TensorIterator::get_base_ptrs() const {
     SmallVector<char*, 4> ptrs(num_operands());
-    detail::get_base_ptrs(ptrs.data(), operands_);
+    ::raxis::get_base_ptrs(ptrs.data(), operands_);
     return ptrs;
 }
 
 StrideVector TensorIterator::get_strides() const {
     int dim = ndim();
     StrideVector strides(num_operands() * static_cast<size_t>(std::max(dim, 2)));
-    detail::get_strides(strides.data(), operands_, dim);
+    ::raxis::get_strides(strides.data(), operands_, dim);
     return strides;
 }
 
@@ -745,17 +759,13 @@ void TensorIterator::serial_for_each(loop2d_t loop, Range range) const {
     SmallBuffer<char*, 4> ptrs(noperands);
     SmallBuffer<int64_t, 8> strides(noperands * static_cast<size_t>(std::max(ndim, 2)));
 
-    detail::get_base_ptrs(ptrs.data(), operands_);
-    detail::get_strides(strides.data(), operands_, ndim);
+    ::raxis::get_base_ptrs(ptrs.data(), operands_);
+    ::raxis::get_strides(strides.data(), operands_, ndim);
 
     detail::serial_for_each(shape_, strides, ptrs.data(), noperands, loop, range);
 }
 
 namespace {
-
-} // namespace 
-
-namespace detail {
 
 void get_base_ptrs(char** ptrs, ArrayRef<Operand> operands) {
     for (int idx = 0; idx < operands.size(); idx++) {
@@ -793,6 +803,10 @@ void get_data_ptrs(
         }
     }
 }
+
+}
+
+namespace detail {
 
 void serial_for_each(
     IntArrayRef shape,
