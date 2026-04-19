@@ -104,9 +104,10 @@ def format_shape(*shapes):
 
 class BenchmarkRunner:
 
-    def __init__(self, device="cpu", warmup=5, repeats=20, threshold=10.0,
+    def __init__(self, device="cpu", dtype="float32", warmup=5, repeats=20, threshold=10.0,
                  target_ops=None):
         self.device = device
+        self.dtype = np.dtype(dtype)
         self.warmup = warmup
         self.repeats = repeats
         self.threshold = threshold
@@ -123,9 +124,9 @@ class BenchmarkRunner:
         
         return False
 
-    def _make_tensors(self, shape, dtype=np.float32, lo=0.0, hi=1.0, seed=42):
+    def _make_tensors(self, shape, dtype: np.dtype = None, lo=0.0, hi=1.0, seed=42):
         rng = np.random.RandomState(seed)
-        data = (rng.rand(*shape) * (hi - lo) + lo).astype(dtype)
+        data = (rng.rand(*shape) * (hi - lo) + lo).astype(dtype or self.dtype)
         r = raxis.from_numpy(data)
         t = torch.from_numpy(data.copy())
         if self.device != "cpu":
@@ -367,6 +368,8 @@ def run_all(runner):
          {"lo": 0.99, "hi": 1.01}),
         ("max_all",  S_REDUCE, lambda r: r.max(),  lambda t: t.max(),  lambda n: n.max()),
         ("min_all",  S_REDUCE, lambda r: r.min(),  lambda t: t.min(),  lambda n: n.min()),
+        ("amax_all",  S_REDUCE, lambda r: r.amax(), lambda t: t.amax(), None),
+        ("amin_all",  S_REDUCE, lambda r: r.amin(), lambda t: t.amin(), None),
     ])
 
     # -- Reductions (dim) --
@@ -459,8 +462,10 @@ def _run_section_pair(runner, title, benchmarks):
 # ---------------------------------------------------------------------------
 
 def main():
+    dtypes = ["bool", "uint8", "int32", "int64", "float32", "float64"]
     parser = argparse.ArgumentParser(description="Raxis performance benchmarks")
     parser.add_argument("--device", default="cpu", choices=["cpu", "cuda"])
+    parser.add_argument("--dtype", default="float32", choices=dtypes)
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--repeats", type=int, default=20)
     parser.add_argument("--threshold", type=float, default=1.5)
@@ -480,12 +485,13 @@ def main():
             print("[!] CUDA not available for raxis")
             exit(1)
 
-    print(bold(f"Benchmarking on: {args.device}"))
+    print(bold(f"Benchmarking on: {args.device} - {args.dtype}"))
     print(dim(f"Warmup: {args.warmup}  Repeats: {args.repeats}  "
               f"Threshold: {args.threshold}x"))
 
     runner = BenchmarkRunner(
         device=args.device,
+        dtype=args.dtype,
         warmup=args.warmup,
         repeats=args.repeats,
         threshold=args.threshold,
