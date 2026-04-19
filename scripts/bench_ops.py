@@ -55,12 +55,10 @@ bold_cyan   = _ansi("1;36")
 
 def color_ratio(ratio, threshold):
     text = f"{ratio:5.2f}x"
-    if ratio < 2.0:
+    if ratio < threshold*0.9:
         return bold_green(text)
-    elif ratio < 5.0:
-        return yellow(text)
     elif ratio < threshold:
-        return bold_yellow(text)
+        return yellow(text)
     return bold_red(text)
 
 
@@ -107,18 +105,23 @@ def format_shape(*shapes):
 class BenchmarkRunner:
 
     def __init__(self, device="cpu", warmup=5, repeats=20, threshold=10.0,
-                 filter_str=None):
+                 target_ops=None):
         self.device = device
         self.warmup = warmup
         self.repeats = repeats
         self.threshold = threshold
-        self.filter_str = filter_str
+        self.target_ops = target_ops
         self.results = []
 
     def _should_run(self, name):
-        if self.filter_str is None:
+        if self.target_ops is None:
             return True
-        return self.filter_str.lower() in name.lower()
+        
+        for op_name in self.target_ops:
+            if op_name in name.lower():
+                return True
+        
+        return False
 
     def _make_tensors(self, shape, dtype=np.float32, lo=0.0, hi=1.0, seed=42):
         rng = np.random.RandomState(seed)
@@ -460,8 +463,8 @@ def main():
     parser.add_argument("--device", default="cpu", choices=["cpu", "cuda"])
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--repeats", type=int, default=20)
-    parser.add_argument("--threshold", type=float, default=5.0)
-    parser.add_argument("-k", "--filter", dest="filter_str", default=None)
+    parser.add_argument("--threshold", type=float, default=1.5)
+    parser.add_argument("-k", "--filter", dest="target_ops", nargs='+', default=None)
     parser.add_argument("--no-color", action="store_true")
     args = parser.parse_args()
 
@@ -486,7 +489,7 @@ def main():
         warmup=args.warmup,
         repeats=args.repeats,
         threshold=args.threshold,
-        filter_str=args.filter_str,
+        target_ops=args.target_ops,
     )
 
     run_all(runner)
