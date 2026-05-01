@@ -442,6 +442,15 @@ inline Vectorized<T> operator~(const Vectorized<T>& a) {
     return a ^ ones;
 }
 
+template <typename T>
+Vectorized<T> inline operator&&(const Vectorized<T>& a, const Vectorized<T>& b) {
+    Vectorized<T> ret;
+    for (int i = 0; i != Vectorized<T>::size(); i++) {
+        ret[i] = a[i] && b[i];
+    }
+    return ret;
+}
+
 // --- maximum/minimum (propagate NaN) ---
 
 template <typename T>

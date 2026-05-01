@@ -14,9 +14,9 @@ namespace {
 void fill_kernel(TensorIterator& iter, Scalar value) {
     iter.dtype().dispatch_all_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
         scalar_t val = value.to<scalar_t>();
-        cpu_kernel(iter, [=]() -> scalar_t {
-            return val;
-        });
+        cpu_kernel_vec(iter,
+            [val]() -> scalar_t { return val; },
+            [val]() { return Vectorized<scalar_t>(val); });
     });
 }
 

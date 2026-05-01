@@ -4,6 +4,7 @@
 #include <raxis/ops/dispatch_stub.h>
 #include <raxis/ops/reduce_ops.h>
 #include <raxis/ops/cpu/reduce.h>
+#include <raxis/ops/cpu/vec/vec.h>
 
 #include <raxis/core/dtype.h>
 #include <raxis/core/scalar.h>
@@ -54,21 +55,36 @@ inline int64_t ceil_log2(int64_t n) {
 /// Normal scalar load
 template <typename scalar_t>
 struct LoadPolicy {
-    static constexpr int64_t memsize() { return sizeof(scalar_t); }
+    static constexpr int64_t memsize() { 
+        return sizeof(scalar_t); 
+    }
 
-    static scalar_t load(const char* RAXIS_RESTRICT data,
-                         int64_t stride, int64_t index) {
+    static scalar_t load(const char* RAXIS_RESTRICT data, int64_t stride, int64_t index) {
         return *reinterpret_cast<const scalar_t*>(data + index * stride);
     }
 };
 
+template <typename scalar_t>
+struct VecLoadPolicy {
+    using Vec = Vectorized<scalar_t>;
+    static constexpr int64_t memsize() { 
+        return sizeof(scalar_t) * Vec::size();
+     }
+
+    static Vec load(const char* RAXIS_RESTRICT data, int64_t stride, int64_t index) {
+        return Vec::loadu(data + index * stride);
+    }
+};
+
+
 /// NaN-aware scalar load: replaces NaN with 0 before accumulation
 template <typename scalar_t>
 struct NanLoadPolicy {
-    static constexpr int64_t memsize() { return sizeof(scalar_t); }
+    static constexpr int64_t memsize() { 
+        return sizeof(scalar_t); 
+    }
 
-    static scalar_t load(const char* RAXIS_RESTRICT data,
-                         int64_t stride, int64_t index) {
+    static scalar_t load(const char* RAXIS_RESTRICT data,int64_t stride, int64_t index) {
         auto val = LoadPolicy<scalar_t>::load(data, stride, index);
         if constexpr (std::is_floating_point_v<scalar_t>) {
             return std::isnan(val) ? scalar_t(0) : val;
@@ -78,12 +94,29 @@ struct NanLoadPolicy {
     }
 };
 
+template <typename scalar_t>
+struct NanVecLoadPolicy {
+    using Vec = Vectorized<scalar_t>;
+    static constexpr int64_t memsize() { 
+        return sizeof(scalar_t) * Vec::size(); 
+    }
+
+    static Vec load(const char* RAXIS_RESTRICT data, int64_t stride, int64_t index) {
+        auto val = Vec::loadu(data + index * stride);
+        return Vec::blendv(val, Vec(scalar_t(0)), val.isnan());
+    }
+};
+
 /// Select the right load policy based on ignore_nan
 template <typename scalar_t, bool ignore_nan>
 using SumLoadPolicy = std::conditional_t<
     ignore_nan, NanLoadPolicy<scalar_t>, LoadPolicy<scalar_t>>;
 
+template <typename scalar_t, bool ignore_nan>
+using SumVecLoadPolicy = std::conditional_t<
+    ignore_nan, NanVecLoadPolicy<scalar_t>, VecLoadPolicy<scalar_t>>;
 
+    
 // ============================================================================
 // Store policy
 // ============================================================================
@@ -95,23 +128,41 @@ using SumLoadPolicy = std::conditional_t<
 
 template <typename scalar_t>
 struct StoreAccumulate {
-    static void store(char* RAXIS_RESTRICT data, int64_t stride,
-                      int64_t index, scalar_t value) {
+    static void store(char* RAXIS_RESTRICT data, int64_t stride, int64_t index, scalar_t value) {
         auto* ptr = reinterpret_cast<scalar_t*>(data + index * stride);
         *ptr += value;
     }
 };
 
+template <typename scalar_t>
+struct VecStoreAccumulate {
+    using Vec = Vectorized<scalar_t>;
+
+    static void store(char* RAXIS_RESTRICT data, int64_t stride, int64_t index, Vec value) {
+        alignas(VECTOR_WIDTH) scalar_t values[Vec::size()];
+        value.store(values);
+        char* base = data + stride * index;
+        for (int k = 0; k < Vec::size(); ++k) {
+            auto* ptr = reinterpret_cast<scalar_t*>(base + k * stride);
+            *ptr += values[k];
+        }
+    }
+};
+
 /// Store an array of values (for multi_row_sum with nrows > 1)
 template <typename scalar_t, int64_t nrows>
-void store_array(char* RAXIS_RESTRICT data, int64_t stride, int64_t index,
-                 const std::array<scalar_t, nrows>& values) {
+void store_array(
+    char* RAXIS_RESTRICT data, 
+    int64_t stride, 
+    int64_t index,  
+    const std::array<scalar_t, 
+    nrows>& values
+) {
     char* base = data + stride * index;
     for (int64_t k = 0; k < nrows; ++k) {
         StoreAccumulate<scalar_t>::store(base, stride, k, values[k]);
     }
 }
-
 
 // ============================================================================
 // Cascade (pairwise) summation
@@ -301,6 +352,84 @@ void scalar_outer_sum(
     }
 }
 
+template <typename scalar_t, bool ignore_nan>
+void vectorized_inner_sum(
+    char* RAXIS_RESTRICT data[2],
+    int64_t outer_stride,
+    int64_t out_stride,
+    int64_t size0,
+    int64_t size1)
+{
+    using Vec = Vectorized<scalar_t>;
+    using VecPolicy = SumVecLoadPolicy<scalar_t, ignore_nan>;
+    using ScalarPolicy = SumLoadPolicy<scalar_t, ignore_nan>;
+
+    constexpr int64_t vec_stride = VecPolicy::memsize();
+    constexpr int64_t scalar_stride = ScalarPolicy::memsize();
+    constexpr int64_t vec_numel = vec_stride / scalar_stride;
+    const int64_t vec_size = size0 / vec_numel;
+
+    for (int64_t j = 0; j < size1; ++j) {
+        const char* row_in = data[1] + j * outer_stride;
+        auto vec_acc = row_sum<Vec, VecPolicy>(row_in, vec_stride, vec_size);
+
+        scalar_t final_acc = scalar_t(0);
+        for (int64_t k = vec_size * vec_numel; k < size0; ++k) {
+            final_acc += ScalarPolicy::load(row_in, scalar_stride, k);
+        }
+
+        alignas(VECTOR_WIDTH) scalar_t partials[Vec::size()];
+        vec_acc.store(partials);
+        for (int k = 0; k < Vec::size(); ++k) {
+            final_acc += partials[k];
+        }
+
+        StoreAccumulate<scalar_t>::store(data[0], out_stride, j, final_acc);
+    }
+}
+
+template <typename scalar_t, bool ignore_nan>
+void vectorized_outer_sum(
+    char* RAXIS_RESTRICT data[2],
+    int64_t inner_stride,
+    int64_t out_stride,
+    int64_t size0,
+    int64_t size1)
+{
+    using Vec = Vectorized<scalar_t>;
+    using VecPolicy = SumVecLoadPolicy<scalar_t, ignore_nan>;
+    using ScalarPolicy = SumLoadPolicy<scalar_t, ignore_nan>;
+
+    constexpr int64_t scalar_stride = ScalarPolicy::memsize();
+    constexpr int64_t vec_stride = VecPolicy::memsize();
+    constexpr int64_t nrows = 4;
+
+    int64_t j = 0;
+    for (; j + nrows * Vec::size() <= size1; j += nrows * Vec::size()) {
+        const char* row_in = data[1] + j * scalar_stride;
+        auto sums = multi_row_sum<Vec, nrows, VecPolicy>(
+            row_in, inner_stride, vec_stride, size0);
+
+        for (int64_t i = 0; i < nrows; ++i) {
+            VecStoreAccumulate<scalar_t>::store(
+                data[0], out_stride, j + i * Vec::size(), sums[i]);
+        }
+    }
+
+    for (; j + Vec::size() <= size1; j += Vec::size()) {
+        const char* row_in = data[1] + j * scalar_stride;
+        Vec sum = row_sum<Vec, VecPolicy>(row_in, inner_stride, size0);
+        VecStoreAccumulate<scalar_t>::store(data[0], out_stride, j, sum);
+    }
+
+    for (; j < size1; ++j) {
+        const char* row_in = data[1] + j * scalar_stride;
+        scalar_t acc = row_sum<scalar_t, ScalarPolicy>(row_in, inner_stride, size0);
+        StoreAccumulate<scalar_t>::store(data[0], out_stride, j, acc);
+    }
+}
+
+
 /// Elementwise sum: not a true reduction (both strides nonzero).
 /// Used by parallel_reduce's combine pass.
 template <typename scalar_t, bool ignore_nan>
@@ -330,19 +459,18 @@ void elementwise_sum(
 
 template <typename scalar_t, bool ignore_nan>
 void sum_kernel_impl(TensorIterator& iter) {
+    using Vec = Vectorized<scalar_t>;
     iter.get_output(0).zero_();
     iter.parallel_reduce(
         [](char** data, const int64_t* strides, int64_t size0, int64_t size1) {
             int64_t in_strides[]  = { strides[1], strides[3] };
             int64_t out_strides[] = { strides[0], strides[2] };
 
-            // Case 1: not a true reduction (parallel_reduce combine pass)
             if (out_strides[0] != 0 && out_strides[1] != 0) {
                 elementwise_sum<scalar_t, ignore_nan>(data, strides, size0, size1);
                 return;
             }
 
-            // Normalize: ensure dim 0 is the reduced dim (out_stride == 0)
             if (out_strides[0] != 0 && out_strides[1] == 0) {
                 std::swap(in_strides[0], in_strides[1]);
                 std::swap(out_strides[0], out_strides[1]);
@@ -357,14 +485,12 @@ void sum_kernel_impl(TensorIterator& iter) {
             bool outer_contiguous =
                 (in_strides[1] == static_cast<int64_t>(sizeof(scalar_t)));
 
-            if (inner_contiguous) {
-                // Future: vectorized_inner_sum with SIMD LoadPolicy
-                scalar_inner_sum<scalar_t, ignore_nan>(
-                    data, in_strides, out_stride, size0, size1);
-            } else if (outer_contiguous) {
-                // Future: vectorized_outer_sum with SIMD LoadPolicy
-                scalar_outer_sum<scalar_t, ignore_nan>(
-                    data, in_strides, out_stride, size0, size1);
+            if (inner_contiguous && size0 >= Vec::size()) {
+                vectorized_inner_sum<scalar_t, ignore_nan>(
+                    data, in_strides[1], out_stride, size0, size1);
+            } else if (outer_contiguous && size1 >= Vec::size()) {
+                vectorized_outer_sum<scalar_t, ignore_nan>(
+                    data, in_strides[0], out_stride, size0, size1);
             } else if (in_strides[0] < in_strides[1]) {
                 scalar_inner_sum<scalar_t, ignore_nan>(
                     data, in_strides, out_stride, size0, size1);
@@ -380,10 +506,11 @@ void sum_kernel(TensorIterator& iter) {
     if (iter.common_dtype().is_integral(/*include_bool=*/true)) {
         iter.common_dtype().dispatch_integral_types(
             [&]<typename scalar_t>(std::type_identity<scalar_t>) {
-                cpu_reduce_kernel<scalar_t>(
+                cpu_reduce_kernel_vec<scalar_t>(
                     iter,
                     [](scalar_t a, scalar_t b) -> scalar_t { return a + b; },
-                    /*ident=*/0);
+                    [](Vectorized<scalar_t> a, Vectorized<scalar_t> b) { return a + b; },
+                    /*ident=*/scalar_t(0));
             },
             /*include_bool=*/true
         );

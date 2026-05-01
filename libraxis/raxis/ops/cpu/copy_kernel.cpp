@@ -12,12 +12,10 @@ namespace raxis {
 namespace {
 
 void direct_copy_kernel(TensorIterator& iter) {
-    Dtype dtype = iter.dtype(0);
-
-    dtype.dispatch_all_types([&]<typename scalar_t>(std::type_identity<scalar_t>){
-        cpu_kernel(iter, [](scalar_t x) -> scalar_t {
-            return x;
-        });
+    iter.dtype(0).dispatch_all_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+        cpu_kernel_vec(iter,
+            [](scalar_t x) -> scalar_t { return x; },
+            [](Vectorized<scalar_t> x) { return x; });
     });
 }
 

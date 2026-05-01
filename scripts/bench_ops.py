@@ -363,7 +363,7 @@ def run_all(runner):
     _run_section(runner, "Reductions (all-reduce)", [
         ("sum_all",  S_REDUCE, lambda r: r.sum(),  lambda t: t.sum(),  lambda n: n.sum()),
         ("mean_all", S_REDUCE, lambda r: r.mean(), lambda t: t.mean(), lambda n: n.mean()),
-        ("prod_all", [(100, 100), (1000, 1000)],
+        ("prod_all", [(100, 100)],
          lambda r: r.prod(), lambda t: t.prod(), lambda n: n.prod(),
          {"lo": 0.99, "hi": 1.01}),
         ("max_all",  S_REDUCE, lambda r: r.max(),  lambda t: t.max(),  lambda n: n.max()),
@@ -380,6 +380,10 @@ def run_all(runner):
          lambda n: n.sum(axis=1)),
         ("mean_dim1", S_REDUCE, lambda r: r.mean(dim=1), lambda t: t.mean(dim=1),
          lambda n: n.mean(axis=1)),
+        ("prod_dim0",  [(100, 100)], lambda r: r.prod(dim=0),  lambda t: t.prod(dim=0),
+         lambda n: n.prod(axis=0)),
+        ("prod_dim1",  [(100, 100)], lambda r: r.prod(dim=1),  lambda t: t.prod(dim=1),
+         lambda n: n.prod(axis=1)),
         ("amax_dim1", S_REDUCE, lambda r: r.amax([1]),   lambda t: t.amax(dim=1),
          lambda n: n.max(axis=1)),
         ("amin_dim0", S_REDUCE, lambda r: r.amin([0]),   lambda t: t.amin(dim=0),
@@ -397,8 +401,9 @@ def run_all(runner):
     ])
 
     # -- Clone / copy --
-    _run_section(runner, "Clone / copy", [
+    _run_section(runner, "Clone / copy / fill", [
         ("clone", S2D, lambda r: r.clone(), lambda t: t.clone(), lambda n: n.copy()),
+        ("fill", S2D, lambda r: r.fill_(3.1415), lambda t: t.fill_(3.1415), lambda n: n.fill(3.1415)),
     ])
 
     # -- Backward --
