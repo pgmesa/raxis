@@ -22,6 +22,6 @@ void fill_kernel(TensorIterator& iter, Scalar value) {
 
 } // namespace
 
-REGISTER_CPU_DISPATCH(fill_stub, &fill_kernel);
+REGISTER_DISPATCH(fill_stub, &fill_kernel);
 
 } // namespace raxis

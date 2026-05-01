@@ -7,7 +7,7 @@
 
 namespace raxis {
 
-class TensorIterator;
+struct TensorIterator;
 using copy_fn = void(*)(TensorIterator&);
 DECLARE_DISPATCH(copy_fn, copy_stub);
 

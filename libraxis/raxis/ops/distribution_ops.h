@@ -11,7 +11,7 @@
 namespace raxis {
 
 class Generator;
-class TensorIterator;
+struct TensorIterator;
 
 using uniform_fn = void(*)(TensorIterator&, double, double, Generator&);
 using normal_fn  = void(*)(TensorIterator&, double, double, Generator&);

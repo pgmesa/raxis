@@ -64,11 +64,18 @@ set(RAXIS_LIB_DIR ${PROJECT_SOURCE_DIR}/raxis)
 set(RAXIS_BINDINGS_DIR ${PROJECT_SOURCE_DIR}/bindings)
 set(RAXIS_EXAMPLES_DIR ${PROJECT_SOURCE_DIR}/examples)
 
-# Collect source files (excluding bindings)
+option(RAXIS_ENABLE_SIMD "Enable SIMD vectorization" ON)
+include(cmake/DispatchCompile.cmake)
+
+# Collect source files (excluding bindings and kernels)
 file(GLOB_RECURSE RAXIS_SOURCES "${RAXIS_LIB_DIR}/*.cpp")
+list(FILTER RAXIS_SOURCES EXCLUDE REGEX ".*_kernel\\.cpp$")
 
 # Create the core library
 add_library(raxis SHARED ${RAXIS_SOURCES})
+
+file(GLOB_RECURSE RAXIS_KERNEL_SOURCES "${RAXIS_LIB_DIR}/ops/cpu/*_kernel.cpp")
+raxis_add_dispatch_sources(raxis ${RAXIS_KERNEL_SOURCES})
 
 target_compile_definitions(raxis
     PRIVATE

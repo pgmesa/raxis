@@ -98,13 +98,13 @@ void min_values_kernel(TensorIterator& iter) {
 
 } // namespace
 
-REGISTER_CPU_DISPATCH(mean_stub, nullptr);
-REGISTER_CPU_DISPATCH(prod_stub, &prod_kernel);
-REGISTER_CPU_DISPATCH(max_all_stub, &max_all_kernel);
-REGISTER_CPU_DISPATCH(min_all_stub, &min_all_kernel);
-REGISTER_CPU_DISPATCH(max_values_stub, &max_values_kernel);
-REGISTER_CPU_DISPATCH(min_values_stub, &min_values_kernel);
-// REGISTER_CPU_DISPATCH(argmax_stub, &argmax_kernel);
-// REGISTER_CPU_DISPATCH(argmin_stub, &argmin_kernel);
+REGISTER_DISPATCH(mean_stub, nullptr);
+REGISTER_DISPATCH(prod_stub, &prod_kernel);
+REGISTER_DISPATCH(max_all_stub, &max_all_kernel);
+REGISTER_DISPATCH(min_all_stub, &min_all_kernel);
+REGISTER_DISPATCH(max_values_stub, &max_values_kernel);
+REGISTER_DISPATCH(min_values_stub, &min_values_kernel);
+// REGISTER_DISPATCH(argmax_stub, &argmax_kernel);
+// REGISTER_DISPATCH(argmin_stub, &argmin_kernel);
 
 } // namespace raxis

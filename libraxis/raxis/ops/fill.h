@@ -9,7 +9,7 @@
 
 namespace raxis {
 
-class TensorIterator;
+struct TensorIterator;
 using fill_fn = void(*)(TensorIterator&, Scalar);
 DECLARE_DISPATCH(fill_fn, fill_stub);
 

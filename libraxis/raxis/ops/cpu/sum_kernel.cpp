@@ -407,7 +407,7 @@ void nansum_kernel(TensorIterator& iter) {
 
 } // anonymous namespace
 
-REGISTER_CPU_DISPATCH(sum_stub, &sum_kernel);
-REGISTER_CPU_DISPATCH(nansum_stub, &nansum_kernel);
+REGISTER_DISPATCH(sum_stub, &sum_kernel);
+REGISTER_DISPATCH(nansum_stub, &nansum_kernel);
 
 } // namespace raxis

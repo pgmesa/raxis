@@ -7,6 +7,7 @@
 #include <cassert>
 #include <bitset>
 
+#include <raxis/export.h>
 #include <raxis/core/dtype.h>
 #include <raxis/core/device.h>
 #include <raxis/core/types.h>
@@ -35,7 +36,7 @@ constexpr int64_t GRAIN_SIZE = 32768;
 
 } // namespace detail
 
-struct Operand {
+struct RAXIS_API Operand {
     using StrideVector = SmallVector<int64_t, 6>;
 
     /// The data pointer. This may be different from tensor->data_ptr() if the
@@ -92,11 +93,11 @@ private:
 };
 
 
-class TensorIterator;
+struct TensorIterator;
 class TensorIteratorConfig;
 
 
-class TensorIteratorConfig {
+class RAXIS_API TensorIteratorConfig {
 public:
     friend struct TensorIterator;
     
@@ -259,7 +260,7 @@ inline TensorIteratorConfig unary_float_op_config() {
 
 } // namespace iterator
 
-struct TensorIterator {
+struct RAXIS_API TensorIterator {
 public:
     using DimMask = std::bitset<64>;
     using PtrVector = SmallVector<char*, 4>;

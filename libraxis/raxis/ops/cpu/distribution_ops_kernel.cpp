@@ -82,8 +82,8 @@ void randint_kernel(TensorIterator& iter, int64_t low, uint64_t range, Generator
 
 } // namespace
 
-REGISTER_CPU_DISPATCH(uniform_stub, &uniform_kernel);
-REGISTER_CPU_DISPATCH(normal_stub,  &normal_kernel);
-REGISTER_CPU_DISPATCH(randint_stub, &randint_kernel);
+REGISTER_DISPATCH(uniform_stub, &uniform_kernel);
+REGISTER_DISPATCH(normal_stub,  &normal_kernel);
+REGISTER_DISPATCH(randint_stub, &randint_kernel);
 
 } // namespace raxis

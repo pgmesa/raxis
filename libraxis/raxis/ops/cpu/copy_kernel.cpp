@@ -40,6 +40,6 @@ void copy_kernel(TensorIterator& iter) {
 
 } // namespace
 
-REGISTER_CPU_DISPATCH(copy_stub, &copy_kernel);
+REGISTER_DISPATCH(copy_stub, &copy_kernel);
     
 } // namespace raxis
