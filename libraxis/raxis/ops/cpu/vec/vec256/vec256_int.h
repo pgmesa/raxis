@@ -14,7 +14,7 @@ namespace raxis::vec {
 inline namespace CPU_CAPABILITY {
 
 // AVX2 int32_t specialization: 8 x int32 in a 256-bit register.
-// int64_t, uint8_t, uint16_t use the generic fallback from vec_base.h
+// int64_t, uint8_t use the generic fallback from vec_base.h
 // because AVX2 lacks native 64-bit multiply and the element counts
 // for 8/16-bit types require more complex widening logic.
 

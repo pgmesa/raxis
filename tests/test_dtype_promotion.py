@@ -26,7 +26,6 @@ T2R = {t: r for r, t in SHARED_DTYPES}
 SHARED_DTYPES_NP = [
     (raxis.bool,    bool),
     (raxis.uint8,   np.uint8),
-    (raxis.uint16,  np.uint16),
     (raxis.int32,   np.int32),
     (raxis.int64,   np.int64),
     (raxis.float32, np.float32),

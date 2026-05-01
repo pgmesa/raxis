@@ -22,7 +22,6 @@ py::dtype numpy_dtype(const Dtype& dt) {
         case DtypeKind::Int32:   return py::dtype::of<int32_t>();
         case DtypeKind::Int64:   return py::dtype::of<int64_t>();
         case DtypeKind::Uint8:   return py::dtype::of<uint8_t>();
-        case DtypeKind::Uint16:  return py::dtype::of<uint16_t>();
         case DtypeKind::Bool:    return py::dtype::of<bool>();
         default:
             throw std::runtime_error("Unsupported dtype for numpy()");
@@ -35,7 +34,6 @@ inline Dtype dtype_from_numpy(py::dtype dt) {
     if (dt.is(py::dtype::of<int32_t>()))  return dtypes::Int32;
     if (dt.is(py::dtype::of<int64_t>()))  return dtypes::Int64;
     if (dt.is(py::dtype::of<uint8_t>()))  return dtypes::Uint8;
-    if (dt.is(py::dtype::of<uint16_t>())) return dtypes::Uint16;
     if (dt.is(py::dtype::of<bool>()))     return dtypes::Bool;
     throw py::type_error("unsupported numpy dtype: " + py::str(dt).cast<std::string>());
 }

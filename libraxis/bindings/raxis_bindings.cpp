@@ -57,7 +57,6 @@ PYBIND11_MODULE(_C, c) {
     c.attr("int32")   = py::cast(dtypes::Int32);
     c.attr("int64")   = py::cast(dtypes::Int64);
     c.attr("uint8")   = py::cast(dtypes::Uint8);
-    c.attr("uint16")  = py::cast(dtypes::Uint16);
     c.attr("bool")    = py::cast(dtypes::Bool);
     
     c.def("set_default_dtype", &raxis::set_default_dtype, py::arg("dtype"));

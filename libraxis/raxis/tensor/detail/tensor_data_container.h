@@ -30,7 +30,6 @@ struct TensorDataContainer {
 
     TensorDataContainer(bool v)     : dtype_(dtypes::Bool),    scalar_(v) {}
     TensorDataContainer(uint8_t v)  : dtype_(dtypes::Uint8),   scalar_(v) {}
-    TensorDataContainer(uint16_t v) : dtype_(dtypes::Uint16),  scalar_(v) {}
     TensorDataContainer(int32_t v)  : dtype_(dtypes::Int32),   scalar_(v) {}
     TensorDataContainer(int64_t v)  : dtype_(dtypes::Int64),   scalar_(v) {}
     TensorDataContainer(float v)    : dtype_(dtypes::Float32), scalar_(v) {}

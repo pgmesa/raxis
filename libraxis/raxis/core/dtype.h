@@ -21,7 +21,6 @@ enum class DtypeKind : uint8_t {
     Undefined = 0,
     Bool,
     Uint8,
-    Uint16,
     Int32,
     Int64,
     Float32,
@@ -37,7 +36,6 @@ constexpr size_t dtype_itemsize(DtypeKind kind) {
     switch (kind) {
         case DtypeKind::Bool:    return sizeof(bool);
         case DtypeKind::Uint8:   return sizeof(uint8_t);
-        case DtypeKind::Uint16:  return sizeof(uint16_t);
         case DtypeKind::Int32:   return sizeof(int32_t);
         case DtypeKind::Int64:   return sizeof(int64_t);
         case DtypeKind::Float32: return sizeof(float32);
@@ -50,7 +48,6 @@ constexpr const char* dtype_name(DtypeKind kind) {
     switch (kind) {
         case DtypeKind::Bool:    return "bool";
         case DtypeKind::Uint8:   return "uint8";
-        case DtypeKind::Uint16:  return "uint16";
         case DtypeKind::Int32:   return "int32";
         case DtypeKind::Int64:   return "int64";
         case DtypeKind::Float32: return "float32";
@@ -66,7 +63,6 @@ constexpr bool dtype_is_floating(DtypeKind kind) {
 constexpr bool dtype_is_integral(DtypeKind kind, bool include_bool = false) {
     if (include_bool && kind == DtypeKind::Bool) return true;
     return kind == DtypeKind::Uint8 || 
-           kind == DtypeKind::Uint16 ||
            kind == DtypeKind::Int32 || 
            kind == DtypeKind::Int64;
 }
@@ -140,7 +136,6 @@ public:
     static constexpr Dtype from_type() {
         if constexpr (std::is_same_v<T, bool>)          return Dtype(DtypeKind::Bool);
         else if constexpr (std::is_same_v<T, uint8_t>)  return Dtype(DtypeKind::Uint8);
-        else if constexpr (std::is_same_v<T, uint16_t>) return Dtype(DtypeKind::Uint16);
         else if constexpr (std::is_same_v<T, int32_t>)  return Dtype(DtypeKind::Int32);
         else if constexpr (std::is_same_v<T, int64_t>)  return Dtype(DtypeKind::Int64);
         else if constexpr (std::is_same_v<T, float32>)  return Dtype(DtypeKind::Float32);
@@ -156,8 +151,6 @@ public:
                 return func(std::type_identity<bool>{});
             case DtypeKind::Uint8:
                 return func(std::type_identity<uint8_t>{});
-            case DtypeKind::Uint16:
-                return func(std::type_identity<uint16_t>{});
             case DtypeKind::Int32:
                 return func(std::type_identity<int32_t>{});
             case DtypeKind::Int64:
@@ -176,8 +169,6 @@ public:
         switch (kind_) {
             case DtypeKind::Uint8:
                 return func(std::type_identity<uint8_t>{});
-            case DtypeKind::Uint16:
-                return func(std::type_identity<uint16_t>{});
             case DtypeKind::Int32:
                 return func(std::type_identity<int32_t>{});
             case DtypeKind::Int64:
@@ -228,8 +219,6 @@ public:
                 break;
             case DtypeKind::Uint8:
                 return func(std::type_identity<uint8_t>{});
-            case DtypeKind::Uint16:
-                return func(std::type_identity<uint16_t>{});
             case DtypeKind::Int32:
                 return func(std::type_identity<int32_t>{});
             case DtypeKind::Int64:
@@ -257,7 +246,6 @@ namespace dtypes {
 inline static constexpr Dtype Undefined = Dtype(DtypeKind::Undefined);
 inline static constexpr Dtype Bool      = Dtype(DtypeKind::Bool);
 inline static constexpr Dtype Uint8     = Dtype(DtypeKind::Uint8);
-inline static constexpr Dtype Uint16    = Dtype(DtypeKind::Uint16);
 inline static constexpr Dtype Int32     = Dtype(DtypeKind::Int32);
 inline static constexpr Dtype Int64     = Dtype(DtypeKind::Int64);
 inline static constexpr Dtype Float32   = Dtype(DtypeKind::Float32);
@@ -277,7 +265,6 @@ inline Dtype parse_dtype(const std::string& name) {
     // Simple lookup
     if (normalized == "bool")                          return dtypes::Bool;
     if (normalized == "uint8" || normalized == "u1")   return dtypes::Uint8;
-    if (normalized == "uint16" || normalized == "u2")  return dtypes::Uint16;
     if (normalized == "int32" || normalized == "i4")   return dtypes::Int32;
     if (normalized == "int64" || normalized == "i8")   return dtypes::Int64;
     if (normalized == "float32" || normalized == "f4") return dtypes::Float32;
@@ -294,7 +281,6 @@ namespace detail {
     // Short aliases for the promotion table
     constexpr auto b1 = DtypeKind::Bool;
     constexpr auto u1 = DtypeKind::Uint8;
-    constexpr auto u2 = DtypeKind::Uint16;
     constexpr auto i4 = DtypeKind::Int32;
     constexpr auto i8 = DtypeKind::Int64;
     constexpr auto f4 = DtypeKind::Float32;
@@ -312,14 +298,13 @@ namespace detail {
     // clang-format off
     constexpr std::array<std::array<DtypeKind, NUM_DTYPES>, NUM_DTYPES>
         promotion_table = {{
-        /*        b1  u1  u2  i4  i8  f4  f8*/
-        /* b1 */ {b1, u1, u2, i4, i8, f4, f8},
-        /* u1 */ {u1, u1, u2, i4, i8, f4, f8},
-        /* u2 */ {u2, u2, u2, i4, i8, f4, f8},
-        /* i4 */ {i4, i4, i4, i4, i8, f4, f8},
-        /* i8 */ {i8, i8, i8, i8, i8, f4, f8},
-        /* f4 */ {f4, f4, f4, f4, f4, f4, f8},
-        /* f8 */ {f8, f8, f8, f8, f8, f8, f8},
+        /*        b1  u1  i4  i8  f4  f8*/
+        /* b1 */ {b1, u1, i4, i8, f4, f8},
+        /* u1 */ {u1, u1, i4, i8, f4, f8},
+        /* i4 */ {i4, i4, i4, i8, f4, f8},
+        /* i8 */ {i8, i8, i8, i8, f4, f8},
+        /* f4 */ {f4, f4, f4, f4, f4, f8},
+        /* f8 */ {f8, f8, f8, f8, f8, f8},
     }};
     // clang-format on
     
@@ -359,7 +344,6 @@ namespace raxis::test {
     static_assert(promote_types(dtypes::Bool, dtypes::Bool) == dtypes::Bool);
     static_assert(promote_types(dtypes::Bool, dtypes::Uint8) == dtypes::Uint8);
     static_assert(promote_types(dtypes::Uint8, dtypes::Int32) == dtypes::Int32);
-    static_assert(promote_types(dtypes::Uint16, dtypes::Int32) == dtypes::Int32);
     static_assert(promote_types(dtypes::Int32, dtypes::Int64) == dtypes::Int64);
     static_assert(promote_types(dtypes::Int64, dtypes::Float32) == dtypes::Float32);
     static_assert(promote_types(dtypes::Float32, dtypes::Float64) == dtypes::Float64);
