@@ -1,3 +1,5 @@
 [submodule "libraxis/third_party/sleef"]
+	ignore = dirty
 	path = libraxis/third_party/sleef
 	url = https://github.com/shibatch/sleef.git
+	
