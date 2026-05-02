@@ -1,0 +1,3 @@
+[submodule "libraxis/third_party/sleef"]
+	path = libraxis/third_party/sleef
+	url = https://github.com/shibatch/sleef.git
