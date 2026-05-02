@@ -541,5 +541,250 @@ inline Vectorized<int64_t> minimum(const Vectorized<int64_t>& a, const Vectorize
     return _mm256_blendv_epi8(a, b, cmp);
 }
 
+
+template <>
+struct Vectorized<uint8_t> {
+    using value_type = uint8_t;
+    using size_type = int;
+    static constexpr size_type kSize = 32;
+
+private:
+    __m256i values_;
+
+    static inline __m256i invert(const __m256i& v) {
+        return _mm256_xor_si256(v, _mm256_set1_epi8(-1));
+    }
+
+public:
+    static constexpr size_type size() {
+        return kSize;
+    }
+
+    Vectorized() : values_(_mm256_setzero_si256()) {}
+
+    Vectorized(__m256i v) : values_(v) {}
+
+    Vectorized(uint8_t val) : values_(_mm256_set1_epi8(static_cast<char>(val))) {}
+
+    operator __m256i() const {
+        return values_;
+    }
+
+    static Vectorized loadu(const void* ptr, int64_t count = kSize) {
+        if (count == kSize) {
+            return _mm256_loadu_si256(static_cast<const __m256i*>(ptr));
+        }
+        alignas(32) uint8_t tmp[kSize] = {};
+        std::memcpy(tmp, ptr, count * sizeof(uint8_t));
+        return _mm256_load_si256(reinterpret_cast<const __m256i*>(tmp));
+    }
+
+    void store(void* ptr, int count = kSize) const {
+        if (count == kSize) {
+            _mm256_storeu_si256(static_cast<__m256i*>(ptr), values_);
+            return;
+        }
+        alignas(32) uint8_t tmp[kSize];
+        _mm256_storeu_si256(reinterpret_cast<__m256i*>(tmp), values_);
+        std::memcpy(ptr, tmp, count * sizeof(uint8_t));
+    }
+
+    uint8_t operator[](int idx) const {
+        alignas(32) uint8_t tmp[kSize];
+        _mm256_storeu_si256(reinterpret_cast<__m256i*>(tmp), values_);
+        return tmp[idx];
+    }
+
+    // --- Blend ---
+
+    template <int64_t mask>
+    static Vectorized blend(const Vectorized& a, const Vectorized& b) {
+        alignas(32) uint8_t a_tmp[kSize], b_tmp[kSize];
+        a.store(a_tmp);
+        b.store(b_tmp);
+        for (int i = 0; i < kSize; i++) {
+            if ((mask >> i) & 1) a_tmp[i] = b_tmp[i];
+        }
+        return loadu(a_tmp);
+    }
+
+    static Vectorized blendv(
+        const Vectorized& a,
+        const Vectorized& b,
+        const Vectorized& mask
+    ) {
+        return _mm256_blendv_epi8(a.values_, b.values_, mask.values_);
+    }
+
+    static Vectorized set(
+        const Vectorized& a,
+        const Vectorized& b,
+        int64_t count = kSize
+    ) {
+        alignas(32) uint8_t a_tmp[kSize], b_tmp[kSize];
+        a.store(a_tmp);
+        b.store(b_tmp);
+        for (int64_t i = 0; i < count; i++) {
+            a_tmp[i] = b_tmp[i];
+        }
+        return loadu(a_tmp);
+    }
+
+    template <typename step_t>
+    static Vectorized arange(uint8_t base = 0, step_t step = static_cast<step_t>(1)) {
+        alignas(32) uint8_t tmp[kSize];
+        for (int i = 0; i < kSize; i++) {
+            tmp[i] = static_cast<uint8_t>(base + i * step);
+        }
+        return loadu(tmp);
+    }
+
+    // --- Unary ---
+
+    Vectorized neg() const {
+        return _mm256_sub_epi8(_mm256_setzero_si256(), values_);
+    }
+
+    Vectorized abs() const {
+        return *this;
+    }
+
+    // --- Comparisons (unsigned) ---
+
+    Vectorized operator==(const Vectorized& other) const {
+        return _mm256_cmpeq_epi8(values_, other.values_);
+    }
+
+    Vectorized operator!=(const Vectorized& other) const {
+        return invert(_mm256_cmpeq_epi8(values_, other.values_));
+    }
+
+    // Unsigned less-than: a < b iff max(a,b) != a
+    Vectorized operator<(const Vectorized& other) const {
+        auto max_val = _mm256_max_epu8(values_, other.values_);
+        return invert(_mm256_cmpeq_epi8(max_val, values_));
+    }
+
+    // Unsigned less-equal: a <= b iff max(a,b) == b
+    Vectorized operator<=(const Vectorized& other) const {
+        auto max_val = _mm256_max_epu8(values_, other.values_);
+        return _mm256_cmpeq_epi8(max_val, other.values_);
+    }
+
+    Vectorized operator>(const Vectorized& other) const {
+        return other < *this;
+    }
+
+    Vectorized operator>=(const Vectorized& other) const {
+        return other <= *this;
+    }
+
+    Vectorized eq(const Vectorized& other) const;
+    Vectorized ne(const Vectorized& other) const;
+    Vectorized lt(const Vectorized& other) const;
+    Vectorized le(const Vectorized& other) const;
+    Vectorized gt(const Vectorized& other) const;
+    Vectorized ge(const Vectorized& other) const;
+
+    Vectorized isnan() const {
+        return _mm256_setzero_si256();
+    }
+
+    int zero_mask() const {
+        return _mm256_movemask_epi8(
+            _mm256_cmpeq_epi8(values_, _mm256_setzero_si256()));
+    }
+};
+
+// --- Arithmetic ---
+
+template <>
+inline Vectorized<uint8_t> operator+(const Vectorized<uint8_t>& a, const Vectorized<uint8_t>& b) {
+    return _mm256_add_epi8(a, b);
+}
+
+template <>
+inline Vectorized<uint8_t> operator-(const Vectorized<uint8_t>& a, const Vectorized<uint8_t>& b) {
+    return _mm256_sub_epi8(a, b);
+}
+
+// AVX2 has no 8-bit multiply; widen to 16-bit, multiply, re-pack
+template <>
+inline Vectorized<uint8_t> operator*(const Vectorized<uint8_t>& a, const Vectorized<uint8_t>& b) {
+    __m256i mask_00ff = _mm256_set1_epi16(0x00FF);
+    __m256i a_lo = _mm256_and_si256(a, mask_00ff);
+    __m256i b_lo = _mm256_and_si256(b, mask_00ff);
+    __m256i a_hi = _mm256_srli_epi16(a, 8);
+    __m256i b_hi = _mm256_srli_epi16(b, 8);
+    __m256i lo = _mm256_and_si256(_mm256_mullo_epi16(a_lo, b_lo), mask_00ff);
+    __m256i hi = _mm256_slli_epi16(_mm256_mullo_epi16(a_hi, b_hi), 8);
+    return _mm256_or_si256(lo, hi);
+}
+
+template <>
+inline Vectorized<uint8_t> operator/(const Vectorized<uint8_t>& a, const Vectorized<uint8_t>& b) {
+    alignas(32) uint8_t a_arr[Vectorized<uint8_t>::size()];
+    alignas(32) uint8_t b_arr[Vectorized<uint8_t>::size()];
+    a.store(a_arr);
+    b.store(b_arr);
+    for (int i = 0; i < Vectorized<uint8_t>::size(); i++) {
+        a_arr[i] = a_arr[i] / b_arr[i];
+    }
+    return Vectorized<uint8_t>::loadu(a_arr);
+}
+
+// --- Bitwise ---
+
+template <>
+inline Vectorized<uint8_t> operator&(const Vectorized<uint8_t>& a, const Vectorized<uint8_t>& b) {
+    return _mm256_and_si256(a, b);
+}
+
+template <>
+inline Vectorized<uint8_t> operator|(const Vectorized<uint8_t>& a, const Vectorized<uint8_t>& b) {
+    return _mm256_or_si256(a, b);
+}
+
+template <>
+inline Vectorized<uint8_t> operator^(const Vectorized<uint8_t>& a, const Vectorized<uint8_t>& b) {
+    return _mm256_xor_si256(a, b);
+}
+
+inline Vectorized<uint8_t> Vectorized<uint8_t>::eq(const Vectorized<uint8_t>& other) const {
+    return (*this == other) & Vectorized<uint8_t>(1);
+}
+
+inline Vectorized<uint8_t> Vectorized<uint8_t>::ne(const Vectorized<uint8_t>& other) const {
+    return (*this != other) & Vectorized<uint8_t>(1);
+}
+
+inline Vectorized<uint8_t> Vectorized<uint8_t>::gt(const Vectorized<uint8_t>& other) const {
+    return (*this > other) & Vectorized<uint8_t>(1);
+}
+
+inline Vectorized<uint8_t> Vectorized<uint8_t>::ge(const Vectorized<uint8_t>& other) const {
+    return (*this >= other) & Vectorized<uint8_t>(1);
+}
+
+inline Vectorized<uint8_t> Vectorized<uint8_t>::lt(const Vectorized<uint8_t>& other) const {
+    return (*this < other) & Vectorized<uint8_t>(1);
+}
+
+inline Vectorized<uint8_t> Vectorized<uint8_t>::le(const Vectorized<uint8_t>& other) const {
+    return (*this <= other) & Vectorized<uint8_t>(1);
+}
+
+// --- maximum/minimum (unsigned) ---
+
+template <>
+inline Vectorized<uint8_t> maximum(const Vectorized<uint8_t>& a, const Vectorized<uint8_t>& b) {
+    return _mm256_max_epu8(a, b);
+}
+
+template <>
+inline Vectorized<uint8_t> minimum(const Vectorized<uint8_t>& a, const Vectorized<uint8_t>& b) {
+    return _mm256_min_epu8(a, b);
+}
+
 } // namespacer CPU_CAPABILITY
 } // namespace raxis::vec  
