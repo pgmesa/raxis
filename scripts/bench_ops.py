@@ -1,5 +1,5 @@
 """
-Performance comparison: raxis vs PyTorch vs NumPy.
+Performance comparison: Raxis vs PyTorch vs NumPy.
 
 Usage:
     python bench_ops.py                        # all benchmarks, CPU
@@ -17,6 +17,28 @@ import time
 import numpy as np
 import torch
 import raxis
+
+
+# ---------------------------------------------------------------------------
+# Dtype categories
+# ---------------------------------------------------------------------------
+
+ALL = "all"
+NO_BOOL = "no_bool"
+FLOAT = "float"
+
+_FLOAT_DTYPES = {"float32", "float64"}
+_BOOL_DTYPES = {"bool"}
+
+
+def dtype_allowed(dtype_str, category):
+    if category == ALL:
+        return True
+    if category == NO_BOOL:
+        return dtype_str not in _BOOL_DTYPES
+    if category == FLOAT:
+        return dtype_str in _FLOAT_DTYPES
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -39,7 +61,6 @@ def _ansi(code):
     return wrap
 
 
-# Style functions
 bold      = _ansi("1")
 dim       = _ansi("2")
 green     = _ansi("32")
@@ -108,6 +129,7 @@ class BenchmarkRunner:
                  target_ops=None):
         self.device = device
         self.dtype = np.dtype(dtype)
+        self.dtype_str = dtype
         self.warmup = warmup
         self.repeats = repeats
         self.threshold = threshold
@@ -117,16 +139,26 @@ class BenchmarkRunner:
     def _should_run(self, name):
         if self.target_ops is None:
             return True
-        
+
         for op_name in self.target_ops:
             if op_name in name.lower():
                 return True
-        
+
         return False
 
     def _make_tensors(self, shape, dtype: np.dtype = None, lo=0.0, hi=1.0, seed=42):
         rng = np.random.RandomState(seed)
-        data = (rng.rand(*shape) * (hi - lo) + lo).astype(dtype or self.dtype)
+        dt = dtype or self.dtype
+
+        if np.issubdtype(dt, np.integer):
+            lo_i = int(lo) if lo != 0.0 else 0
+            hi_i = int(hi) if hi != 1.0 else 100
+            data = rng.randint(lo_i, max(hi_i, lo_i + 1), size=shape).astype(dt)
+        elif np.issubdtype(dt, np.bool_):
+            data = rng.randint(0, 2, size=shape).astype(dt)
+        else:
+            data = (rng.rand(*shape) * (hi - lo) + lo).astype(dt)
+
         r = raxis.from_numpy(data)
         t = torch.from_numpy(data.copy())
         if self.device != "cpu":
@@ -316,104 +348,131 @@ def run_all(runner):
 
     # -- Binary arithmetic --
     _run_section(runner, "Binary arithmetic", [
-        ("add", S2D, lambda r: r + r, lambda t: t + t, lambda n: n + n),
-        ("sub", S2D, lambda r: r - r, lambda t: t - t, lambda n: n - n),
-        ("mul", S2D, lambda r: r * r, lambda t: t * t, lambda n: n * n),
-        ("div", S2D, lambda r: r / r, lambda t: t / t, lambda n: n / n),
+        ("add",  ALL,     S2D, lambda r: r + r, lambda t: t + t, lambda n: n + n),
+        ("sub",  NO_BOOL, S2D, lambda r: r - r, lambda t: t - t, lambda n: n - n),
+        ("mul",  ALL,     S2D, lambda r: r * r, lambda t: t * t, lambda n: n * n),
+        ("div",  FLOAT,   S2D, lambda r: r / r, lambda t: t / t, lambda n: n / n),
     ])
 
     # -- Binary broadcast --
     _run_section_pair(runner, "Binary broadcast", [
-        ("add_bcast", BCAST_PAIRS, lambda a, b: a + b, lambda a, b: a + b),
-        ("mul_bcast", BCAST_PAIRS, lambda a, b: a * b, lambda a, b: a * b),
+        ("add_bcast", ALL, BCAST_PAIRS, lambda a, b: a + b, lambda a, b: a + b),
+        ("mul_bcast", ALL, BCAST_PAIRS, lambda a, b: a * b, lambda a, b: a * b),
     ])
 
     # -- Scalar ops --
     _run_section(runner, "Scalar ops", [
-        ("add_scalar", S2D, lambda r: r + 3.14, lambda t: t + 3.14, lambda n: n + 3.14),
-        ("mul_scalar", S2D, lambda r: r * 2.0, lambda t: t * 2.0, lambda n: n * 2.0),
+        ("add_scalar", ALL,     S2D, lambda r: r + 3, lambda t: t + 3, lambda n: n + 3),
+        ("mul_scalar", NO_BOOL, S2D, lambda r: r * 2, lambda t: t * 2, lambda n: n * 2),
     ])
 
     # -- Unary ops --
     _run_section(runner, "Unary ops", [
-        ("neg",     S2D, lambda r: r.neg(),     lambda t: t.neg(),     lambda n: -n),
-        ("abs",     S2D, lambda r: r.abs(),     lambda t: t.abs(),     lambda n: np.abs(n)),
-        ("exp",     S2D, lambda r: r.exp(),     lambda t: t.exp(),     lambda n: np.exp(n)),
-        ("log",     S2D, lambda r: r.log(),     lambda t: t.log(),     lambda n: np.log(n),
+        ("neg",     NO_BOOL, S2D, lambda r: r.neg(),     lambda t: t.neg(),     lambda n: -n),
+        ("abs",     NO_BOOL,     S2D, lambda r: r.abs(),     lambda t: t.abs(),     lambda n: np.abs(n)),
+        ("exp",     FLOAT,   S2D, lambda r: r.exp(),     lambda t: t.exp(),     lambda n: np.exp(n)),
+        ("log",     FLOAT,   S2D, lambda r: r.log(),     lambda t: t.log(),     lambda n: np.log(n),
          {"lo": 0.01, "hi": 10.0}),
-        ("sqrt",    S2D, lambda r: r.sqrt(),    lambda t: t.sqrt(),    lambda n: np.sqrt(n),
+        ("sqrt",    FLOAT,   S2D, lambda r: r.sqrt(),    lambda t: t.sqrt(),    lambda n: np.sqrt(n),
          {"lo": 0.01, "hi": 10.0}),
-        ("sigmoid", S2D, lambda r: r.sigmoid(), lambda t: t.sigmoid(), None),
+        ("sigmoid", FLOAT,   S2D, lambda r: r.sigmoid(), lambda t: t.sigmoid(), None),
+        ("ceil",    FLOAT,   S2D, lambda r: r.ceil(),    lambda t: t.ceil(),    lambda n: np.ceil(n)),
+        ("floor",   FLOAT,   S2D, lambda r: r.floor(),   lambda t: t.floor(),   lambda n: np.floor(n)),
+        ("round",   FLOAT,   S2D, lambda r: r.round(),   lambda t: t.round(),   lambda n: np.round(n)),
     ])
 
     # -- Comparison ops --
     _run_section(runner, "Comparison ops", [
-        ("gt", S2D, lambda r: raxis.gt(r, 0.5), lambda t: torch.gt(t, 0.5), None),
-        ("lt", S2D, lambda r: raxis.lt(r, 0.5), lambda t: torch.lt(t, 0.5), None),
-        ("eq", S2D, lambda r: raxis.eq(r, 0.5), lambda t: torch.eq(t, 0.5), None),
+        ("gt", ALL, S2D, lambda r: raxis.gt(r, 0.5), lambda t: torch.gt(t, 0.5), None),
+        ("ge", ALL, S2D, lambda r: raxis.ge(r, 0.5), lambda t: torch.ge(t, 0.5), None),
+        ("lt", ALL, S2D, lambda r: raxis.lt(r, 0.5), lambda t: torch.lt(t, 0.5), None),
+        ("le", ALL, S2D, lambda r: raxis.le(r, 0.5), lambda t: torch.le(t, 0.5), None),
+        ("eq", ALL, S2D, lambda r: raxis.eq(r, 0.5), lambda t: torch.eq(t, 0.5), None),
+        ("ne", ALL, S2D, lambda r: raxis.ne(r, 0.5), lambda t: torch.ne(t, 0.5), None),
     ])
 
     # -- Elementwise binary --
     _run_section(runner, "Elementwise binary", [
-        ("pow_scalar", S2D, lambda r: r.pow(2.0), lambda t: t.pow(2.0),
-         lambda n: np.power(n, 2.0), {"lo": 0.01, "hi": 10.0}),
+        ("maximum", ALL, S2D,
+         lambda r: raxis.maximum(r, r), lambda t: torch.maximum(t, t), lambda n: np.maximum(n, n)),
+        ("minimum", ALL, S2D,
+         lambda r: raxis.minimum(r, r), lambda t: torch.minimum(t, t), lambda n: np.minimum(n, n)),
+        ("pow_scalar", FLOAT, S2D,
+         lambda r: r.pow(2.0), lambda t: t.pow(2.0), lambda n: np.power(n, 2.0),
+         {"lo": 0.01, "hi": 10.0}),
+    ])
+
+    # -- Logical ops --
+    _run_section(runner, "Logical ops", [
+        ("logical_not", ALL, S2D,
+         lambda r: raxis.logical_not(r), lambda t: torch.logical_not(t),
+         lambda n: np.logical_not(n)),
+        ("logical_and", ALL, S2D,
+         lambda r: raxis.logical_and(r, r), lambda t: torch.logical_and(t, t),
+         lambda n: np.logical_and(n, n)),
+        ("logical_or", ALL, S2D,
+         lambda r: raxis.logical_or(r, r), lambda t: torch.logical_or(t, t),
+         lambda n: np.logical_or(n, n)),
     ])
 
     # -- Reductions (all-reduce) --
     _run_section(runner, "Reductions (all-reduce)", [
-        ("sum_all",  S_REDUCE, lambda r: r.sum(),  lambda t: t.sum(),  lambda n: n.sum()),
-        ("mean_all", S_REDUCE, lambda r: r.mean(), lambda t: t.mean(), lambda n: n.mean()),
-        ("prod_all", [(100, 100)],
+        ("sum_all",  ALL,   S_REDUCE, lambda r: r.sum(),  lambda t: t.sum(),  lambda n: n.sum()),
+        ("mean_all", FLOAT, S_REDUCE, lambda r: r.mean(), lambda t: t.mean(), lambda n: n.mean()),
+        ("prod_all", ALL,   [(100, 100)],
          lambda r: r.prod(), lambda t: t.prod(), lambda n: n.prod(),
          {"lo": 0.99, "hi": 1.01}),
-        ("max_all",  S_REDUCE, lambda r: r.max(),  lambda t: t.max(),  lambda n: n.max()),
-        ("min_all",  S_REDUCE, lambda r: r.min(),  lambda t: t.min(),  lambda n: n.min()),
-        ("amax_all",  S_REDUCE, lambda r: r.amax(), lambda t: t.amax(), None),
-        ("amin_all",  S_REDUCE, lambda r: r.amin(), lambda t: t.amin(), None),
+        ("max_all",  ALL,   S_REDUCE, lambda r: r.max(),  lambda t: t.max(),  lambda n: n.max()),
+        ("min_all",  ALL,   S_REDUCE, lambda r: r.min(),  lambda t: t.min(),  lambda n: n.min()),
+        ("amax_all", ALL,   S_REDUCE, lambda r: r.amax(), lambda t: t.amax(), None),
+        ("amin_all", ALL,   S_REDUCE, lambda r: r.amin(), lambda t: t.amin(), None),
     ])
 
     # -- Reductions (dim) --
     _run_section(runner, "Reductions (dim)", [
-        ("sum_dim0",  S_REDUCE, lambda r: r.sum(dim=0),  lambda t: t.sum(dim=0),
+        ("sum_dim0",  ALL,   S_REDUCE, lambda r: r.sum(dim=0),  lambda t: t.sum(dim=0),
          lambda n: n.sum(axis=0)),
-        ("sum_dim1",  S_REDUCE, lambda r: r.sum(dim=1),  lambda t: t.sum(dim=1),
+        ("sum_dim1",  ALL,   S_REDUCE, lambda r: r.sum(dim=1),  lambda t: t.sum(dim=1),
          lambda n: n.sum(axis=1)),
-        ("mean_dim1", S_REDUCE, lambda r: r.mean(dim=1), lambda t: t.mean(dim=1),
+        ("mean_dim1", FLOAT, S_REDUCE, lambda r: r.mean(dim=1), lambda t: t.mean(dim=1),
          lambda n: n.mean(axis=1)),
-        ("prod_dim0",  [(100, 100)], lambda r: r.prod(dim=0),  lambda t: t.prod(dim=0),
+        ("prod_dim0", ALL,   [(100, 100)], lambda r: r.prod(dim=0), lambda t: t.prod(dim=0),
          lambda n: n.prod(axis=0)),
-        ("prod_dim1",  [(100, 100)], lambda r: r.prod(dim=1),  lambda t: t.prod(dim=1),
+        ("prod_dim1", ALL,   [(100, 100)], lambda r: r.prod(dim=1), lambda t: t.prod(dim=1),
          lambda n: n.prod(axis=1)),
-        ("amax_dim1", S_REDUCE, lambda r: r.amax([1]),   lambda t: t.amax(dim=1),
+        ("amax_dim1", ALL,   S_REDUCE, lambda r: r.amax([1]),   lambda t: t.amax(dim=1),
          lambda n: n.max(axis=1)),
-        ("amin_dim0", S_REDUCE, lambda r: r.amin([0]),   lambda t: t.amin(dim=0),
+        ("amin_dim0", ALL,   S_REDUCE, lambda r: r.amin([0]),   lambda t: t.amin(dim=0),
          lambda n: n.min(axis=0)),
     ])
 
     # -- Shape ops --
     _run_section(runner, "Shape ops", [
-        ("transpose",  S2D, lambda r: r.transpose(0, 1), lambda t: t.transpose(0, 1), None),
-        ("reshape",    S2D, lambda r: r.reshape((-1,)),   lambda t: t.reshape((-1,)),   None),
-        ("contiguous", S2D,
+        ("transpose",  ALL, S2D, lambda r: r.transpose(0, 1), lambda t: t.transpose(0, 1), None),
+        ("reshape",    ALL, S2D, lambda r: r.reshape((-1,)),   lambda t: t.reshape((-1,)),   None),
+        ("contiguous", ALL, S2D,
          lambda r: r.transpose(0, 1).contiguous(),
          lambda t: t.transpose(0, 1).contiguous(),
          lambda n: np.ascontiguousarray(n.T)),
     ])
 
-    # -- Clone / copy --
+    # -- Clone / copy / fill --
     _run_section(runner, "Clone / copy / fill", [
-        ("clone", S2D, lambda r: r.clone(), lambda t: t.clone(), lambda n: n.copy()),
-        ("fill", S2D, lambda r: r.fill_(3.1415), lambda t: t.fill_(3.1415), lambda n: n.fill(3.1415)),
+        ("clone", ALL, S2D, lambda r: r.clone(), lambda t: t.clone(), lambda n: n.copy()),
+        ("fill",  ALL, S2D,
+         lambda r: r.fill_(3), lambda t: t.fill_(3), lambda n: n.fill(3)),
     ])
 
     # -- Backward --
     has_any = False
-    for name, shapes, fn, kw in [
-        ("add",  S2D,     lambda t: t + t,   None),
-        ("mul",  S2D,     lambda t: t * t,   None),
-        ("sum",  S_REDUCE, lambda t: t.sum(), None),
-        ("exp",  S2D,     lambda t: t.exp(), None),
+    for name, cat, shapes, fn, kw in [
+        ("add",  FLOAT, S2D,      lambda t: t + t,   None),
+        ("mul",  FLOAT, S2D,      lambda t: t * t,   None),
+        ("sum",  FLOAT, S_REDUCE, lambda t: t.sum(), None),
+        ("exp",  FLOAT, S2D,      lambda t: t.exp(), None),
     ]:
+        if not dtype_allowed(runner.dtype_str, cat):
+            continue
         if runner._should_run(name + " bwd"):
             if not has_any:
                 print_header("Backward")
@@ -426,15 +485,17 @@ def _run_section(runner, title, benchmarks):
     header_printed = False
 
     for entry in benchmarks:
-        name, shapes = entry[0], entry[1]
-        raxis_fn, torch_fn = entry[2], entry[3]
-        numpy_fn = entry[4] if len(entry) > 4 else None
-        data_kw = entry[5] if len(entry) > 5 else None
+        name, cat, shapes = entry[0], entry[1], entry[2]
+        raxis_fn, torch_fn = entry[3], entry[4]
+        numpy_fn = entry[5] if len(entry) > 5 else None
+        data_kw = entry[6] if len(entry) > 6 else None
 
-        # Handle the case where numpy_fn slot is actually data_kw (dict)
         if isinstance(numpy_fn, dict):
             data_kw = numpy_fn
             numpy_fn = None
+
+        if not dtype_allowed(runner.dtype_str, cat):
+            continue
 
         if not runner._should_run(name):
             continue
@@ -451,7 +512,10 @@ def _run_section_pair(runner, title, benchmarks):
     """Run a list of two-tensor benchmarks, printing the header only if any match."""
     header_printed = False
 
-    for name, pairs, raxis_fn, torch_fn in benchmarks:
+    for name, cat, pairs, raxis_fn, torch_fn in benchmarks:
+        if not dtype_allowed(runner.dtype_str, cat):
+            continue
+
         if not runner._should_run(name):
             continue
 
