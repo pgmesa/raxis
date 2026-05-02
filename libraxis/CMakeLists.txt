@@ -34,7 +34,7 @@ target_include_directories(raxis
 # ─────────────────────────────────────────────────────────────────────────────
 # Parallelization
 option(RAXIS_PARALLEL "Enable intra-op parallelism" ON)
-option(RAXIS_USE_OPENMP "Prefer OpenMP over native thread pool" OFF)
+option(RAXIS_USE_OPENMP "Prefer OpenMP over native thread pool" ON)
 
 if(RAXIS_PARALLEL)
     if(RAXIS_USE_OPENMP)
