@@ -1,28 +1,44 @@
-# Specify a pybind11 installation, if not, the one installed
-# in the current virtual environment will be used
-set(PYBIND11_PATH "" CACHE PATH "Path to Pybind11 installation")
+set(PYTHON_EXECUTABLE "" CACHE STRING "Path to the Python executable to use")
+if(PYTHON_EXECUTABLE)
+    set(Python_EXECUTABLE ${PYTHON_EXECUTABLE})
+endif()
 
+find_package(Python COMPONENTS Interpreter Development REQUIRED)
+
+message(STATUS "Python Interpreter: ${Python_EXECUTABLE}")
+message(STATUS "Python Version: ${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}")
+
+get_filename_component(PYTHON_EXECUTABLE_DIR ${Python_EXECUTABLE} DIRECTORY)
+
+if(WIN32)
+    list(APPEND CMAKE_PREFIX_PATH "${PYTHON_EXECUTABLE_DIR}\\Lib\\site-packages")
+elseif(UNIX)
+    execute_process(
+        COMMAND "${Python_EXECUTABLE}" -c
+            "import sysconfig; print(sysconfig.get_path('purelib'))"
+        OUTPUT_VARIABLE PYTHON_SITE_PACKAGES
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    list(APPEND CMAKE_PREFIX_PATH "${PYTHON_SITE_PACKAGES}")
+endif()
+
+set(PYBIND11_PATH "" CACHE PATH "Path to pybind11 installation")
 if(PYBIND11_PATH)
     list(APPEND CMAKE_PREFIX_PATH ${PYBIND11_PATH})
 endif()
 
 find_package(pybind11 REQUIRED)
 
-# Create Python module
 pybind11_add_module(raxis_bindings raxis_bindings.cpp)
 add_library(raxis::bindings ALIAS raxis_bindings)
 
-# Set C++ standard to match PyTorch
-set_target_properties(raxis_bindings PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
-
-# Link against core library
-target_link_libraries(raxis_bindings PRIVATE raxis::raxis)
-
-# Set output properties
-set_target_properties(raxis_bindings 
-    PROPERTIES
-        PREFIX ""                             # no "lib" prefix
-        OUTPUT_NAME "_C"
-        SUFFIX "${PYTHON_MODULE_EXTENSION}"   # .so or .pyd
-        CXX_VISIBILITY_PRESET "hidden"
+set_target_properties(raxis_bindings PROPERTIES
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED ON
+    PREFIX ""
+    OUTPUT_NAME "_C"
+    SUFFIX "${PYTHON_MODULE_EXTENSION}"
+    CXX_VISIBILITY_PRESET "hidden"
 )
+
+target_link_libraries(raxis_bindings PRIVATE raxis::raxis)
