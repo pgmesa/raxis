@@ -1,5 +1,7 @@
 #pragma once
 
+// DO NOT DEFINE STATIC DATA IN THIS HEADER!
+
 #include <immintrin.h>
 
 #include <cmath>
