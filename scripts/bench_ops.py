@@ -6,7 +6,7 @@ Usage:
     python bench_ops.py --device cuda          # all benchmarks, CUDA
     python bench_ops.py -k sum                 # filter by name substring
     python bench_ops.py --repeats 50           # more repeats for stability
-    python bench_ops.py --threshold 20         # flag anything >20x slower
+    python bench_ops.py --threshold 2         # flag anything >2x slower
     python bench_ops.py --no-color             # disable terminal colors
 """
 
@@ -557,7 +557,7 @@ def main():
     parser.add_argument("--device", default="cpu", choices=["cpu", "cuda"])
     parser.add_argument("--dtype", default="float32", choices=dtypes)
     parser.add_argument("--warmup", type=int, default=5)
-    parser.add_argument("--repeats", type=int, default=20)
+    parser.add_argument("--repeats", type=int, default=50)
     parser.add_argument("--threshold", type=float, default=1.5)
     parser.add_argument("-k", "--filter", dest="target_ops", nargs='+', default=None)
     parser.add_argument("--no-color", action="store_true")
