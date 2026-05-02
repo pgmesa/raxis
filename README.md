@@ -10,7 +10,7 @@ pip install raxis
 
 ### Prerequisites
 
-- C++20 compiler (MSVC 19.30+, GCC 12+, Clang 15+)
+- C++20 compiler (MSVC 17+, GCC 12+, Clang 14+)
 - CMake 3.22+
 - Python 3.10+ with pybind11 (`pip install pybind11`)
 
@@ -30,7 +30,6 @@ git submodule update --init
 ### Configure and build
 
 ```bash
-cd libraxis
 cmake --preset release
 cmake --build --preset release
 ```
