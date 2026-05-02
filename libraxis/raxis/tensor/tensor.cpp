@@ -430,6 +430,8 @@ Tensor Tensor::round() const { return ::raxis::round(*this); }
 Tensor Tensor::exp() const { return ::raxis::exp(*this); }
 Tensor Tensor::log() const { return ::raxis::log(*this); }
 Tensor Tensor::sqrt() const { return ::raxis::sqrt(*this); }
+Tensor Tensor::rsqrt() const { return ::raxis::rsqrt(*this); }
+Tensor Tensor::reciprocal() const { return ::raxis::reciprocal(*this); }
 Tensor Tensor::sigmoid() const { return ::raxis::sigmoid(*this); }
 Tensor Tensor::logical_not() const { return ::raxis::logical_not(*this); }
 
@@ -441,6 +443,8 @@ Tensor& Tensor::round_() const { return ::raxis::round_(const_cast<Tensor&>(*thi
 Tensor& Tensor::exp_() const { return ::raxis::exp_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::log_() const { return ::raxis::log_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::sqrt_() const { return ::raxis::sqrt_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::rsqrt_() const { return ::raxis::rsqrt_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::reciprocal_() const { return ::raxis::reciprocal_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::sigmoid_() const { return ::raxis::sigmoid_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::logical_not_() const { return ::raxis::logical_not_(const_cast<Tensor&>(*this)); }
 

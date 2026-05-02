@@ -504,15 +504,14 @@ void sum_kernel_impl(TensorIterator& iter) {
 
 void sum_kernel(TensorIterator& iter) {
     if (iter.common_dtype().is_integral(/*include_bool=*/true)) {
-        iter.common_dtype().dispatch_integral_types(
+        iter.common_dtype().dispatch_integral_and_bool_types(
             [&]<typename scalar_t>(std::type_identity<scalar_t>) {
                 cpu_reduce_kernel_vec<scalar_t>(
                     iter,
                     [](scalar_t a, scalar_t b) -> scalar_t { return a + b; },
                     [](Vectorized<scalar_t> a, Vectorized<scalar_t> b) { return a + b; },
                     /*ident=*/scalar_t(0));
-            },
-            /*include_bool=*/true
+            }
         );
         return;
     }

@@ -14,9 +14,9 @@
 
 namespace raxis {
 
-using namespace vec;
-
 namespace {
+
+using namespace vec;
 
 void add_kernel(TensorIterator& iter) {
     iter.common_dtype().dispatch_all_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
@@ -170,19 +170,6 @@ void minimum_kernel(TensorIterator& iter) {
     });
 }
  
-void pow_kernel(TensorIterator& iter) {
-    iter.common_dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
-        cpu_kernel_vec(iter,
-            [](scalar_t a, scalar_t b) -> scalar_t {
-                return std::pow(a, b);
-            },
-            [](Vectorized<scalar_t> a, Vectorized<scalar_t> b) {
-                return a.pow(b);
-            }
-        );
-    });
-}
- 
 void logical_and_kernel(TensorIterator& iter) {
     iter.common_dtype().dispatch_all_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
         cpu_kernel(iter, [](scalar_t a, scalar_t b) -> bool {
@@ -213,7 +200,6 @@ REGISTER_DISPATCH(eq_stub, &eq_kernel);
 REGISTER_DISPATCH(ne_stub, &ne_kernel);
 REGISTER_DISPATCH(maximum_stub, &maximum_kernel);
 REGISTER_DISPATCH(minimum_stub, &minimum_kernel);
-REGISTER_DISPATCH(pow_stub, &pow_kernel);
 REGISTER_DISPATCH(logical_and_stub, &logical_and_kernel);
 REGISTER_DISPATCH(logical_or_stub, &logical_or_kernel);
 

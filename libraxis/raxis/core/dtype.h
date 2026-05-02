@@ -212,19 +212,26 @@ public:
     }
 
     template<typename Func>
-    auto dispatch_integral_types(Func&& func, bool include_bool = false) const {
+    auto dispatch_integral_types(Func&& func) const {
+        // default: no bool
         switch (kind_) {
-            case DtypeKind::Bool:
-                if (include_bool) return func(std::type_identity<bool>{});
-                break;
-            case DtypeKind::Uint8:
-                return func(std::type_identity<uint8_t>{});
-            case DtypeKind::Int32:
-                return func(std::type_identity<int32_t>{});
-            case DtypeKind::Int64:
-                return func(std::type_identity<int64_t>{});
-            default:
-                break;
+            case DtypeKind::Uint8:  return func(std::type_identity<uint8_t>{});
+            case DtypeKind::Int32:  return func(std::type_identity<int32_t>{});
+            case DtypeKind::Int64:  return func(std::type_identity<int64_t>{});
+            default: break;
+        }
+        RAXIS_INTERNAL_ASSERT(false, 
+            "Cannot integer dispatch '", dtype_name(kind_), "' dtype");
+    }
+
+    template<typename Func>
+    auto dispatch_integral_and_bool_types(Func&& func) const {
+        switch (kind_) {
+            case DtypeKind::Bool:   return func(std::type_identity<bool>{});
+            case DtypeKind::Uint8:  return func(std::type_identity<uint8_t>{});
+            case DtypeKind::Int32:  return func(std::type_identity<int32_t>{});
+            case DtypeKind::Int64:  return func(std::type_identity<int64_t>{});
+            default: break;
         }
         RAXIS_INTERNAL_ASSERT(false, 
             "Cannot integer dispatch '", dtype_name(kind_), "' dtype");

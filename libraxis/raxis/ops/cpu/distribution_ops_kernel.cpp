@@ -67,7 +67,7 @@ void normal_kernel(TensorIterator& iter, double mean, double std_val, Generator&
 }
 
 void randint_kernel(TensorIterator& iter, int64_t low, uint64_t range, Generator& gen) {
-    iter.dtype().dispatch_integral_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+    iter.dtype().dispatch_integral_and_bool_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
         std::lock_guard<std::mutex> lock(gen.mutex());
         auto& engine = gen.engine();
 
@@ -77,7 +77,7 @@ void randint_kernel(TensorIterator& iter, int64_t low, uint64_t range, Generator
             );
             return static_cast<scalar_t>(val);
         });
-    }, /*include_bool=*/true);
+    });
 }
 
 } // namespace

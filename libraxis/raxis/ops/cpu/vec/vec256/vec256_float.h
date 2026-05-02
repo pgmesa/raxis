@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <cstring>
 
+#include <sleef.h>
+
 #include <raxis/ops/cpu/vec/vec_base.h>
 
 
@@ -159,19 +161,20 @@ public:
 
     Vectorized frac() const;
 
-    Vectorized exp() const { return map(std::exp); }
-    Vectorized log() const { return map(std::log); }
-    Vectorized log2() const { return map(std::log2); }
+    Vectorized exp() const {
+        return Sleef_expf8_u10(values_);
+    }
+
+    Vectorized log() const {
+        return Sleef_logf8_u10(values_);
+    }
+
+    Vectorized log2() const {
+        return Sleef_log2f8_u10(values_);
+    }
 
     Vectorized pow(const Vectorized& exponent) const {
-        alignas(32) float base_arr[kSize];
-        alignas(32) float exp_arr[kSize];
-        store(base_arr);
-        exponent.store(exp_arr);
-        for (int i = 0; i < kSize; i++) {
-            base_arr[i] = std::pow(base_arr[i], exp_arr[i]);
-        }
-        return _mm256_load_ps(base_arr);
+        return Sleef_powf8_u10(values_, exponent);
     }
 
     // --- Comparisons ---

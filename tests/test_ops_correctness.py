@@ -173,6 +173,8 @@ UNARY_OPS = [
     ("exp",     "exp",     randf_small),
     ("log",     "log",     randf_positive),
     ("sqrt",    "sqrt",    randf_positive),
+    ("rsqrt",      "rsqrt",      randf_positive),
+    ("reciprocal", "reciprocal", randf_nonzero),
     ("sigmoid", "sigmoid", randf_centered),
 ]
 
@@ -185,6 +187,8 @@ UNARY_INPLACE_OPS = [
     ("exp_",     randf_small),
     ("log_",     randf_positive),
     ("sqrt_",    randf_positive),
+    ("rsqrt_",      randf_positive),
+    ("reciprocal_", randf_nonzero),
     ("sigmoid_", randf_centered),
 ]
 
@@ -402,45 +406,72 @@ class TestBinaryElementwise:
 
     # -- pow --
 
-    @pytest.mark.parametrize("exp", [0.5, 2.0, -1.0, 3])
-    def test_pow_scalar(self, exp, device):
+    @pytest.mark.parametrize("exp", [0.0, 1.0, 0.5, -0.5, -1.0, 2.0, 3.0, -2.0, 2.5])
+    def test_pow_scalar_fastpaths(self, exp, device):
         data = randf_positive(10, 20)
         r, t = make_pair(data, device)
         check_match(r.pow(exp), t.pow(exp), context=f"pow({exp})")
-
-    def test_pow_tensor(self, device):
-        base = randf_positive(10, 20, seed=1)
-        exp = randf(10, 20, seed=2, lo=0.5, hi=3.0)
+ 
+    @pytest.mark.parametrize("exp", [0.0, 1.0, 0.5, -0.5, -1.0, 2.0, 3.0, -2.0, 2.5])
+    @pytest.mark.parametrize("shape", ELEMENTWISE_BINARY_SHAPES)
+    def test_pow_scalar_shapes(self, exp, shape, device):
+        data = randf_positive(*shape)
+        r, t = make_pair(data, device)
+        check_match(r.pow(exp), t.pow(exp), context=f"pow({exp}) {shape}")
+ 
+    # -- pow: Scalar base --
+ 
+    @pytest.mark.parametrize("base", [1.0, 2.0, 0.5, 3.0])
+    def test_pow_scalar_base(self, base, device):
+        exp_data = randf(10, 20, lo=0.5, hi=3.0)
+        r_e, t_e = make_pair(exp_data, device)
+        check_match(
+            raxis.pow(base, r_e),
+            torch.pow(base, t_e),
+            context=f"pow({base}, tensor)")
+ 
+    # -- pow: integer tensors --
+ 
+    def test_pow_int_tensor(self, device):
+        base = np.array([[2, 3, 4], [5, 1, -1]], dtype=np.int64)
+        exp = np.array([[3, 2, 1], [0, 10, 3]], dtype=np.int64)
         r_b, t_b = make_pair(base, device)
         r_e, t_e = make_pair(exp, device)
-        check_match(r_b.pow(r_e), t_b.pow(t_e), context="pow(tensor)")
-
-    def test_pow_operator(self, device):
-        data = randf_positive(10, 20)
-        r, t = make_pair(data, device)
-        check_match(r ** 2.0, t ** 2.0, context="** operator")
-
-    def test_pow_module(self, device):
-        data = randf_positive(10, 20)
-        r, t = make_pair(data, device)
-        check_match(raxis.pow(r, 2.0), torch.pow(t, 2.0), context="raxis.pow")
-
-    @pytest.mark.parametrize("lhs_shape,rhs_shape,desc", BROADCAST_CASES,
-                             ids=[c[2] for c in BROADCAST_CASES])
-    def test_pow_broadcast(self, lhs_shape, rhs_shape, desc, device):
-        base = randf_positive(*lhs_shape, seed=1)
-        exp = randf(*rhs_shape, seed=2, lo=0.5, hi=3.0)
+        check_match(raxis.pow(r_b, r_e), torch.pow(t_b, t_e),
+                    atol=0, context="pow int tensor-tensor")
+ 
+    def test_pow_int_scalar(self, device):
+        base = np.array([1, 2, 3, 4, 5], dtype=np.int64)
+        r, t = make_pair(base, device)
+        check_match(r.pow(3), t.pow(3), atol=0, context="pow int scalar")
+ 
+    def test_pow_int_negative_exp(self, device):
+        base = np.array([1, -1, 2, -2, 3], dtype=np.int64)
+        exp = np.array([-1, -1, -1, -2, -3], dtype=np.int64)
         r_b, t_b = make_pair(base, device)
         r_e, t_e = make_pair(exp, device)
-        check_match(r_b.pow(r_e), t_b.pow(t_e), context=f"pow {desc}")
-
-    def test_pow_backward(self, device):
+        check_match(raxis.pow(r_b, r_e), torch.pow(t_b, t_e),
+                    atol=0, context="pow int negative exp")
+ 
+    # -- pow: edge cases --
+ 
+    def test_pow_zero_exp(self, device):
         data = randf_positive(10, 20)
         r, t = make_pair(data, device)
-        r, t, grad_ok = try_requires_grad(r, t)
-        if not grad_ok:
-            pytest.skip("pow: requires_grad not supported")
-        try_backward(r.pow(2.0), t.pow(2.0), [r], [t], context="pow")
+        check_match(r.pow(0.0), t.pow(0.0), context="pow(0) == 1")
+ 
+    def test_pow_one_exp(self, device):
+        data = randf_positive(10, 20)
+        r, t = make_pair(data, device)
+        check_match(r.pow(1.0), t.pow(1.0), context="pow(1) == identity")
+ 
+    def test_pow_scalar_base_one(self, device):
+        exp_data = randf(10, 20, lo=0.5, hi=3.0)
+        r_e, t_e = make_pair(exp_data, device)
+        check_match(
+            raxis.pow(1.0, r_e),
+            torch.pow(1.0, t_e),
+            context="pow(1.0, tensor) == 1")
 
     # -- logical_and / logical_or --
 

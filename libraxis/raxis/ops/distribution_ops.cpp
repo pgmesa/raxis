@@ -64,14 +64,14 @@ Tensor& randint_(Tensor& self, int64_t low, int64_t high) {
 
     auto range = static_cast<uint64_t>(high) - static_cast<uint64_t>(low);
 
-    self.dtype().dispatch_integral_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+    self.dtype().dispatch_integral_and_bool_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
         using lim = std::numeric_limits<scalar_t>;
         RAXIS_CHECK(
             low >= static_cast<int64_t>(lim::lowest()) &&
             (high - 1) <= static_cast<int64_t>(lim::max()),
             "randint_ range [", low, ", ", high, ") is outside the range of ", self.dtype()
         );
-    }, /*include_bool=*/true);
+    });
 
     auto iter = TensorIteratorConfig()
         .check_all_same_dtype(false)

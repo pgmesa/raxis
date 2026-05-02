@@ -14,6 +14,10 @@
 
 namespace raxis {
 
+namespace {
+
+using namespace vec;
+
 template <typename F>
 inline void unary_outer_loop(char* data[2], const int64_t strides[2],
                              int64_t n, F&& f) {
@@ -23,8 +27,6 @@ inline void unary_outer_loop(char* data[2], const int64_t strides[2],
         data[1] += strides[1];
     }
 }
-
-using namespace vec;
 
 template <typename func_t, typename vec_func_t>
 inline void vectorized_reduction(char** data, int64_t n, int64_t stride,
@@ -150,4 +152,5 @@ void cpu_reduce_kernel_vec(TensorIterator& iter, func_t op, vec_func_t vop, scal
     );
 }
 
+}
 } // namespace raxis

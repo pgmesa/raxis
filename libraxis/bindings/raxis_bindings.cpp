@@ -498,6 +498,8 @@ PYBIND11_MODULE(_C, c) {
         .def("exp", &raxis::Tensor::exp)
         .def("log", &raxis::Tensor::log)
         .def("sqrt", &raxis::Tensor::sqrt)
+        .def("rsqrt", &raxis::Tensor::rsqrt)
+        .def("reciprocal", &raxis::Tensor::reciprocal)
         .def("sigmoid", &raxis::Tensor::sigmoid)
         .def("logical_not", &raxis::Tensor::logical_not)
 
@@ -509,6 +511,8 @@ PYBIND11_MODULE(_C, c) {
         .def("exp_", &raxis::Tensor::exp_)
         .def("log_", &raxis::Tensor::log_)
         .def("sqrt_", &raxis::Tensor::sqrt_)
+        .def("rsqrt_", &raxis::Tensor::rsqrt_)
+        .def("reciprocal_", &raxis::Tensor::reciprocal_)
         .def("sigmoid_", &raxis::Tensor::sigmoid_)
         .def("logical_not_", &raxis::Tensor::logical_not_)
         
@@ -846,10 +850,13 @@ PYBIND11_MODULE(_C, c) {
  
     c.def("pow",
         py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::pow),
-        py::arg("input"), py::arg("exponent"));
+        py::arg("base"), py::arg("exponent"));
     c.def("pow",
         py::overload_cast<const raxis::Tensor&, raxis::Scalar>(&raxis::pow),
-        py::arg("input"), py::arg("exponent"));
+        py::arg("base"), py::arg("exponent"));
+    c.def("pow",
+        py::overload_cast<raxis::Scalar, const raxis::Tensor&>(&raxis::pow),
+        py::arg("base"), py::arg("exponent"));
  
     // Logical Ops
     c.def("logical_and",
@@ -887,6 +894,12 @@ PYBIND11_MODULE(_C, c) {
         py::arg("input"));
     c.def("sqrt",
         py::overload_cast<const raxis::Tensor&>(&raxis::sqrt),
+        py::arg("input"));
+    c.def("rsqrt",
+        py::overload_cast<const raxis::Tensor&>(&raxis::rsqrt),
+        py::arg("input"));
+    c.def("reciprocal",
+        py::overload_cast<const raxis::Tensor&>(&raxis::reciprocal),
         py::arg("input"));
     c.def("sigmoid",
         py::overload_cast<const raxis::Tensor&>(&raxis::sigmoid),

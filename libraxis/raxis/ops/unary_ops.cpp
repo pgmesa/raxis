@@ -222,6 +222,47 @@ Tensor& sqrt_(Tensor& self) {
     return self;
 }
 
+Tensor rsqrt(const Tensor& self) {
+    Tensor out;
+    auto iter = iterator::unary_float_op_config()
+        .add_output(out)
+        .add_input(self)
+        .build();
+
+    rsqrt_stub(iter.device_type(), iter);
+    return iter.get_output(0);
+}
+
+Tensor& rsqrt_(Tensor& self) {
+    auto iter = iterator::unary_float_op_config()
+        .add_output(self)
+        .add_input(self)
+        .build();
+
+    rsqrt_stub(iter.device_type(), iter);
+    return self;
+}
+
+Tensor reciprocal(const Tensor& self) {
+    Tensor out;
+    auto iter = iterator::unary_float_op_config()
+        .add_output(out)
+        .add_input(self)
+        .build();
+
+    reciprocal_stub(iter.device_type(), iter);
+    return iter.get_output(0);
+}
+
+Tensor& reciprocal_(Tensor& self) {
+    auto iter = iterator::unary_float_op_config()
+        .add_output(self)
+        .add_input(self)
+        .build();
+
+    reciprocal_stub(iter.device_type(), iter);
+    return self;
+}
 
 Tensor sigmoid(const Tensor& self) {
     Tensor out;
@@ -276,6 +317,8 @@ DEFINE_DISPATCH(round_stub);
 DEFINE_DISPATCH(exp_stub);
 DEFINE_DISPATCH(log_stub);
 DEFINE_DISPATCH(sqrt_stub);
+DEFINE_DISPATCH(rsqrt_stub);
+DEFINE_DISPATCH(reciprocal_stub);
 DEFINE_DISPATCH(sigmoid_stub);
 DEFINE_DISPATCH(logical_not_stub);
 

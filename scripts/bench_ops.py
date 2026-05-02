@@ -173,14 +173,16 @@ class BenchmarkRunner:
         if self.device != "cpu" and torch.cuda.is_available():
             torch.cuda.synchronize()
 
-        t0 = time.perf_counter()
-        for _ in range(self.repeats):
-            fn()
+        samples = []
+        for _ in range(3):
+            t0 = time.perf_counter()
+            for _ in range(self.repeats):
+                fn()
+            if self.device != "cpu" and torch.cuda.is_available():
+                torch.cuda.synchronize()
+            samples.append((time.perf_counter() - t0) / self.repeats)
 
-        if self.device != "cpu" and torch.cuda.is_available():
-            torch.cuda.synchronize()
-
-        return (time.perf_counter() - t0) / self.repeats
+        return min(samples)
 
     def bench(self, name, shapes, raxis_fn, torch_fn, numpy_fn=None,
               data_kw=None, shape_label=None):
@@ -337,8 +339,8 @@ class BenchmarkRunner:
 # ---------------------------------------------------------------------------
 
 def run_all(runner):
-    S2D = [(100, 100), (1000, 1000), (4000, 4000)]
-    S_REDUCE = [(100, 100), (1000, 1000), (4000, 4000)]
+    S2D = [(100, 100), (500, 500), (1000, 1000)]
+    S_REDUCE = [(100, 100), (500, 500), (1000, 1000)]
 
     BCAST_PAIRS = [
         ((1000, 1000), (1000, 1)),
@@ -368,17 +370,21 @@ def run_all(runner):
 
     # -- Unary ops --
     _run_section(runner, "Unary ops", [
-        ("neg",     NO_BOOL, S2D, lambda r: r.neg(),     lambda t: t.neg(),     lambda n: -n),
-        ("abs",     NO_BOOL,     S2D, lambda r: r.abs(),     lambda t: t.abs(),     lambda n: np.abs(n)),
-        ("exp",     FLOAT,   S2D, lambda r: r.exp(),     lambda t: t.exp(),     lambda n: np.exp(n)),
-        ("log",     FLOAT,   S2D, lambda r: r.log(),     lambda t: t.log(),     lambda n: np.log(n),
+        ("neg",     NO_BOOL, S2D, lambda r: r.neg(), lambda t: t.neg(), lambda n: -n),
+        ("abs",     NO_BOOL,     S2D, lambda r: r.abs(), lambda t: t.abs(), lambda n: np.abs(n)),
+        ("exp",     FLOAT,   S2D, lambda r: r.exp(), lambda t: t.exp(), lambda n: np.exp(n)),
+        ("log",     FLOAT,   S2D, lambda r: r.log(), lambda t: t.log(), lambda n: np.log(n),
          {"lo": 0.01, "hi": 10.0}),
-        ("sqrt",    FLOAT,   S2D, lambda r: r.sqrt(),    lambda t: t.sqrt(),    lambda n: np.sqrt(n),
+        ("sqrt",    FLOAT,   S2D, lambda r: r.sqrt(), lambda t: t.sqrt(), lambda n: np.sqrt(n),
          {"lo": 0.01, "hi": 10.0}),
         ("sigmoid", FLOAT,   S2D, lambda r: r.sigmoid(), lambda t: t.sigmoid(), None),
-        ("ceil",    FLOAT,   S2D, lambda r: r.ceil(),    lambda t: t.ceil(),    lambda n: np.ceil(n)),
-        ("floor",   FLOAT,   S2D, lambda r: r.floor(),   lambda t: t.floor(),   lambda n: np.floor(n)),
-        ("round",   FLOAT,   S2D, lambda r: r.round(),   lambda t: t.round(),   lambda n: np.round(n)),
+        ("ceil",    FLOAT,   S2D, lambda r: r.ceil(), lambda t: t.ceil(), lambda n: np.ceil(n)),
+        ("floor",   FLOAT,   S2D, lambda r: r.floor(), lambda t: t.floor(), lambda n: np.floor(n)),
+        ("round",   FLOAT,   S2D, lambda r: r.round(), lambda t: t.round(),lambda n: np.round(n)),
+        ("rsqrt",      FLOAT, S2D, lambda r: r.rsqrt(), lambda t: t.rsqrt(),lambda n: 1.0 / np.sqrt(n),
+         {"lo": 0.01, "hi": 10.0}),
+        ("reciprocal", FLOAT, S2D, lambda r: r.reciprocal(), lambda t: t.reciprocal(), lambda n: 1.0 / n,
+         {"lo": 0.1, "hi": 10.0}),
     ])
 
     # -- Comparison ops --
@@ -397,9 +403,24 @@ def run_all(runner):
          lambda r: raxis.maximum(r, r), lambda t: torch.maximum(t, t), lambda n: np.maximum(n, n)),
         ("minimum", ALL, S2D,
          lambda r: raxis.minimum(r, r), lambda t: torch.minimum(t, t), lambda n: np.minimum(n, n)),
-        ("pow_scalar", FLOAT, S2D,
+        ("pow_sq",      FLOAT, S2D,
          lambda r: r.pow(2.0), lambda t: t.pow(2.0), lambda n: np.power(n, 2.0),
          {"lo": 0.01, "hi": 10.0}),
+        ("pow_cube",    FLOAT, S2D,
+         lambda r: r.pow(3.0), lambda t: t.pow(3.0), lambda n: np.power(n, 3.0),
+         {"lo": 0.01, "hi": 10.0}),
+        ("pow_sqrt",    FLOAT, S2D,
+         lambda r: r.pow(0.5), lambda t: t.pow(0.5), lambda n: np.power(n, 0.5),
+         {"lo": 0.01, "hi": 10.0}),
+        ("pow_recip",   FLOAT, S2D,
+         lambda r: r.pow(-1.0), lambda t: t.pow(-1.0), lambda n: np.power(n, -1.0),
+         {"lo": 0.1, "hi": 10.0}),
+        ("pow_generic",  FLOAT, S2D,
+         lambda r: r.pow(2.5), lambda t: t.pow(2.5), lambda n: np.power(n, 2.5),
+         {"lo": 0.01, "hi": 10.0}),
+        ("pow_tensor",  FLOAT, S2D,
+         lambda r: raxis.pow(r, r), lambda t: torch.pow(t, t), lambda n: np.power(n, n),
+         {"lo": 0.5, "hi": 2.0}),
     ])
 
     # -- Logical ops --

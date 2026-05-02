@@ -22,7 +22,6 @@ DECLARE_DISPATCH(binary_fn, eq_stub);
 DECLARE_DISPATCH(binary_fn, ne_stub);
 DECLARE_DISPATCH(binary_fn, maximum_stub);
 DECLARE_DISPATCH(binary_fn, minimum_stub);
-DECLARE_DISPATCH(binary_fn, pow_stub);
 DECLARE_DISPATCH(binary_fn, logical_and_stub);
 DECLARE_DISPATCH(binary_fn, logical_or_stub);
 
@@ -79,8 +78,6 @@ RAXIS_API Tensor ne(const Tensor& a, Scalar s);
 // Elementwise
 RAXIS_API Tensor maximum(const Tensor& a, const Tensor& b);
 RAXIS_API Tensor minimum(const Tensor& a, const Tensor& b);
-RAXIS_API Tensor pow(const Tensor& a, const Tensor& b);
-RAXIS_API Tensor pow(const Tensor& a, Scalar s);
  
 // Logical
 RAXIS_API Tensor logical_and(const Tensor& a, const Tensor& b);

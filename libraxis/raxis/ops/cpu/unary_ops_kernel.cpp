@@ -14,9 +14,9 @@
 
 namespace raxis {
 
-using namespace vec;
+inline namespace CPU_CAPABILITY {
 
-namespace {
+using namespace vec;
 
 void neg_kernel(TensorIterator& iter) {
     iter.common_dtype().dispatch_all_types_except_bool([&]<typename scalar_t>(std::type_identity<scalar_t>) {
@@ -110,6 +110,32 @@ void sqrt_kernel(TensorIterator& iter) {
     });
 }
 
+void rsqrt_kernel(TensorIterator& iter) {
+    iter.common_dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+        cpu_kernel_vec(iter,
+            [](scalar_t a) -> scalar_t {
+                return static_cast<scalar_t>(1.0) / std::sqrt(a);
+            },
+            [](Vectorized<scalar_t> a) {
+                return a.rsqrt();
+            }
+        );
+    });
+}
+
+void reciprocal_kernel(TensorIterator& iter) {
+    iter.common_dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+        cpu_kernel_vec(iter,
+            [](scalar_t a) -> scalar_t {
+                return static_cast<scalar_t>(1.0) / a;
+            },
+            [](Vectorized<scalar_t> a) {
+                return a.reciprocal();
+            }
+        );
+    });
+}
+
 void sigmoid_kernel(TensorIterator& iter) {
     iter.common_dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
         cpu_kernel_vec(iter,
@@ -132,7 +158,7 @@ void logical_not_kernel(TensorIterator& iter) {
     });
 }
 
-} // namespace
+} // namespace CPU_CAPABILITY
 
 REGISTER_DISPATCH(neg_stub, &neg_kernel);
 REGISTER_DISPATCH(abs_stub, &abs_kernel);
@@ -142,6 +168,8 @@ REGISTER_DISPATCH(round_stub, &round_kernel);
 REGISTER_DISPATCH(exp_stub, &exp_kernel);
 REGISTER_DISPATCH(log_stub, &log_kernel);
 REGISTER_DISPATCH(sqrt_stub, &sqrt_kernel);
+REGISTER_DISPATCH(rsqrt_stub, &rsqrt_kernel);
+REGISTER_DISPATCH(reciprocal_stub, &reciprocal_kernel);
 REGISTER_DISPATCH(sigmoid_stub, &sigmoid_kernel);
 REGISTER_DISPATCH(logical_not_stub, &logical_not_kernel);
 

@@ -238,6 +238,8 @@ public:
     Tensor exp() const;
     Tensor log() const;
     Tensor sqrt() const;
+    Tensor rsqrt() const;
+    Tensor reciprocal() const;
     Tensor sigmoid() const;
     Tensor logical_not() const;
     
@@ -249,6 +251,8 @@ public:
     Tensor& exp_() const;
     Tensor& log_() const;
     Tensor& sqrt_() const;
+    Tensor& rsqrt_() const;
+    Tensor& reciprocal_() const;
     Tensor& sigmoid_() const;
     Tensor& logical_not_() const;
 

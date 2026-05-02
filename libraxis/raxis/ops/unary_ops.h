@@ -10,6 +10,15 @@ namespace raxis {
 struct TensorIterator;
 using unary_fn = void(*)(TensorIterator&);
 
+inline namespace CPU_CAPABILITY {
+
+void neg_kernel(TensorIterator &iter);
+void sqrt_kernel(TensorIterator& iter);
+void rsqrt_kernel(TensorIterator& iter);
+void reciprocal_kernel(TensorIterator& iter);
+
+} // namespace CPU_CAPABILITY
+
 DECLARE_DISPATCH(unary_fn, neg_stub);
 DECLARE_DISPATCH(unary_fn, abs_stub);
 DECLARE_DISPATCH(unary_fn, ceil_stub);
@@ -19,8 +28,9 @@ DECLARE_DISPATCH(unary_fn, round_stub);
 DECLARE_DISPATCH(unary_fn, exp_stub);
 DECLARE_DISPATCH(unary_fn, log_stub);
 DECLARE_DISPATCH(unary_fn, sqrt_stub);
+DECLARE_DISPATCH(unary_fn, rsqrt_stub);
+DECLARE_DISPATCH(unary_fn, reciprocal_stub);
 DECLARE_DISPATCH(unary_fn, sigmoid_stub);
-
 DECLARE_DISPATCH(unary_fn, logical_not_stub);
 
 RAXIS_API Tensor isnan(const Tensor& self);
@@ -48,6 +58,12 @@ RAXIS_API Tensor& log_(Tensor& self);
 
 RAXIS_API Tensor sqrt(const Tensor& self);
 RAXIS_API Tensor& sqrt_(Tensor& self);
+
+RAXIS_API Tensor rsqrt(const Tensor& a);
+RAXIS_API Tensor& rsqrt_(Tensor& a);
+
+RAXIS_API Tensor reciprocal(const Tensor& a);
+RAXIS_API Tensor& reciprocal_(Tensor& a);
 
 RAXIS_API Tensor sigmoid(const Tensor& self);
 RAXIS_API Tensor& sigmoid_(Tensor& self);

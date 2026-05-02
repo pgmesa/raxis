@@ -3,10 +3,6 @@
 
 #include <iostream>
 
-#include <fmt/format.h>
-
-#include <raxis/format.h>
-
 #include <raxis/ops/dispatch_stub.h>
 #include <raxis/ops/scalar_ops.h>
 
@@ -270,24 +266,6 @@ Tensor minimum(const Tensor& a, const Tensor& b) {
     minimum_stub(iter.device_type(), iter);
     return iter.get_output(0);
 }
- 
-
-Tensor pow(const Tensor& a, const Tensor& b) {
-    Tensor out;
-    auto iter = iterator::binary_float_op_config()
-        .add_output(out)
-        .add_input(a)
-        .add_input(b)
-        .build();
- 
-    pow_stub(iter.device_type(), iter);
-    return iter.get_output(0);
-}
- 
-Tensor pow(const Tensor& a, Scalar s) {
-    return pow(a, wrapped_scalar_tensor(s));
-}
- 
 
 Tensor logical_and(const Tensor& a, const Tensor& b) {
     Tensor out;
@@ -322,7 +300,6 @@ DEFINE_DISPATCH(eq_stub);
 DEFINE_DISPATCH(ne_stub);
 DEFINE_DISPATCH(maximum_stub);
 DEFINE_DISPATCH(minimum_stub);
-DEFINE_DISPATCH(pow_stub);
 DEFINE_DISPATCH(logical_and_stub);
 DEFINE_DISPATCH(logical_or_stub);
 
