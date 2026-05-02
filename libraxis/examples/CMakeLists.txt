@@ -1,6 +1,4 @@
 
-# find_package(argparse CONFIG REQUIRED)
-
 # Helper function to build an example and copy its dependencies
 function(add_example EXAMPLE_NAME SOURCE_FILE)
     add_executable(${EXAMPLE_NAME} ${SOURCE_FILE})
@@ -10,7 +8,6 @@ function(add_example EXAMPLE_NAME SOURCE_FILE)
     target_link_libraries(${EXAMPLE_NAME}
         PRIVATE
             raxis::raxis
-            # argparse::argparse
     )
 endfunction()
 
