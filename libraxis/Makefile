@@ -1,7 +1,6 @@
 # Output directory from your preset
 BUILD_DIR := build
 
-# OS detection (Windows CMD has 'ComSpec' set, Unix-like systems usually have 'SHELL')
 IS_WINDOWS := $(findstring Windows_NT,$(OS))
 
 # Platform-safe delete command
@@ -15,16 +14,13 @@ endif
 
 .PHONY: all configure build rebuild clean help check-preset
 
-# Default target shows help
 all: help
 
-# Check if PRESET is provided
 check-preset:
 ifndef preset
 	$(error 'preset' is not set. Please specify a preset with preset=<preset-name>. Run 'make help' for more information)
 endif
 
-# Help message
 help:
 	@echo "Usage: make [target] PRESET=<preset-name> [target=<target-name>]"
 	@echo ""
@@ -42,11 +38,9 @@ help:
 	@echo "  target     - Specific target to build (optional)"
 	@echo "               Example: make build preset=ninja-release target=image_visualizer"
 
-# Configure with preset
 configure: check-preset
 	cmake --preset $(preset)
 
-# Build with preset and optional target
 build: check-preset
 ifdef target
 	cmake --build --preset $(preset) --target $(target)
@@ -54,9 +48,13 @@ else
 	cmake --build --preset $(preset)
 endif
 
-# Clean, configure, and build
-rebuild: clean configure build
+rebuild: check-preset
+	cmake --fresh --preset $(preset)
+ifdef target
+	cmake --build --preset $(preset) --target $(target)
+else
+	cmake --build --preset $(preset)
+endif
 
-# Remove build directory
 clean:
 	$(RM) $(BUILD_DIR_WIN)

@@ -1,11 +1,9 @@
-target/
 vscode/
 debug/
 CMakeUserPresets.json
 raxis/include
 raxis/share
 raxis/_C.pyi
-vcpkg_installed/
 build_package.*
 build_debug.*
 

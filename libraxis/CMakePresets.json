@@ -11,135 +11,36 @@
       "hidden": true,
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-        "VCPKG_INSTALLED_DIR": "${sourceDir}/vcpkg_installed/",
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/../raxis",
-        "BUILD_PYTHON_BINDINGS": "ON",
-        "BUILD_EXAMPLES": "ON"
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/../raxis"
       }
     },
     {
-      "name": "base-debug",
+      "name": "debug",
       "inherits": "base",
-      "hidden": true,
+      "displayName": "Debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
-      "name": "base-release",
+      "name": "release",
       "inherits": "base",
-      "hidden": true,
+      "displayName": "Release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
-      }
-    },
-    {
-      "name": "windows-base",
-      "inherits": "base",
-      "hidden": true,
-      "generator": "Visual Studio 17 2022",
-      "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-windows",
-        "CMAKE_CXX_COMPILER": "cl"
-      }
-    },
-    {
-      "name": "linux-base",
-      "inherits": "base",
-      "hidden": true,
-      "generator": "Ninja",
-      "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-linux",
-        "CMAKE_CXX_COMPILER": "g++"
-      }
-    },
-    {
-      "name": "windows-debug",
-      "inherits": ["windows-base", "base-debug"],
-	    "hidden": true,
-      "displayName": "Windows Debug"
-    },
-    {
-      "name": "windows-release",
-      "inherits": ["windows-base", "base-release"],
-	    "hidden": true,
-      "displayName": "Windows Release"
-    },
-    {
-      "name": "linux-debug",
-      "inherits": ["linux-base", "base-debug"],
-	    "hidden": true,
-      "displayName": "Linux Debug"
-    },
-    {
-      "name": "linux-release",
-      "inherits": ["linux-base", "base-release"],
-	    "hidden": true,
-      "displayName": "Linux Release"
-    },
-    {
-      "name": "runner-windows",
-      "inherits": "windows-release",
-      "displayName": "GitHub Runner Windows",
-      "generator": "Visual Studio 17 2022",
-      "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-windows",
-        "CMAKE_CXX_COMPILER": "cl",
-        "BUILD_PYTHON_BINDINGS": "ON",
-        "BUILD_EXAMPLES": "OFF"
-      }
-    },
-    {
-      "name": "runner-linux",
-      "inherits": "linux-release",
-      "displayName": "GitHub Runner Linux",
-      "generator": "Ninja",
-      "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-linux",
-        "CMAKE_C_COMPILER": "/usr/bin/gcc-12",
-        "CMAKE_CXX_COMPILER": "/usr/bin/g++-12",
-        "CMAKE_CUDA_HOST_COMPILER": "/usr/bin/gcc-12",
-        "BUILD_PYTHON_BINDINGS": "ON",
-        "BUILD_EXAMPLES": "OFF"
       }
     }
   ],
   "buildPresets": [
     {
-      "name": "windows-debug",
-	    "hidden": true,
-      "configurePreset": "windows-debug",
-      "displayName": "Windows Debug Build"
+      "name": "debug",
+      "configurePreset": "debug",
+      "displayName": "Debug Build"
     },
     {
-      "name": "windows-release",
-	    "hidden": true,
-      "configurePreset": "windows-release",
-      "displayName": "Windows Release Build"
-    },
-    {
-      "name": "linux-debug",
-	    "hidden": true,
-      "configurePreset": "linux-debug",
-      "displayName": "Linux Debug Build"
-    },
-    {
-      "name": "linux-release",
-	    "hidden": true,
-      "configurePreset": "linux-release",
-      "displayName": "Linux Release Build"
-    },
-    {
-      "name": "runner-windows",
-      "configurePreset": "runner-windows",
-      "displayName": "Runner Windows Build",
-      "configuration": "Release"
-    },
-    {
-      "name": "runner-linux",
-      "configurePreset": "runner-linux",
-      "displayName": "Runner Linux Build",
+      "name": "release",
+      "configurePreset": "release",
+      "displayName": "Release Build",
       "configuration": "Release"
     }
   ]
