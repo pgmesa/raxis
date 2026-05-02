@@ -25,6 +25,10 @@ if(NOT WIN32)
     target_compile_options(raxis PRIVATE -fvisibility=hidden)
 endif()
 
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+    target_compile_options(raxis PRIVATE -Wno-psabi)
+endif()
+
 target_include_directories(raxis
     PUBLIC
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
