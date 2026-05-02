@@ -5,10 +5,8 @@
 #include <memory>
 #include <stdexcept>
 #include <algorithm>
+#include <iosfwd>
 
-#include <fmt/format.h>
-
-#include <raxis/format.h>
 #include <raxis/ops.h>
 
 #include <raxis/tensor/shape_utils.h>
@@ -151,10 +149,12 @@ bool Tensor::is_wrapped_number() const {
 
 std::string Tensor::to_string() const {
     ensure_defined("to_string");
-    return fmt::format(
-        "raxis(shape={}, strides={}, dtype={}, device='{}')", 
-        impl_->shape(), impl_->strides(), impl_->dtype().name(), impl_->device().str()
-    );
+    std::ostringstream os;
+    os << "raxis(shape=" << impl_->shape()
+       << ", strides=" << impl_->strides()
+       << ", dtype=" << impl_->dtype().name()
+       << ", device='" << impl_->device().str() << "')";
+    return os.str();
 }
 
 // ===================== View operations ======================
