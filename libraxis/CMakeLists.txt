@@ -66,6 +66,7 @@ option(RAXIS_USE_BLAS "Build with BLAS library for accelerated linear algebra" O
 
 if(RAXIS_USE_BLAS)
     set(BLA_STATIC ON)
+    find_package(BLAS QUIET)
     if(BLAS_FOUND)
         find_path(CBLAS_INCLUDE_DIR cblas.h
             PATH_SUFFIXES openblas openblas/include
