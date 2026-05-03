@@ -126,7 +126,7 @@ def format_shape(*shapes):
 class BenchmarkRunner:
 
     def __init__(self, device="cpu", dtype="float32", warmup=5, repeats=20, threshold=10.0,
-                 target_ops=None):
+                 target_ops=None, no_numpy=False):
         self.device = device
         self.dtype = np.dtype(dtype)
         self.dtype_str = dtype
@@ -135,6 +135,7 @@ class BenchmarkRunner:
         self.threshold = threshold
         self.target_ops = target_ops
         self.results = []
+        self.no_numpy = no_numpy
 
     def _should_run(self, name):
         if self.target_ops is None:
@@ -200,7 +201,7 @@ class BenchmarkRunner:
             ratio = r_time / max(t_time, 1e-12)
 
             np_time = None
-            if numpy_fn is not None and self.device == "cpu":
+            if numpy_fn is not None and self.device == "cpu" and not self.no_numpy:
                 np_time = self._time_fn(lambda: numpy_fn(data))
 
             status = "OK" if ratio < self.threshold else "SLOW"
@@ -220,9 +221,8 @@ class BenchmarkRunner:
 
         return ran
 
-    def bench_pair(self, name, shape_pairs, raxis_fn, torch_fn, data_kw_a=None,
-                   data_kw_b=None):
-        """Benchmark ops that need two tensors with different shapes (e.g. broadcast)."""
+    def bench_pair(self, name, shape_pairs, raxis_fn, torch_fn, numpy_fn=None,
+               data_kw_a=None, data_kw_b=None):
         if not self._should_run(name):
             return False
 
@@ -231,23 +231,30 @@ class BenchmarkRunner:
         ran = False
 
         for shape_a, shape_b in shape_pairs:
-            _, r_a, t_a = self._make_tensors(shape_a, seed=1, **kw_a)
-            _, r_b, t_b = self._make_tensors(shape_b, seed=2, **kw_b)
+            data_a, r_a, t_a = self._make_tensors(shape_a, seed=1, **kw_a)
+            data_b, r_b, t_b = self._make_tensors(shape_b, seed=2, **kw_b)
 
             r_time = self._time_fn(lambda: raxis_fn(r_a, r_b))
             t_time = self._time_fn(lambda: torch_fn(t_a, t_b))
             ratio = r_time / max(t_time, 1e-12)
 
+            np_time = None
+            if numpy_fn is not None and self.device == "cpu" and not self.no_numpy:
+                np_time = self._time_fn(lambda: numpy_fn(data_a, data_b))
+
             status = "OK" if ratio < self.threshold else "SLOW"
             self.results.append({
                 "name": name, "shape": (shape_a, shape_b),
                 "raxis_ms": r_time * 1e3, "torch_ms": t_time * 1e3,
-                "ratio": ratio, "np_ratio": None, "status": status,
+                "ratio": ratio,
+                "np_ratio": (r_time / max(np_time, 1e-12)) if np_time else None,
+                "status": status,
             })
 
             s_label = format_shape(shape_a, shape_b)
+            np_ms = np_time * 1e3 if np_time else None
             print_row(name, s_label, r_time * 1e3, t_time * 1e3, ratio,
-                      self.threshold)
+                    self.threshold, np_ms=np_ms)
             ran = True
 
         return ran
@@ -489,7 +496,9 @@ def run_all(runner):
  
     _run_section(runner, "Dot product", [
         ("dot", NO_BOOL, S_DOT,
-         lambda r: raxis.dot(r, r), lambda t: torch.dot(t, t), None),
+        lambda r: raxis.dot(r, r),
+        lambda t: torch.dot(t, t),
+        lambda n: np.dot(n, n)),
     ])
  
     # -- MV --
@@ -502,8 +511,9 @@ def run_all(runner):
  
     _run_section_pair(runner, "Matrix-vector (mv)", [
         ("mv", NO_BOOL, S_MV,
-         lambda a, b: raxis.mv(a, b),
-         lambda a, b: torch.mv(a, b)),
+        lambda a, b: raxis.mv(a, b),
+        lambda a, b: torch.mv(a, b),
+        lambda a, b: np.matvec(a, b)),
     ])
  
     # -- MM --
@@ -531,14 +541,15 @@ def run_all(runner):
  
     _run_section_pair(runner, "Matmul (mm)", [
         ("mm", NO_BOOL, S_MM,
-         lambda a, b: raxis.mm(a, b),
-         lambda a, b: torch.mm(a, b)),
+        lambda a, b: raxis.mm(a, b),
+        lambda a, b: torch.mm(a, b)),
     ])
  
     _run_section_pair(runner, "Matmul (batched)", [
         ("matmul_bmm", NO_BOOL, S_MATMUL,
-         lambda a, b: raxis.matmul(a, b),
-         lambda a, b: torch.matmul(a, b)),
+        lambda a, b: raxis.matmul(a, b),
+        lambda a, b: torch.matmul(a, b),
+        lambda a, b: np.matmul(a, b)),
     ])
 
     # -- Backward --
@@ -587,10 +598,13 @@ def _run_section(runner, title, benchmarks):
 
 
 def _run_section_pair(runner, title, benchmarks):
-    """Run a list of two-tensor benchmarks, printing the header only if any match."""
     header_printed = False
 
-    for name, cat, pairs, raxis_fn, torch_fn in benchmarks:
+    for entry in benchmarks:
+        name, cat, pairs = entry[0], entry[1], entry[2]
+        raxis_fn, torch_fn = entry[3], entry[4]
+        numpy_fn = entry[5] if len(entry) > 5 else None
+
         if not dtype_allowed(runner.dtype_str, cat):
             continue
 
@@ -601,7 +615,7 @@ def _run_section_pair(runner, title, benchmarks):
             print_header(title)
             header_printed = True
 
-        runner.bench_pair(name, pairs, raxis_fn, torch_fn)
+        runner.bench_pair(name, pairs, raxis_fn, torch_fn, numpy_fn=numpy_fn)
 
 
 # ---------------------------------------------------------------------------
@@ -618,6 +632,7 @@ def main():
     parser.add_argument("--threshold", type=float, default=1.5)
     parser.add_argument("-k", "--filter", dest="target_ops", nargs='+', default=None)
     parser.add_argument("--no-color", action="store_true")
+    parser.add_argument("--no-numpy", action="store_true", help="Skip NumPy benchmarks")
     args = parser.parse_args()
 
     if args.no_color or not sys.stdout.isatty():
@@ -643,6 +658,7 @@ def main():
         repeats=args.repeats,
         threshold=args.threshold,
         target_ops=args.target_ops,
+        no_numpy=args.no_numpy,
     )
 
     run_all(runner)
