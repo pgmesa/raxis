@@ -145,6 +145,7 @@ PYBIND11_MODULE(_C, c) {
         // Shape / view operations
         .def("squeeze", &raxis::Tensor::squeeze, py::arg("dim") = py::none())
         .def("unsqueeze", &raxis::Tensor::unsqueeze, py::arg("dim"))
+        .def_property_readonly("mT", &raxis::Tensor::mT)
         .def("transpose", &raxis::Tensor::transpose, py::arg("dim0"), py::arg("dim1"))
         .def("permute", [](const raxis::Tensor& self, raxis::Vec dims) {
             return self.permute(dims);
@@ -282,6 +283,13 @@ PYBIND11_MODULE(_C, c) {
         .def("randint_",
             &raxis::Tensor::randint_,
             py::arg("low"), py::arg("high"))
+        
+        .def("dot", &raxis::Tensor::dot, py::arg("other"))
+        .def("mv", &raxis::Tensor::mv, py::arg("vec"))
+        .def("mm", &raxis::Tensor::mm, py::arg("mat2"))
+        .def("bmm", &raxis::Tensor::bmm, py::arg("mat2"))
+        .def("matmul", &raxis::Tensor::matmul, py::arg("other"))
+        .def("__matmul__", &raxis::Tensor::matmul, py::arg("other"))
 
         .def("add",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::add, py::const_),
@@ -739,6 +747,22 @@ PYBIND11_MODULE(_C, c) {
         }
         return raxis::broadcast_shapes(refs);
     }, py::arg("shapes"));
+
+    // Linear algebra
+    c.def("dot", &raxis::dot, py::arg("input"), py::arg("other"));
+    c.def("mv", &raxis::mv, py::arg("input"), py::arg("vec"));
+    c.def("addmv", &raxis::addmv,
+        py::arg("input"), py::arg("mat"), py::arg("vec"),
+        py::arg("beta") = 1, py::arg("alpha") = 1);
+    c.def("mm", &raxis::mm, py::arg("input"), py::arg("mat2"));
+    c.def("addmm", &raxis::addmm,
+        py::arg("input"), py::arg("mat1"), py::arg("mat2"),
+        py::arg("beta") = 1, py::arg("alpha") = 1);
+    c.def("bmm", &raxis::bmm, py::arg("input"), py::arg("mat2"));
+    c.def("addbmm", &raxis::addbmm,
+        py::arg("input"), py::arg("batch1"), py::arg("batch2"),
+        py::arg("beta") = 1, py::arg("alpha") = 1);
+    c.def("matmul", &raxis::matmul, py::arg("input"), py::arg("other"));
 
     // Basic operations
     c.def(

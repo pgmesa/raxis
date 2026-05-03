@@ -86,6 +86,7 @@ public:
     int64_t numel() const;
     int ndim() const;
     IntArrayRef shape() const;
+    int64_t stride(int64_t dim) const;
     IntArrayRef strides() const;
     DimVector byte_strides() const;
     int64_t storage_offset() const;
@@ -110,6 +111,7 @@ public:
     Tensor slice(int64_t dim, int64_t start, int64_t stop, int64_t step = 1) const;
     Tensor unsqueeze(int64_t dim) const;
     Tensor squeeze(std::optional<int64_t> dim_opt = std::nullopt) const;
+    Tensor mT() const;
     Tensor transpose(int64_t dim0, int64_t dim1) const;
     Tensor permute(IntArrayRef dims) const;
     Tensor swapdims(int64_t dim0, int64_t dim1) const;
@@ -175,6 +177,13 @@ public:
 
     Tensor amax(IntArrayRef dim = {}, bool keepdim = false) const;
     Tensor amin(IntArrayRef dim = {}, bool keepdim = false) const;
+
+    // ====================== Linear Algebra ======================
+    Tensor dot(const Tensor& other) const;
+    Tensor mv(const Tensor& vec) const;
+    Tensor mm(const Tensor& mat2) const;
+    Tensor bmm(const Tensor& mat2) const;
+    Tensor matmul(const Tensor& other) const;
 
     // ===================== Binary Operations ====================
     Tensor add(const Tensor& other) const;

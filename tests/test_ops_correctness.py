@@ -1245,3 +1245,405 @@ class TestFactories:
         r_np = np.array(r)
         assert r_np.min() >= 0
         assert r_np.max() < 100
+        
+
+# ============================================================================
+# LINEAR ALGEBRA OPS
+# ============================================================================
+
+MM_SHAPES = [
+    ((1, 1), (1, 1)),
+    ((1, 5), (5, 1)),
+    ((3, 4), (4, 5)),
+    ((16, 32), (32, 16)),
+    ((64, 128), (128, 64)),
+    ((256, 128), (128, 256)),  # parallelization threshold
+]
+
+MM_DTYPES = [np.float32, np.float64, np.int32, np.int64, np.uint8]
+
+MATMUL_CASES = [
+    # (desc, shape_a, shape_b)
+    ("1Dx1D_dot",      (16,),         (16,)),
+    ("2Dx1D_mv",       (8, 16),       (16,)),
+    ("1Dx2D",          (16,),         (16, 8)),
+    ("2Dx2D_mm",       (8, 16),       (16, 4)),
+    ("3Dx3D_bmm",      (4, 8, 16),    (4, 16, 6)),
+    ("3Dx3D_bcast",    (1, 8, 16),    (4, 16, 6)),
+    ("NDx2D_fold",     (2, 3, 8),     (8, 4)),
+    ("NDx1D",          (2, 3, 8),     (8,)),
+    ("2DxND",          (8, 16),       (3, 16, 4)),
+    ("4Dx4D",          (2, 3, 4, 8),  (2, 3, 8, 5)),
+    ("4Dx4D broadcast",(2, 1, 4, 8),  (1, 3, 8, 5)),
+]
+
+
+class TestDot:
+    """Test dot product (1D x 1D)."""
+
+    SIZES = [1, 4, 16, 128, 1024]
+
+    @pytest.mark.parametrize("n", SIZES)
+    @pytest.mark.parametrize("dtype", MM_DTYPES, ids=[np.dtype(d).name for d in MM_DTYPES])
+    def test_dot(self, n, dtype, device):
+        a_data = randf(n, seed=42, lo=-2.0, hi=2.0).astype(dtype)
+        b_data = randf(n, seed=99, lo=-2.0, hi=2.0).astype(dtype)
+        r_a, t_a = make_pair(a_data, device)
+        r_b, t_b = make_pair(b_data, device)
+
+        atol = 1e-4 if dtype == np.float32 else 1e-10
+        check_match(raxis.dot(r_a, r_b), torch.dot(t_a, t_b),
+                    atol=atol, context=f"dot n={n} {np.dtype(dtype).name}")
+
+    def test_dot_method(self, device):
+        a_data = randf(64, seed=42, lo=-2.0, hi=2.0)
+        b_data = randf(64, seed=99, lo=-2.0, hi=2.0)
+        r_a, t_a = make_pair(a_data, device)
+        r_b, t_b = make_pair(b_data, device)
+        check_match(r_a.dot(r_b), t_a.dot(t_b), context="dot method")
+
+    def test_dot_strided(self, device):
+        a_data = randf(64, seed=42, lo=-2.0, hi=2.0)
+        b_data = randf(64, seed=99, lo=-2.0, hi=2.0)
+        r_a, t_a = make_pair(a_data, device)
+        r_b, t_b = make_pair(b_data, device)
+        check_match(raxis.dot(r_a[::2], r_b[::2]),
+                    torch.dot(t_a[::2], t_b[::2]),
+                    context="dot strided")
+
+    def test_dot_size_mismatch(self, device):
+        a = raxis.randn([3])
+        b = raxis.randn([5])
+        with pytest.raises(RuntimeError):
+            raxis.dot(a, b)
+
+    def test_dot_dim_error(self, device):
+        a = raxis.randn([3, 4])
+        b = raxis.randn([3, 4])
+        with pytest.raises(RuntimeError):
+            raxis.dot(a, b)
+
+
+class TestMV:
+    """Test matrix-vector product."""
+
+    SHAPES = [
+        ((4, 8), (8,)),
+        ((16, 32), (32,)),
+        ((128, 64), (64,)),
+        ((256, 128), (128,)),  # parallelization threshold
+    ]
+
+    @pytest.mark.parametrize("shapes", SHAPES,
+                             ids=[f"{a}@{b}" for a, b in SHAPES])
+    @pytest.mark.parametrize("dtype", MM_DTYPES, ids=[np.dtype(d).name for d in MM_DTYPES])
+    def test_mv(self, shapes, dtype, device):
+        (m, k), (k_,) = shapes
+        a_data = randf(m, k, seed=42, lo=-2.0, hi=2.0).astype(dtype)
+        v_data = randf(k, seed=99, lo=-2.0, hi=2.0).astype(dtype)
+        r_a, t_a = make_pair(a_data, device)
+        r_v, t_v = make_pair(v_data, device)
+
+        atol = 1e-4 if dtype == np.float32 else 1e-10
+        check_match(raxis.mv(r_a, r_v), torch.mv(t_a, t_v),
+                    atol=atol, context=f"mv {shapes} {np.dtype(dtype).name}")
+
+    def test_mv_method(self, device):
+        a_data = randf(16, 32, seed=42, lo=-2.0, hi=2.0)
+        v_data = randf(32, seed=99, lo=-2.0, hi=2.0)
+        r_a, t_a = make_pair(a_data, device)
+        r_v, t_v = make_pair(v_data, device)
+        check_match(r_a.mv(r_v), t_a.mv(t_v), context="mv method")
+
+    def test_mv_transposed(self, device):
+        a_data = randf(32, 16, seed=42, lo=-2.0, hi=2.0)
+        v_data = randf(32, seed=99, lo=-2.0, hi=2.0)
+        r_a, t_a = make_pair(a_data, device)
+        r_v, t_v = make_pair(v_data, device)
+        check_match(raxis.mv(r_a.transpose(0, 1), r_v),
+                    torch.mv(t_a.transpose(0, 1), t_v),
+                    context="mv transposed mat")
+
+
+class TestAddmv:
+    """Test addmv: result = beta * self + alpha * (mat @ vec)."""
+
+    def test_basic(self, device):
+        m, k = 16, 32
+        self_data = randf(m, seed=1, lo=-2.0, hi=2.0)
+        a_data = randf(m, k, seed=42, lo=-2.0, hi=2.0)
+        v_data = randf(k, seed=99, lo=-2.0, hi=2.0)
+
+        r_self, t_self = make_pair(self_data, device)
+        r_a, t_a = make_pair(a_data, device)
+        r_v, t_v = make_pair(v_data, device)
+
+        check_match(
+            raxis.addmv(r_self, r_a, r_v),
+            torch.addmv(t_self, t_a, t_v),
+            context="addmv basic")
+
+    def test_with_scalars(self, device):
+        m, k = 8, 16
+        self_data = randf(m, seed=1, lo=-2.0, hi=2.0)
+        a_data = randf(m, k, seed=42, lo=-2.0, hi=2.0)
+        v_data = randf(k, seed=99, lo=-2.0, hi=2.0)
+
+        r_self, t_self = make_pair(self_data, device)
+        r_a, t_a = make_pair(a_data, device)
+        r_v, t_v = make_pair(v_data, device)
+
+        check_match(
+            raxis.addmv(r_self, r_a, r_v, beta=0.5, alpha=2.0),
+            torch.addmv(t_self, t_a, t_v, beta=0.5, alpha=2.0),
+            context="addmv beta=0.5 alpha=2.0")
+
+    def test_beta_zero(self, device):
+        m, k = 4, 8
+        a_data = randf(m, k, seed=42, lo=-2.0, hi=2.0)
+        v_data = randf(k, seed=99, lo=-2.0, hi=2.0)
+        r_a, t_a = make_pair(a_data, device)
+        r_v, t_v = make_pair(v_data, device)
+        r_self = raxis.zeros([m])
+        t_self = torch.zeros(m)
+
+        check_match(
+            raxis.addmv(r_self, r_a, r_v, beta=0, alpha=1),
+            torch.addmv(t_self, t_a, t_v, beta=0, alpha=1),
+            context="addmv beta=0")
+
+
+class TestMM:
+    """Test mm (2D x 2D matrix multiplication)."""
+
+    @pytest.mark.parametrize("shapes", MM_SHAPES, ids=[f"{a}@{b}" for a, b in MM_SHAPES])
+    @pytest.mark.parametrize("dtype", MM_DTYPES, ids=[np.dtype(d).name for d in MM_DTYPES])
+    def test_mm(self, shapes, dtype, device):
+        (m, k), (_, n) = shapes
+        a_data = randf(m, k, seed=42, lo=-2.0, hi=2.0).astype(dtype)
+        b_data = randf(k, n, seed=99, lo=-2.0, hi=2.0).astype(dtype)
+        r_a, t_a = make_pair(a_data, device)
+        r_b, t_b = make_pair(b_data, device)
+
+        atol = 1e-4 if dtype == np.float32 else 1e-10
+        check_match(raxis.mm(r_a, r_b), torch.mm(t_a, t_b),
+                    atol=atol, context=f"mm {shapes} {np.dtype(dtype).name}")
+
+    @pytest.mark.parametrize("shapes", MM_SHAPES, ids=[f"{a}@{b}" for a, b in MM_SHAPES])
+    def test_mm_method(self, shapes, device):
+        (m, k), (_, n) = shapes
+        a_data = randf(m, k, seed=42, lo=-2.0, hi=2.0)
+        b_data = randf(k, n, seed=99, lo=-2.0, hi=2.0)
+        r_a, t_a = make_pair(a_data, device)
+        r_b, t_b = make_pair(b_data, device)
+        check_match(r_a.mm(r_b), t_a.mm(t_b), context=f"mm method {shapes}")
+
+    def test_mm_transposed_inputs(self, device):
+        a_data = randf(32, 64, seed=42, lo=-2.0, hi=2.0)
+        b_data = randf(48, 64, seed=99, lo=-2.0, hi=2.0)
+        r_a, t_a = make_pair(a_data, device)
+        r_b, t_b = make_pair(b_data, device)
+
+        check_match(
+            raxis.mm(r_a, r_b.transpose(0, 1)),
+            torch.mm(t_a, t_b.transpose(0, 1)),
+            context="mm transposed B")
+
+        check_match(
+            raxis.mm(r_a.transpose(0, 1), r_a),
+            torch.mm(t_a.transpose(0, 1), t_a),
+            context="mm transposed A (gram)")
+
+    def test_mm_shape_error(self, device):
+        a = raxis.randn([3, 4])
+        b = raxis.randn([5, 6])
+        with pytest.raises(RuntimeError):
+            raxis.mm(a, b)
+
+    def test_mm_dim_error(self, device):
+        a = raxis.randn([3, 4, 5])
+        b = raxis.randn([5, 6])
+        with pytest.raises(RuntimeError):
+            raxis.mm(a, b)
+
+
+class TestAddmm:
+    """Test addmm: result = beta * self + alpha * (mat1 @ mat2)."""
+
+    @pytest.mark.parametrize("dtype", MM_DTYPES, ids=[np.dtype(d).name for d in MM_DTYPES])
+    def test_basic(self, dtype, device):
+        m, k, n = 16, 32, 8
+        self_data = randf(m, n, seed=1, lo=-2.0, hi=2.0).astype(dtype)
+        a_data = randf(m, k, seed=42, lo=-2.0, hi=2.0).astype(dtype)
+        b_data = randf(k, n, seed=99, lo=-2.0, hi=2.0).astype(dtype)
+
+        r_self, t_self = make_pair(self_data, device)
+        r_a, t_a = make_pair(a_data, device)
+        r_b, t_b = make_pair(b_data, device)
+
+        atol = 1e-4 if dtype == np.float32 else 1e-10
+        check_match(
+            raxis.addmm(r_self, r_a, r_b),
+            torch.addmm(t_self, t_a, t_b),
+            atol=atol, context=f"addmm basic {np.dtype(dtype).name}")
+
+    def test_with_scalars(self, device):
+        m, k, n = 8, 16, 4
+        self_data = randf(m, n, seed=1, lo=-2.0, hi=2.0)
+        a_data = randf(m, k, seed=42, lo=-2.0, hi=2.0)
+        b_data = randf(k, n, seed=99, lo=-2.0, hi=2.0)
+
+        r_self, t_self = make_pair(self_data, device)
+        r_a, t_a = make_pair(a_data, device)
+        r_b, t_b = make_pair(b_data, device)
+
+        check_match(
+            raxis.addmm(r_self, r_a, r_b, beta=0.5, alpha=2.0),
+            torch.addmm(t_self, t_a, t_b, beta=0.5, alpha=2.0),
+            context="addmm beta=0.5 alpha=2.0")
+
+    def test_beta_zero(self, device):
+        m, k, n = 4, 8, 4
+        a_data = randf(m, k, seed=42, lo=-2.0, hi=2.0)
+        b_data = randf(k, n, seed=99, lo=-2.0, hi=2.0)
+        r_a, t_a = make_pair(a_data, device)
+        r_b, t_b = make_pair(b_data, device)
+        r_self = raxis.zeros([m, n])
+        t_self = torch.zeros(m, n)
+
+        check_match(
+            raxis.addmm(r_self, r_a, r_b, beta=0, alpha=1),
+            torch.addmm(t_self, t_a, t_b, beta=0, alpha=1),
+            context="addmm beta=0")
+
+    def test_bias_broadcast(self, device):
+        m, k, n = 8, 16, 4
+        bias_data = randf(n, seed=1, lo=-2.0, hi=2.0)
+        a_data = randf(m, k, seed=42, lo=-2.0, hi=2.0)
+        b_data = randf(k, n, seed=99, lo=-2.0, hi=2.0)
+
+        r_bias, t_bias = make_pair(bias_data, device)
+        r_a, t_a = make_pair(a_data, device)
+        r_b, t_b = make_pair(b_data, device)
+
+        check_match(
+            raxis.addmm(r_bias, r_a, r_b),
+            torch.addmm(t_bias, t_a, t_b),
+            context="addmm bias broadcast")
+
+
+class TestBMM:
+    """Test bmm (batched matrix multiply)."""
+
+    BMM_SHAPES = [
+        ((2, 4, 8), (2, 8, 4)),
+        ((4, 16, 32), (4, 32, 16)),
+        ((8, 64, 64), (8, 64, 64)),
+    ]
+
+    @pytest.mark.parametrize("shapes", BMM_SHAPES,
+                             ids=[f"{a}@{b}" for a, b in BMM_SHAPES])
+    @pytest.mark.parametrize("dtype", MM_DTYPES, ids=[np.dtype(d).name for d in MM_DTYPES])
+    def test_bmm(self, shapes, dtype, device):
+        sa, sb = shapes
+        a_data = randf(*sa, seed=42, lo=-2.0, hi=2.0).astype(dtype)
+        b_data = randf(*sb, seed=99, lo=-2.0, hi=2.0).astype(dtype)
+        r_a, t_a = make_pair(a_data, device)
+        r_b, t_b = make_pair(b_data, device)
+
+        atol = 1e-4 if dtype == np.float32 else 1e-10
+        check_match(raxis.bmm(r_a, r_b), torch.bmm(t_a, t_b),
+                    atol=atol, context=f"bmm {shapes} {np.dtype(dtype).name}")
+
+    def test_bmm_method(self, device):
+        a_data = randf(4, 8, 16, seed=42, lo=-2.0, hi=2.0)
+        b_data = randf(4, 16, 6, seed=99, lo=-2.0, hi=2.0)
+        r_a, t_a = make_pair(a_data, device)
+        r_b, t_b = make_pair(b_data, device)
+        check_match(r_a.bmm(r_b), t_a.bmm(t_b), context="bmm method")
+
+
+class TestAddbmm:
+    """Test addbmm: result = beta * self + alpha * sum(batch1[b] @ batch2[b])."""
+
+    def test_basic(self, device):
+        bs, m, k, n = 4, 8, 16, 6
+        self_data = randf(m, n, seed=1, lo=-2.0, hi=2.0)
+        a_data = randf(bs, m, k, seed=42, lo=-2.0, hi=2.0)
+        b_data = randf(bs, k, n, seed=99, lo=-2.0, hi=2.0)
+
+        r_self, t_self = make_pair(self_data, device)
+        r_a, t_a = make_pair(a_data, device)
+        r_b, t_b = make_pair(b_data, device)
+
+        check_match(
+            raxis.addbmm(r_self, r_a, r_b),
+            torch.addbmm(t_self, t_a, t_b),
+            context="addbmm basic")
+
+    def test_with_scalars(self, device):
+        bs, m, k, n = 3, 4, 8, 5
+        self_data = randf(m, n, seed=1, lo=-2.0, hi=2.0)
+        a_data = randf(bs, m, k, seed=42, lo=-2.0, hi=2.0)
+        b_data = randf(bs, k, n, seed=99, lo=-2.0, hi=2.0)
+
+        r_self, t_self = make_pair(self_data, device)
+        r_a, t_a = make_pair(a_data, device)
+        r_b, t_b = make_pair(b_data, device)
+
+        check_match(
+            raxis.addbmm(r_self, r_a, r_b, beta=0.5, alpha=2.0),
+            torch.addbmm(t_self, t_a, t_b, beta=0.5, alpha=2.0),
+            context="addbmm beta=0.5 alpha=2.0")
+
+    def test_beta_zero(self, device):
+        bs, m, k, n = 4, 4, 8, 4
+        a_data = randf(bs, m, k, seed=42, lo=-2.0, hi=2.0)
+        b_data = randf(bs, k, n, seed=99, lo=-2.0, hi=2.0)
+        r_a, t_a = make_pair(a_data, device)
+        r_b, t_b = make_pair(b_data, device)
+        r_self = raxis.zeros([m, n])
+        t_self = torch.zeros(m, n)
+
+        check_match(
+            raxis.addbmm(r_self, r_a, r_b, beta=0, alpha=1),
+            torch.addbmm(t_self, t_a, t_b, beta=0, alpha=1),
+            context="addbmm beta=0")
+
+
+class TestMatmul:
+    """Test matmul (general matrix product with broadcasting)."""
+
+    @pytest.mark.parametrize("desc,shape_a,shape_b", MATMUL_CASES,
+                             ids=[c[0] for c in MATMUL_CASES])
+    @pytest.mark.parametrize("dtype", MM_DTYPES, ids=[np.dtype(d).name for d in MM_DTYPES])
+    def test_matmul(self, desc, shape_a, shape_b, dtype, device):
+        a_data = randf(*shape_a, seed=42, lo=-2.0, hi=2.0).astype(dtype)
+        b_data = randf(*shape_b, seed=99, lo=-2.0, hi=2.0).astype(dtype)
+        r_a, t_a = make_pair(a_data, device)
+        r_b, t_b = make_pair(b_data, device)
+
+        r_out = raxis.matmul(r_a, r_b)
+        t_out = torch.matmul(t_a, t_b)
+
+        assert tuple(r_out.shape) == tuple(t_out.shape), \
+            f"Shape mismatch {desc}: raxis={r_out.shape}, torch={t_out.shape}"
+
+        atol = 1e-4 if dtype == np.float32 else 1e-10
+        rtol = 1e-4 if dtype == np.float32 else 1e-10
+        check_match(r_out, t_out, atol=atol, rtol=rtol,
+                    context=f"matmul {desc} {np.dtype(dtype).name}")
+
+    def test_matmul_operator(self, device):
+        a_data = randf(8, 16, seed=42, lo=-2.0, hi=2.0)
+        b_data = randf(16, 4, seed=99, lo=-2.0, hi=2.0)
+        r_a, t_a = make_pair(a_data, device)
+        r_b, t_b = make_pair(b_data, device)
+        check_match(r_a @ r_b, t_a @ t_b, context="matmul @ operator")
+
+    def test_matmul_method(self, device):
+        a_data = randf(8, 16, seed=42, lo=-2.0, hi=2.0)
+        b_data = randf(16, 4, seed=99, lo=-2.0, hi=2.0)
+        r_a, t_a = make_pair(a_data, device)
+        r_b, t_b = make_pair(b_data, device)
+        check_match(r_a.matmul(r_b), t_a.matmul(t_b), context="matmul method")

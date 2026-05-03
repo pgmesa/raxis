@@ -61,6 +61,39 @@ else()
 endif()
 
 # ─────────────────────────────────────────────────────────────────────────────
+# BLAS
+option(RAXIS_USE_BLAS "Build with BLAS library for accelerated linear algebra" ON)
+
+if(RAXIS_USE_BLAS)
+    set(BLA_STATIC ON)
+    if(BLAS_FOUND)
+        find_path(CBLAS_INCLUDE_DIR cblas.h
+            PATH_SUFFIXES openblas openblas/include
+        )
+        if(CBLAS_INCLUDE_DIR)
+            if(BLAS_LIBRARIES MATCHES "openblas")
+                set(RAXIS_BLAS_INFO "OpenBLAS")
+            else()
+                set(RAXIS_BLAS_INFO "generic")
+            endif()
+            target_include_directories(raxis PRIVATE ${CBLAS_INCLUDE_DIR})
+            target_link_libraries(raxis PRIVATE ${BLAS_LIBRARIES})
+            target_compile_definitions(raxis PRIVATE RAXIS_BUILD_WITH_BLAS=1)
+            message(STATUS "BLAS: ${RAXIS_BLAS_INFO} (libs: ${BLAS_LIBRARIES}, include: ${CBLAS_INCLUDE_DIR})")
+        else()
+            target_compile_definitions(raxis PRIVATE RAXIS_BUILD_WITH_BLAS=0)
+            message(WARNING "BLAS library found but cblas.h not found, using naive fallback")
+        endif()
+    else()
+        target_compile_definitions(raxis PRIVATE RAXIS_BUILD_WITH_BLAS=0)
+        message(WARNING "BLAS requested but not found, using naive fallback kernels")
+    endif()
+else()
+    target_compile_definitions(raxis PRIVATE RAXIS_BUILD_WITH_BLAS=0)
+    message(STATUS "BLAS: disabled by user")
+endif()
+
+# ─────────────────────────────────────────────────────────────────────────────
 # SIMD and Sleef
 option(RAXIS_ENABLE_SIMD "Enable SIMD vectorization" ON)
 

@@ -52,6 +52,13 @@ IntArrayRef Tensor::strides() const {
     return impl_->strides(); 
 }
 
+int64_t Tensor::stride(int64_t dim) const { 
+    ensure_defined("strides");
+    const auto strides = this->strides();
+    const auto ndim = static_cast<int64_t>(strides.size());
+    return strides[wrap_dim(dim, ndim)];
+}
+
 int64_t Tensor::numel() const {
     ensure_defined("numel");
     return impl_->numel();
@@ -182,6 +189,9 @@ Tensor Tensor::slice(int64_t dim, int64_t start, int64_t stop, int64_t step) con
     return ::raxis::slice(*this, dim, start, stop, step);
 }
 
+Tensor Tensor::mT() const { 
+    return transpose(-2, -1);
+}
 
 Tensor Tensor::transpose(int64_t dim0, int64_t dim1) const {
     return ::raxis::transpose(*this, dim0, dim1);
@@ -356,6 +366,27 @@ Tensor Tensor::amax(IntArrayRef dim, bool keepdim) const {
 
 Tensor Tensor::amin(IntArrayRef dim, bool keepdim) const {
     return ::raxis::amin(*this, dim, keepdim);
+}
+
+// ====================== Linear Algebra =====================
+Tensor Tensor::dot(const Tensor& other) const { 
+    return ::raxis::dot(*this, other); 
+}
+
+Tensor Tensor::mv(const Tensor& vec) const { 
+    return ::raxis::mv(*this, vec); 
+}
+
+Tensor Tensor::mm(const Tensor& mat2) const { 
+    return ::raxis::mm(*this, mat2); 
+}
+
+Tensor Tensor::bmm(const Tensor& mat2) const { 
+    return ::raxis::bmm(*this, mat2); 
+}
+
+Tensor Tensor::matmul(const Tensor& other) const { 
+    return ::raxis::matmul(*this, other); 
 }
 
 // ===================== Binary Operations ====================

@@ -483,6 +483,63 @@ def run_all(runner):
         ("fill",  ALL, S2D,
          lambda r: r.fill_(3), lambda t: t.fill_(3), lambda n: n.fill(3)),
     ])
+    
+    # -- Dot --
+    S_DOT = [(128,), (1024,), (8192,), (65536,)]
+ 
+    _run_section(runner, "Dot product", [
+        ("dot", NO_BOOL, S_DOT,
+         lambda r: raxis.dot(r, r), lambda t: torch.dot(t, t), None),
+    ])
+ 
+    # -- MV --
+    S_MV = [
+        ((64, 64), (64,)),
+        ((256, 256), (256,)),
+        ((512, 768), (768,)),
+        ((1024, 1024), (1024,)),
+    ]
+ 
+    _run_section_pair(runner, "Matrix-vector (mv)", [
+        ("mv", NO_BOOL, S_MV,
+         lambda a, b: raxis.mv(a, b),
+         lambda a, b: torch.mv(a, b)),
+    ])
+ 
+    # -- MM --
+    S_MM = [
+        ((16, 16), (16, 16)),
+        ((64, 64), (64, 64)),
+        ((128, 128), (128, 128)),
+        ((256, 256), (256, 256)),
+        ((256, 256), (256, 256)),
+        ((512, 512), (512, 512)),
+        # ((1024, 1024), (1024, 1024)),
+        ((128, 512), (512, 64)),
+        #((512, 768), (768, 768)),
+    ]
+ 
+    S_MATMUL = [
+        ((4, 64, 64), (4, 64, 64)),
+        ((8, 128, 128), (8, 128, 128)),
+        ((8, 128, 128), (1, 128, 128)),
+        ((32, 64, 64), (32, 64, 64)),
+        ((8, 128, 64), (8, 64, 128)),
+        ((8, 128, 64), (1, 64, 128)),
+        ((8, 512, 64), (8, 64, 512)),
+    ]
+ 
+    _run_section_pair(runner, "Matmul (mm)", [
+        ("mm", NO_BOOL, S_MM,
+         lambda a, b: raxis.mm(a, b),
+         lambda a, b: torch.mm(a, b)),
+    ])
+ 
+    _run_section_pair(runner, "Matmul (batched)", [
+        ("matmul_bmm", NO_BOOL, S_MATMUL,
+         lambda a, b: raxis.matmul(a, b),
+         lambda a, b: torch.matmul(a, b)),
+    ])
 
     # -- Backward --
     has_any = False
@@ -557,7 +614,7 @@ def main():
     parser.add_argument("--device", default="cpu", choices=["cpu", "cuda"])
     parser.add_argument("--dtype", default="float32", choices=dtypes)
     parser.add_argument("--warmup", type=int, default=5)
-    parser.add_argument("--repeats", type=int, default=50)
+    parser.add_argument("--repeats", type=int, default=20)
     parser.add_argument("--threshold", type=float, default=1.5)
     parser.add_argument("-k", "--filter", dest="target_ops", nargs='+', default=None)
     parser.add_argument("--no-color", action="store_true")
