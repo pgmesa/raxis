@@ -648,6 +648,7 @@ def main():
             exit(1)
 
     print(bold(f"Benchmarking on: {args.device} - {args.dtype}"))
+    print(f"Raxis: {raxis.__version__} | PyTorch: {torch.__version__} | Numpy: {np.__version__}")
     print(dim(f"Warmup: {args.warmup}  Repeats: {args.repeats}  "
               f"Threshold: {args.threshold}x"))
 
