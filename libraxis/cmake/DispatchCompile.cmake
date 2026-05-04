@@ -5,7 +5,7 @@
 # For each kernel source (*_kernel.cpp), creates wrapper .cpp files per ISA
 # that #include the real source, compiled with the appropriate flags.
 #
-# The RAXIS_ENABLE_SIMD option (defined in the main CMakeLists.txt) controls
+# The RAXIS_USE_SIMD option (defined in the main CMakeLists.txt) controls
 # whether SIMD variants are detected and compiled. When OFF, only DEFAULT
 # is compiled. The raxis_add_dispatch_sources() function is always available.
 
@@ -15,7 +15,7 @@ list(APPEND CPU_CAPABILITY_NAMES "DEFAULT")
 list(APPEND CPU_CAPABILITY_FLAGS "NONE")
 
 # Detect SIMD capabilities (only if enabled)
-if(RAXIS_ENABLE_SIMD)
+if(RAXIS_USE_SIMD)
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64|AMD64|x86|X86)")
         # AVX2
         if(MSVC)

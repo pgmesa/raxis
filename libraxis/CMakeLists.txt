@@ -38,10 +38,10 @@ target_include_directories(raxis
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Parallelization
-option(RAXIS_PARALLEL "Enable intra-op parallelism" ON)
+option(RAXIS_USE_PARALLEL "Enable intra-op parallelism" ON)
 option(RAXIS_USE_OPENMP "Prefer OpenMP over native thread pool" ON)
 
-if(RAXIS_PARALLEL)
+if(RAXIS_USE_PARALLEL)
     if(RAXIS_USE_OPENMP)
         find_package(OpenMP QUIET)
         if(OpenMP_CXX_FOUND)
@@ -97,9 +97,9 @@ endif()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SIMD and Sleef
-option(RAXIS_ENABLE_SIMD "Enable SIMD vectorization" ON)
+option(RAXIS_USE_SIMD "Enable SIMD vectorization" ON)
 
-if(RAXIS_ENABLE_SIMD)
+if(RAXIS_USE_SIMD)
     set(SLEEF_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
     set(SLEEF_BUILD_DFT OFF CACHE BOOL "" FORCE)
     set(SLEEF_BUILD_GNUABI_LIBS OFF CACHE BOOL "" FORCE)
@@ -123,7 +123,7 @@ raxis_add_dispatch_sources(raxis ${RAXIS_KERNEL_SOURCES})
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Build config info
-if(RAXIS_PARALLEL)
+if(RAXIS_USE_PARALLEL)
     if(TARGET OpenMP::OpenMP_CXX)
         set(RAXIS_PARALLEL_INFO "OpenMP ${OpenMP_CXX_VERSION}")
     else()
@@ -137,7 +137,7 @@ if(NOT DEFINED RAXIS_BLAS_INFO)
     set(RAXIS_BLAS_INFO "disabled")
 endif()
 
-if(RAXIS_ENABLE_SIMD)
+if(RAXIS_USE_SIMD)
     string(REPLACE ";" ", " RAXIS_SIMD_INFO "${CPU_CAPABILITY_NAMES}")
     set(RAXIS_SLEEF_INFO "enabled")
 else()
