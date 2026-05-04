@@ -7,6 +7,8 @@
 #include <pybind11/pybind11.h>
 
 #include <raxis/raxis.h>
+#include <raxis/util/build_config.h>
+#include <raxis/ops/dispatch_stub.h>
 
 #include "casters.h"
 #include "numpy_utils.h"
@@ -19,7 +21,11 @@ namespace dtypes = raxis::dtypes;
 
 PYBIND11_MODULE(_C, c) {
     c.doc() = "Raxis Python bindings";
-
+   
+    c.def("get_build_config", &raxis::get_build_config, "Get build configuration");
+    c.def("get_cpu_capability", []() -> std::string {
+        return raxis::cpu_capability_name(raxis::get_cpu_capability());
+    });
     // Exceptions
     py::register_exception_translator([](std::exception_ptr p) {
         try {

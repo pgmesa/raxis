@@ -18,6 +18,7 @@ enum class CPUCapability {
 };
 
 RAXIS_API CPUCapability get_cpu_capability();
+RAXIS_API const char* cpu_capability_name(CPUCapability cap);  
 
 template <typename FnPtr, typename T>
 struct DispatchStub;

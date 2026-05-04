@@ -1,0 +1,25 @@
+#pragma once
+
+#include <string>
+
+namespace raxis {
+
+inline std::string get_build_config() {
+    return
+        "Raxis built with:\n"
+        "  - Version: @PROJECT_VERSION@\n"
+        "  - @CMAKE_CXX_COMPILER_ID@ @CMAKE_CXX_COMPILER_VERSION@\n"
+        "  - C++ Standard: @CMAKE_CXX_STANDARD@\n"
+        "  - Build type: @CMAKE_BUILD_TYPE@\n"
+        "  - BLAS: @RAXIS_BLAS_INFO@\n"
+        "  - Parallel: @RAXIS_PARALLEL_INFO@\n"
+        "  - SIMD dispatch: @RAXIS_SIMD_INFO@\n"
+        "  - SLEEF: @RAXIS_SLEEF_INFO@\n"
+        "  - Build settings: BLAS_INFO=@RAXIS_BLAS_INFO@, "
+            "RAXIS_ENABLE_SIMD=@RAXIS_ENABLE_SIMD@, "
+            "RAXIS_PARALLEL=@RAXIS_PARALLEL@, "
+            "RAXIS_USE_OPENMP=@RAXIS_USE_OPENMP@, "
+            "RAXIS_USE_BLAS=@RAXIS_USE_BLAS@";
+}
+
+} // namespace raxis

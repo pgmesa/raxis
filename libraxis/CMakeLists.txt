@@ -32,6 +32,7 @@ endif()
 target_include_directories(raxis
     PUBLIC
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
+        $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
@@ -107,10 +108,10 @@ if(RAXIS_ENABLE_SIMD)
     if(WIN32)
         set(SLEEF_BUILD_WITH_LIBM OFF CACHE BOOL "" FORCE)
     endif()
-    add_subdirectory(third_party/sleef ${CMAKE_BINARY_DIR}/sleef)
+    
+    add_subdirectory(third_party/sleef ${CMAKE_BINARY_DIR}/sleef EXCLUDE_FROM_ALL)    
     set_property(TARGET sleef PROPERTY FOLDER "dependencies")
 
-    target_include_directories(raxis PRIVATE ${CMAKE_BINARY_DIR}/include)
     target_link_libraries(raxis PRIVATE sleef)
     target_compile_definitions(raxis PRIVATE SLEEF_STATIC_LIBS=1)
 endif()
@@ -119,6 +120,36 @@ include(cmake/DispatchCompile.cmake)
 
 file(GLOB_RECURSE RAXIS_KERNEL_SOURCES "${RAXIS_LIB_DIR}/ops/cpu/*_kernel.cpp")
 raxis_add_dispatch_sources(raxis ${RAXIS_KERNEL_SOURCES})
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Build config info
+if(RAXIS_PARALLEL)
+    if(TARGET OpenMP::OpenMP_CXX)
+        set(RAXIS_PARALLEL_INFO "OpenMP ${OpenMP_CXX_VERSION}")
+    else()
+        set(RAXIS_PARALLEL_INFO "native thread pool")
+    endif()
+else()
+    set(RAXIS_PARALLEL_INFO "serial")
+endif()
+
+if(NOT DEFINED RAXIS_BLAS_INFO)
+    set(RAXIS_BLAS_INFO "disabled")
+endif()
+
+if(RAXIS_ENABLE_SIMD)
+    string(REPLACE ";" ", " RAXIS_SIMD_INFO "${CPU_CAPABILITY_NAMES}")
+    set(RAXIS_SLEEF_INFO "enabled")
+else()
+    set(RAXIS_SIMD_INFO "disabled")
+    set(RAXIS_SLEEF_INFO "disabled")
+endif()
+
+configure_file(
+    "${RAXIS_LIB_DIR}/util/build_config.h.in"
+    "${CMAKE_BINARY_DIR}/include/raxis/util/build_config.h"
+    @ONLY
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Examples

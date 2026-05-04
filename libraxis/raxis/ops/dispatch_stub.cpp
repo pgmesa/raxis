@@ -81,6 +81,19 @@ CPUCapability get_cpu_capability() {
     return capability;
 }
 
+const char* cpu_capability_name(CPUCapability cap) {
+    switch (cap) {
+#ifdef HAVE_AVX2_CPU_DEFINITION
+        case CPUCapability::AVX2:
+            return "AVX2";
+#endif
+        case CPUCapability::DEFAULT:
+            return "DEFAULT";
+        default:
+            return "UNKNOWN";
+    }
+}
+
 void* DispatchStubImpl::choose_cpu_impl(
     void* DEFAULT
 #ifdef HAVE_AVX2_CPU_DEFINITION
