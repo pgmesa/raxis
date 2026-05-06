@@ -18,7 +18,6 @@ import numpy as np
 import torch
 import raxis
 
-
 # ---------------------------------------------------------------------------
 # Dtype categories
 # ---------------------------------------------------------------------------
@@ -365,8 +364,8 @@ def run_all(runner):
 
     # -- Binary broadcast --
     _run_section_pair(runner, "Binary broadcast", [
-        ("add_bcast", ALL, BCAST_PAIRS, lambda a, b: a + b, lambda a, b: a + b),
-        ("mul_bcast", ALL, BCAST_PAIRS, lambda a, b: a * b, lambda a, b: a * b),
+        ("add_bcast", ALL, BCAST_PAIRS, lambda a, b: a + b, lambda a, b: a + b, lambda a, b: a + b),
+        ("mul_bcast", ALL, BCAST_PAIRS, lambda a, b: a * b, lambda a, b: a * b, lambda a, b: a * b),
     ])
 
     # -- Scalar ops --
