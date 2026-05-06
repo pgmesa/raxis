@@ -21,7 +21,12 @@ if platform.system() == 'Windows':
     ctypes.WinDLL(str(core_lib_path))
     extension = '.pyd'
 else:
-    # Load core library first
+    # Pre-load shared dependencies from lib/ so the linker can find them
+    skip = {'libraxis', '_C'}
+    for lib in sorted(raxis_lib_dirs.glob('*.so*')):
+        if not any(s in lib.stem for s in skip):
+            ctypes.CDLL(str(lib), mode=ctypes.RTLD_GLOBAL)
+
     core_lib_path = raxis_lib_dirs / 'libraxis.so'
     ctypes.CDLL(str(core_lib_path), mode=ctypes.RTLD_GLOBAL)
     extension = '.so'
