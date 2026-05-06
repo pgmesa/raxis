@@ -3,3 +3,6 @@
 	path = libraxis/third_party/sleef
 	url = https://github.com/shibatch/sleef.git
 	
+[submodule "libraxis/third_party/mimalloc"]
+	path = libraxis/third_party/mimalloc
+	url = https://github.com/microsoft/mimalloc.git
