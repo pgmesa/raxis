@@ -6,6 +6,10 @@
 #include <malloc.h>
 #endif
 
+#if RAXIS_USE_MIMALLOC
+#include <mimalloc.h>
+#endif
+
 #include <raxis/core/allocator.h>
 #include <raxis/core/device.h>
 
@@ -22,7 +26,9 @@ inline size_t aligned_size(size_t n, size_t alignment) {
 }
 
 inline void* aligned_malloc(size_t size, size_t alignment) {
-#ifdef _MSC_VER
+#if RAXIS_USE_MIMALLOC
+    return mi_malloc_aligned(size, alignment);
+#elif defined(_MSC_VER)
     return _aligned_malloc(size, alignment);
 #else
     return std::aligned_alloc(alignment, size);
@@ -30,12 +36,15 @@ inline void* aligned_malloc(size_t size, size_t alignment) {
 }
 
 inline void aligned_free(void* ptr) {
-#ifdef _MSC_VER
+#if RAXIS_USE_MIMALLOC
+    mi_free(ptr);
+#elif defined(_MSC_VER)
     _aligned_free(ptr);
 #else
     std::free(ptr);
 #endif
 }
+
 
 
 class CPUAllocator final : public Allocator {

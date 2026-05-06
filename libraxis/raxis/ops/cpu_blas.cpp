@@ -3,7 +3,11 @@
 #include <raxis/core/dtype.h>
 
 #if RAXIS_BUILD_WITH_BLAS
+#if RAXIS_BUILD_WITH_MKL
+#include <mkl_cblas.h>
+#else
 #include <cblas.h>
+#endif
 #endif
 
 

@@ -11,15 +11,19 @@ inline std::string get_build_config() {
         "  - @CMAKE_CXX_COMPILER_ID@ @CMAKE_CXX_COMPILER_VERSION@\n"
         "  - C++ Standard: @CMAKE_CXX_STANDARD@\n"
         "  - Build type: @CMAKE_BUILD_TYPE@\n"
-        "  - Parallel: @RAXIS_PARALLEL_INFO@\n"
+        "  - CXX flags: @RAXIS_CXX_FLAGS@\n"
+        "  - BLAS: @RAXIS_BLAS_INFO@\n"
         "  - SIMD dispatch: @RAXIS_SIMD_INFO@\n"
         "  - SLEEF: @RAXIS_SLEEF_INFO@\n"
-        "  - BLAS: @RAXIS_BLAS_INFO@\n"
+        "  - Parallel: @RAXIS_PARALLEL_INFO@\n"
+        "  - Allocator: @RAXIS_ALLOC_INFO@\n"
         "  - Build settings: "
+            "RAXIS_USE_BLAS=@RAXIS_USE_BLAS@, "
+            "RAXIS_USE_MKL=@RAXIS_USE_MKL@, "
+            "RAXIS_USE_SIMD=@RAXIS_USE_SIMD@, "
             "RAXIS_USE_PARALLEL=@RAXIS_USE_PARALLEL@, "
             "RAXIS_USE_OPENMP=@RAXIS_USE_OPENMP@, "
-            "RAXIS_USE_SIMD=@RAXIS_USE_SIMD@, "
-            "RAXIS_USE_BLAS=@RAXIS_USE_BLAS@";
+            "RAXIS_USE_MIMALLOC=@RAXIS_USE_MIMALLOC@";
 }
 
 } // namespace raxis

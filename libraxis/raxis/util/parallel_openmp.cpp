@@ -8,6 +8,10 @@
 #include <omp.h>
 #endif
 
+#if RAXIS_BUILD_WITH_MKL
+#include <mkl.h>
+#endif
+
 namespace raxis {
 
 namespace {
@@ -21,7 +25,9 @@ void init_num_threads() {
     if (n > 0) {
         set_num_threads(n);
     } else {
-#ifdef _OPENMP
+#if defined(_OPENMP) && RAXIS_BUILD_WITH_MKL
+        omp_set_num_threads(mkl_get_max_threads());
+#elif defined(_OPENMP)
         omp_set_num_threads(intraop_default_num_threads());
 #endif
     }
@@ -32,6 +38,10 @@ void set_num_threads(int nthreads) {
     num_threads_setting.store(nthreads);
 #ifdef _OPENMP
     omp_set_num_threads(nthreads);
+#endif
+#if RAXIS_BUILD_WITH_MKL
+    mkl_set_num_threads_local(nthreads);
+    mkl_set_dynamic(0);
 #endif
 }
 
