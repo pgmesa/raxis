@@ -516,6 +516,21 @@ PYBIND11_MODULE(_C, c) {
         .def("reciprocal", &raxis::Tensor::reciprocal)
         .def("sigmoid", &raxis::Tensor::sigmoid)
         .def("logical_not", &raxis::Tensor::logical_not)
+        .def("expm1", &raxis::Tensor::expm1)
+        .def("log2", &raxis::Tensor::log2)
+        .def("log10", &raxis::Tensor::log10)
+        .def("log1p", &raxis::Tensor::log1p)
+        .def("sin", &raxis::Tensor::sin)
+        .def("cos", &raxis::Tensor::cos)
+        .def("tan", &raxis::Tensor::tan)
+        .def("asin", &raxis::Tensor::asin)
+        .def("acos", &raxis::Tensor::acos)
+        .def("atan", &raxis::Tensor::atan)
+        .def("sinh", &raxis::Tensor::sinh)
+        .def("cosh", &raxis::Tensor::cosh)
+        .def("tanh", &raxis::Tensor::tanh)
+        .def("erf", &raxis::Tensor::erf)
+        .def("erfc", &raxis::Tensor::erfc)
 
         .def("neg_", &raxis::Tensor::neg_)
         .def("abs_", &raxis::Tensor::abs_)
@@ -529,6 +544,21 @@ PYBIND11_MODULE(_C, c) {
         .def("reciprocal_", &raxis::Tensor::reciprocal_)
         .def("sigmoid_", &raxis::Tensor::sigmoid_)
         .def("logical_not_", &raxis::Tensor::logical_not_)
+        .def("expm1_", &raxis::Tensor::expm1_)
+        .def("log2_", &raxis::Tensor::log2_)
+        .def("log10_", &raxis::Tensor::log10_)
+        .def("log1p_", &raxis::Tensor::log1p_)
+        .def("sin_", &raxis::Tensor::sin_)
+        .def("cos_", &raxis::Tensor::cos_)
+        .def("tan_", &raxis::Tensor::tan_)
+        .def("asin_", &raxis::Tensor::asin_)
+        .def("acos_", &raxis::Tensor::acos_)
+        .def("atan_", &raxis::Tensor::atan_)
+        .def("sinh_", &raxis::Tensor::sinh_)
+        .def("cosh_", &raxis::Tensor::cosh_)
+        .def("tanh_", &raxis::Tensor::tanh_)
+        .def("erf_", &raxis::Tensor::erf_)
+        .def("erfc_", &raxis::Tensor::erfc_)
         
         // Reduction methods
         .def("sum", [](
@@ -936,6 +966,51 @@ PYBIND11_MODULE(_C, c) {
         py::arg("input"));
     c.def("logical_not",
         py::overload_cast<const raxis::Tensor&>(&raxis::logical_not),
+        py::arg("input"));
+    c.def("expm1",
+        py::overload_cast<const raxis::Tensor&>(&raxis::expm1),
+        py::arg("input"));
+    c.def("log2",
+        py::overload_cast<const raxis::Tensor&>(&raxis::log2),
+        py::arg("input"));
+    c.def("log10",
+        py::overload_cast<const raxis::Tensor&>(&raxis::log10),
+        py::arg("input"));
+    c.def("log1p",
+        py::overload_cast<const raxis::Tensor&>(&raxis::log1p),
+        py::arg("input"));
+    c.def("sin",
+        py::overload_cast<const raxis::Tensor&>(&raxis::sin),
+        py::arg("input"));
+    c.def("cos",
+        py::overload_cast<const raxis::Tensor&>(&raxis::cos),
+        py::arg("input"));
+    c.def("tan",
+        py::overload_cast<const raxis::Tensor&>(&raxis::tan),
+        py::arg("input"));
+    c.def("asin",
+        py::overload_cast<const raxis::Tensor&>(&raxis::asin),
+        py::arg("input"));
+    c.def("acos",
+        py::overload_cast<const raxis::Tensor&>(&raxis::acos),
+        py::arg("input"));
+    c.def("atan",
+        py::overload_cast<const raxis::Tensor&>(&raxis::atan),
+        py::arg("input"));
+    c.def("sinh",
+        py::overload_cast<const raxis::Tensor&>(&raxis::sinh),
+        py::arg("input"));
+    c.def("cosh",
+        py::overload_cast<const raxis::Tensor&>(&raxis::cosh),
+        py::arg("input"));
+    c.def("tanh",
+        py::overload_cast<const raxis::Tensor&>(&raxis::tanh),
+        py::arg("input"));
+    c.def("erf",
+        py::overload_cast<const raxis::Tensor&>(&raxis::erf),
+        py::arg("input"));
+    c.def("erfc",
+        py::overload_cast<const raxis::Tensor&>(&raxis::erfc),
         py::arg("input"));
 
     // Reduction Ops

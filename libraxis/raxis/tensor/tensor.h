@@ -251,6 +251,21 @@ public:
     Tensor reciprocal() const;
     Tensor sigmoid() const;
     Tensor logical_not() const;
+    Tensor expm1() const;
+    Tensor log2() const;
+    Tensor log10() const;
+    Tensor log1p() const;
+    Tensor sin() const;
+    Tensor cos() const;
+    Tensor tan() const;
+    Tensor asin() const;
+    Tensor acos() const;
+    Tensor atan() const;
+    Tensor sinh() const;
+    Tensor cosh() const;
+    Tensor tanh() const;
+    Tensor erf() const;
+    Tensor erfc() const;
     
     Tensor& neg_() const;
     Tensor& abs_() const;
@@ -264,6 +279,21 @@ public:
     Tensor& reciprocal_() const;
     Tensor& sigmoid_() const;
     Tensor& logical_not_() const;
+    Tensor& expm1_() const;
+    Tensor& log2_() const;
+    Tensor& log10_() const;
+    Tensor& log1p_() const;
+    Tensor& sin_() const;
+    Tensor& cos_() const;
+    Tensor& tan_() const;
+    Tensor& asin_() const;
+    Tensor& acos_() const;
+    Tensor& atan_() const;
+    Tensor& sinh_() const;
+    Tensor& cosh_() const;
+    Tensor& tanh_() const;
+    Tensor& erf_() const;
+    Tensor& erfc_() const;
 
     // Operators
     Tensor operator[](int64_t index) const;

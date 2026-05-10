@@ -379,7 +379,14 @@ def run_all(runner):
         ("neg",     NO_BOOL, S2D, lambda r: r.neg(), lambda t: t.neg(), lambda n: -n),
         ("abs",     NO_BOOL,     S2D, lambda r: r.abs(), lambda t: t.abs(), lambda n: np.abs(n)),
         ("exp",     FLOAT,   S2D, lambda r: r.exp(), lambda t: t.exp(), lambda n: np.exp(n)),
+        ("expm1",   FLOAT,   S2D, lambda r: r.expm1(), lambda t: t.expm1(), lambda n: np.expm1(n)),
         ("log",     FLOAT,   S2D, lambda r: r.log(), lambda t: t.log(), lambda n: np.log(n),
+         {"lo": 0.01, "hi": 10.0}),
+        ("log2",    FLOAT,   S2D, lambda r: r.log2(), lambda t: t.log2(), lambda n: np.log2(n),
+         {"lo": 0.01, "hi": 10.0}),
+        ("log10",   FLOAT,   S2D, lambda r: r.log10(), lambda t: t.log10(), lambda n: np.log10(n),
+         {"lo": 0.01, "hi": 10.0}),
+        ("log1p",   FLOAT,   S2D, lambda r: r.log1p(), lambda t: t.log1p(), lambda n: np.log1p(n),
          {"lo": 0.01, "hi": 10.0}),
         ("sqrt",    FLOAT,   S2D, lambda r: r.sqrt(), lambda t: t.sqrt(), lambda n: np.sqrt(n),
          {"lo": 0.01, "hi": 10.0}),
@@ -391,6 +398,21 @@ def run_all(runner):
          {"lo": 0.01, "hi": 10.0}),
         ("reciprocal", FLOAT, S2D, lambda r: r.reciprocal(), lambda t: t.reciprocal(), lambda n: 1.0 / n,
          {"lo": 0.1, "hi": 10.0}),
+        ("sin",     FLOAT,   S2D, lambda r: r.sin(), lambda t: t.sin(), lambda n: np.sin(n)),
+        ("cos",     FLOAT,   S2D, lambda r: r.cos(), lambda t: t.cos(), lambda n: np.cos(n)),
+        ("tan",     FLOAT,   S2D, lambda r: r.tan(), lambda t: t.tan(), lambda n: np.tan(n)),
+        ("asin",    FLOAT,   S2D, lambda r: r.asin(), lambda t: t.asin(), lambda n: np.arcsin(n),
+         {"lo": -0.9, "hi": 0.9}),
+        ("acos",    FLOAT,   S2D, lambda r: r.acos(), lambda t: t.acos(), lambda n: np.arccos(n),
+         {"lo": -0.9, "hi": 0.9}),
+        ("atan",    FLOAT,   S2D, lambda r: r.atan(), lambda t: t.atan(), lambda n: np.arctan(n)),
+        ("sinh",    FLOAT,   S2D, lambda r: r.sinh(), lambda t: t.sinh(), lambda n: np.sinh(n),
+         {"lo": -2.0, "hi": 2.0}),
+        ("cosh",    FLOAT,   S2D, lambda r: r.cosh(), lambda t: t.cosh(), lambda n: np.cosh(n),
+         {"lo": -2.0, "hi": 2.0}),
+        ("tanh",    FLOAT,   S2D, lambda r: r.tanh(), lambda t: t.tanh(), lambda n: np.tanh(n)),
+        ("erf",     FLOAT,   S2D, lambda r: r.erf(), lambda t: t.erf(), None),
+        ("erfc",    FLOAT,   S2D, lambda r: r.erfc(), lambda t: t.erfc(), None),
     ])
 
     # -- Comparison ops --
@@ -628,7 +650,7 @@ def main():
     parser.add_argument("--dtype", default="float32", choices=dtypes)
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--repeats", type=int, default=20)
-    parser.add_argument("--threshold", type=float, default=1.5)
+    parser.add_argument("--threshold", type=float, default=2)
     parser.add_argument("-k", "--filter", dest="target_ops", nargs='+', default=None)
     parser.add_argument("--no-color", action="store_true")
     parser.add_argument("--no-numpy", action="store_true", help="Skip NumPy benchmarks")

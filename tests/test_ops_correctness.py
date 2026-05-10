@@ -1,4 +1,3 @@
-
 import pytest
 import raxis
 import torch
@@ -171,11 +170,26 @@ UNARY_OPS = [
     ("floor",   "floor",   randf_centered),
     ("round",   "round",   randf_centered),
     ("exp",     "exp",     randf_small),
+    ("expm1",   "expm1",   randf_small),
     ("log",     "log",     randf_positive),
+    ("log2",    "log2",    randf_positive),
+    ("log10",   "log10",   randf_positive),
+    ("log1p",   "log1p",   randf_positive),
     ("sqrt",    "sqrt",    randf_positive),
     ("rsqrt",      "rsqrt",      randf_positive),
     ("reciprocal", "reciprocal", randf_nonzero),
     ("sigmoid", "sigmoid", randf_centered),
+    ("sin",     "sin",     randf_centered),
+    ("cos",     "cos",     randf_centered),
+    ("tan",     "tan",     randf_small),
+    ("asin",    "asin",    randf_unit),
+    ("acos",    "acos",    randf_unit),
+    ("atan",    "atan",    randf_centered),
+    ("sinh",    "sinh",    randf_small),
+    ("cosh",    "cosh",    randf_small),
+    ("tanh",    "tanh",    randf_centered),
+    ("erf",     "erf",     randf_centered),
+    ("erfc",    "erfc",    randf_centered),
 ]
 
 UNARY_INPLACE_OPS = [
@@ -185,11 +199,26 @@ UNARY_INPLACE_OPS = [
     ("floor_",   randf_centered),
     ("round_",   randf_centered),
     ("exp_",     randf_small),
+    ("expm1_",   randf_small),
     ("log_",     randf_positive),
+    ("log2_",    randf_positive),
+    ("log10_",   randf_positive),
+    ("log1p_",   randf_positive),
     ("sqrt_",    randf_positive),
     ("rsqrt_",      randf_positive),
     ("reciprocal_", randf_nonzero),
     ("sigmoid_", randf_centered),
+    ("sin_",     randf_centered),
+    ("cos_",     randf_centered),
+    ("tan_",     randf_small),
+    ("asin_",    randf_unit),
+    ("acos_",    randf_unit),
+    ("atan_",    randf_centered),
+    ("sinh_",    randf_small),
+    ("cosh_",    randf_small),
+    ("tanh_",    randf_centered),
+    ("erf_",     randf_centered),
+    ("erfc_",    randf_centered),
 ]
 
 # -- Binary arithmetic ops --

@@ -232,6 +232,62 @@ public:
         return map([](T x) -> T { return static_cast<T>(std::log2(static_cast<double>(x))); });
     }
 
+    Vectorized log10() const {
+        return map([](T x) -> T { return static_cast<T>(std::log10(static_cast<double>(x))); });
+    }
+
+    Vectorized log1p() const {
+        return map([](T x) -> T { return static_cast<T>(std::log1p(static_cast<double>(x))); });
+    }
+
+    Vectorized expm1() const {
+        return map([](T x) -> T { return static_cast<T>(std::expm1(static_cast<double>(x))); });
+    }
+
+    Vectorized sin() const {
+        return map([](T x) -> T { return static_cast<T>(std::sin(static_cast<double>(x))); });
+    }
+
+    Vectorized cos() const {
+        return map([](T x) -> T { return static_cast<T>(std::cos(static_cast<double>(x))); });
+    }
+
+    Vectorized tan() const {
+        return map([](T x) -> T { return static_cast<T>(std::tan(static_cast<double>(x))); });
+    }
+
+    Vectorized asin() const {
+        return map([](T x) -> T { return static_cast<T>(std::asin(static_cast<double>(x))); });
+    }
+
+    Vectorized acos() const {
+        return map([](T x) -> T { return static_cast<T>(std::acos(static_cast<double>(x))); });
+    }
+
+    Vectorized atan() const {
+        return map([](T x) -> T { return static_cast<T>(std::atan(static_cast<double>(x))); });
+    }
+
+    Vectorized sinh() const {
+        return map([](T x) -> T { return static_cast<T>(std::sinh(static_cast<double>(x))); });
+    }
+
+    Vectorized cosh() const {
+        return map([](T x) -> T { return static_cast<T>(std::cosh(static_cast<double>(x))); });
+    }
+
+    Vectorized tanh() const {
+        return map([](T x) -> T { return static_cast<T>(std::tanh(static_cast<double>(x))); });
+    }
+
+    Vectorized erf() const {
+        return map([](T x) -> T { return static_cast<T>(std::erf(static_cast<double>(x))); });
+    }
+
+    Vectorized erfc() const {
+        return map([](T x) -> T { return static_cast<T>(std::erfc(static_cast<double>(x))); });
+    }
+
     Vectorized pow(const Vectorized& exponent) const {
         Vectorized result;
         for (int i = 0; i < kSize; i++) {

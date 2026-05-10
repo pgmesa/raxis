@@ -5,6 +5,55 @@
 
 namespace raxis::vec {
 
+// Apply a unary vectorized operation to a contiguous buffer
+template <typename scalar_t, typename Op,
+    std::enable_if_t<
+        std::is_invocable_v<Op, Vectorized<scalar_t>>, int> = 0>
+inline void map(
+    const Op& vec_fun,
+    scalar_t* output_data,
+    const scalar_t* input_data,
+    int64_t size
+) {
+    using Vec = Vectorized<scalar_t>;
+    int64_t d = 0;
+    for (; d < size - (size % Vec::size()); d += Vec::size()) {
+        Vec output_vec = vec_fun(Vec::loadu(input_data + d));
+        output_vec.store(output_data + d);
+    }
+    if (size - d > 0) {
+        Vec output_vec = vec_fun(Vec::loadu(input_data + d, size - d));
+        output_vec.store(output_data + d, size - d);
+    }
+}
+ 
+// Apply a binary vectorized operation to two contiguous buffers
+template <typename scalar_t, typename Op,
+    std::enable_if_t<
+        std::is_invocable_v<Op, Vectorized<scalar_t>, Vectorized<scalar_t>>, int> = 0>
+inline void map2(
+    const Op& vec_fun,
+    scalar_t* output_data,
+    const scalar_t* input_data,
+    const scalar_t* input_data2,
+    int64_t size
+) {
+    using Vec = Vectorized<scalar_t>;
+    int64_t d = 0;
+    for (; d < size - (size % Vec::size()); d += Vec::size()) {
+        Vec data_vec = Vec::loadu(input_data + d);
+        Vec data_vec2 = Vec::loadu(input_data2 + d);
+        Vec output_vec = vec_fun(data_vec, data_vec2);
+        output_vec.store(output_data + d);
+    }
+    if (size - d > 0) {
+        Vec data_vec = Vec::loadu(input_data + d, size - d);
+        Vec data_vec2 = Vec::loadu(input_data2 + d, size - d);
+        Vec output_vec = vec_fun(data_vec, data_vec2);
+        output_vec.store(output_data + d, size - d);
+    }
+}
+
 template <typename scalar_t, typename Op>
 inline scalar_t vec_reduce_all(
     const Op& vec_fun,

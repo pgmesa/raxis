@@ -152,8 +152,14 @@ public:
 
     Vectorized frac() const;
 
+    // --- Transcendentals (Sleef) ---
+
     Vectorized exp() const {
         return Sleef_expd4_u10(values_);
+    }
+
+    Vectorized expm1() const {
+        return Sleef_expm1d4_u10(values_);
     }
 
     Vectorized log() const {
@@ -162,6 +168,58 @@ public:
 
     Vectorized log2() const {
         return Sleef_log2d4_u10(values_);
+    }
+
+    Vectorized log10() const {
+        return Sleef_log10d4_u10(values_);
+    }
+
+    Vectorized log1p() const {
+        return Sleef_log1pd4_u10(values_);
+    }
+
+    Vectorized sin() const {
+        return Sleef_sind4_u10(values_);
+    }
+
+    Vectorized cos() const {
+        return Sleef_cosd4_u10(values_);
+    }
+
+    Vectorized tan() const {
+        return Sleef_tand4_u10(values_);
+    }
+
+    Vectorized asin() const {
+        return Sleef_asind4_u10(values_);
+    }
+
+    Vectorized acos() const {
+        return Sleef_acosd4_u10(values_);
+    }
+
+    Vectorized atan() const {
+        return Sleef_atand4_u10(values_);
+    }
+
+    Vectorized sinh() const {
+        return Sleef_sinhd4_u10(values_);
+    }
+
+    Vectorized cosh() const {
+        return Sleef_coshd4_u10(values_);
+    }
+
+    Vectorized tanh() const {
+        return Sleef_tanhd4_u10(values_);
+    }
+
+    Vectorized erf() const {
+        return Sleef_erfd4_u10(values_);
+    }
+
+    Vectorized erfc() const {
+        return Sleef_erfcd4_u15(values_);
     }
 
     Vectorized pow(const Vectorized& exponent) const {

@@ -465,6 +465,21 @@ Tensor Tensor::rsqrt() const { return ::raxis::rsqrt(*this); }
 Tensor Tensor::reciprocal() const { return ::raxis::reciprocal(*this); }
 Tensor Tensor::sigmoid() const { return ::raxis::sigmoid(*this); }
 Tensor Tensor::logical_not() const { return ::raxis::logical_not(*this); }
+Tensor Tensor::expm1() const { return ::raxis::expm1(*this); }
+Tensor Tensor::log2() const { return ::raxis::log2(*this); }
+Tensor Tensor::log10() const { return ::raxis::log10(*this); }
+Tensor Tensor::log1p() const { return ::raxis::log1p(*this); }
+Tensor Tensor::sin() const { return ::raxis::sin(*this); }
+Tensor Tensor::cos() const { return ::raxis::cos(*this); }
+Tensor Tensor::tan() const { return ::raxis::tan(*this); }
+Tensor Tensor::asin() const { return ::raxis::asin(*this); }
+Tensor Tensor::acos() const { return ::raxis::acos(*this); }
+Tensor Tensor::atan() const { return ::raxis::atan(*this); }
+Tensor Tensor::sinh() const { return ::raxis::sinh(*this); }
+Tensor Tensor::cosh() const { return ::raxis::cosh(*this); }
+Tensor Tensor::tanh() const { return ::raxis::tanh(*this); }
+Tensor Tensor::erf() const { return ::raxis::erf(*this); }
+Tensor Tensor::erfc() const { return ::raxis::erfc(*this); }
 
 Tensor& Tensor::neg_() const { return ::raxis::neg_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::abs_() const { return ::raxis::abs_(const_cast<Tensor&>(*this)); }
@@ -478,6 +493,21 @@ Tensor& Tensor::rsqrt_() const { return ::raxis::rsqrt_(const_cast<Tensor&>(*thi
 Tensor& Tensor::reciprocal_() const { return ::raxis::reciprocal_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::sigmoid_() const { return ::raxis::sigmoid_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::logical_not_() const { return ::raxis::logical_not_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::expm1_() const { return ::raxis::expm1_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::log2_() const { return ::raxis::log2_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::log10_() const { return ::raxis::log10_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::log1p_() const { return ::raxis::log1p_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::sin_() const { return ::raxis::sin_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::cos_() const { return ::raxis::cos_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::tan_() const { return ::raxis::tan_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::asin_() const { return ::raxis::asin_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::acos_() const { return ::raxis::acos_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::atan_() const { return ::raxis::atan_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::sinh_() const { return ::raxis::sinh_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::cosh_() const { return ::raxis::cosh_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::tanh_() const { return ::raxis::tanh_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::erf_() const { return ::raxis::erf_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::erfc_() const { return ::raxis::erfc_(const_cast<Tensor&>(*this)); }
 
 // ========================= Operators =========================
 Tensor Tensor::operator[](int64_t index) const {
