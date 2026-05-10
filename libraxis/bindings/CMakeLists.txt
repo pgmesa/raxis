@@ -28,6 +28,10 @@ if(PYBIND11_PATH)
 endif()
 
 find_package(pybind11 REQUIRED)
+if(NOT pybind11_FOUND)
+    message(FATAL_ERROR
+        "pybind11 not found. Install it with: pip install pybind11")
+endif()
 
 pybind11_add_module(raxis_bindings raxis_bindings.cpp)
 add_library(raxis::bindings ALIAS raxis_bindings)
