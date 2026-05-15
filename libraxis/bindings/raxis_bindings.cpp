@@ -9,6 +9,7 @@
 #include <raxis/raxis.h>
 #include <raxis/util/build_config.h>
 #include <raxis/ops/dispatch_stub.h>
+#include <raxis/util/parallel.h>
 
 #include "casters.h"
 #include "numpy_utils.h"
@@ -26,6 +27,11 @@ PYBIND11_MODULE(_C, c) {
     c.def("get_cpu_capability", []() -> std::string {
         return raxis::cpu_capability_name(raxis::get_cpu_capability());
     });
+    c.def("get_num_threads", &raxis::get_num_threads, 
+            "Returns the number of threads used for parallelizing CPU operations");
+    c.def("set_num_threads", &raxis::set_num_threads, 
+            "Sets the number of threads used for intraop parallelism on CPU.");
+
     // Exceptions
     py::register_exception_translator([](std::exception_ptr p) {
         try {
