@@ -595,8 +595,6 @@ def run_all(runner):
          lambda ts: torch.stack(ts, dim=0),
          lambda ns: np.stack(ns, axis=0)),
     ]:
-        if not dtype_allowed(runner.dtype_str, FLOAT):
-            continue
         if not runner._should_run(name):
             continue
         if not header_printed:

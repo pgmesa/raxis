@@ -84,6 +84,7 @@ public:
     Scalar item() const;
 
     int64_t numel() const;
+    size_t nbytes() const;
     int ndim() const;
     IntArrayRef shape() const;
     int64_t stride(int64_t dim) const;

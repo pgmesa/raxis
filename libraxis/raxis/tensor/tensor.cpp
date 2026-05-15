@@ -64,6 +64,10 @@ int64_t Tensor::numel() const {
     return impl_->numel();
 }
 
+size_t Tensor::nbytes() const {
+    return numel() * dtype().itemsize();
+}
+
 int Tensor::ndim() const {
     ensure_defined("ndim");
     return impl_->ndim();

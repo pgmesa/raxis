@@ -1801,3 +1801,131 @@ class TestCatStackUnbind:
                      context="stack-unbind roundtrip [0]")
         check_match(parts[1], torch.tensor([4.0, 5.0, 6.0]),
                      context="stack-unbind roundtrip [1]")
+        
+    # -- Multi-dtype cat/stack --
+
+    CAT_DTYPES = [
+        (np.float32, "float32"),
+        (np.float64, "float64"),
+        (np.int32,   "int32"),
+        (np.int64,   "int64"),
+    ]
+
+    @pytest.mark.parametrize("dtype,desc", CAT_DTYPES, ids=[d[1] for d in CAT_DTYPES])
+    def test_cat_single_dtype(self, dtype, desc):
+        a = np.arange(6, dtype=dtype).reshape(2, 3)
+        b = np.arange(6, 12, dtype=dtype).reshape(2, 3)
+        r_a, t_a = make_pair(a)
+        r_b, t_b = make_pair(b)
+        check_match(raxis.cat([r_a, r_b], dim=0), torch.cat([t_a, t_b], dim=0),
+                     context=f"cat {desc} dim=0")
+
+    @pytest.mark.parametrize("dtype,desc", CAT_DTYPES, ids=[d[1] for d in CAT_DTYPES])
+    def test_stack_single_dtype(self, dtype, desc):
+        a = np.arange(6, dtype=dtype).reshape(2, 3)
+        b = np.arange(6, 12, dtype=dtype).reshape(2, 3)
+        r_a, t_a = make_pair(a)
+        r_b, t_b = make_pair(b)
+        check_match(raxis.stack([r_a, r_b], dim=0), torch.stack([t_a, t_b], dim=0),
+                     context=f"stack {desc} dim=0")
+
+    MIXED_DTYPE_CASES = [
+        (np.int32,   np.float32, "int32+float32"),
+        (np.int32,   np.float64, "int32+float64"),
+        (np.int64,   np.float32, "int64+float32"),
+        (np.float32, np.float64, "float32+float64"),
+        (np.int32,   np.int64,   "int32+int64"),
+    ]
+
+    @pytest.mark.parametrize("dtype_a,dtype_b,desc", MIXED_DTYPE_CASES,
+                             ids=[c[2] for c in MIXED_DTYPE_CASES])
+    def test_cat_mixed_dtype(self, dtype_a, dtype_b, desc):
+        a = np.arange(6, dtype=dtype_a).reshape(2, 3)
+        b = np.arange(6, 12, dtype=dtype_b).reshape(2, 3)
+        r_a, t_a = make_pair(a)
+        r_b, t_b = make_pair(b)
+        r_out = raxis.cat([r_a, r_b], dim=0)
+        t_out = torch.cat([t_a, t_b], dim=0)
+        check_match(r_out, t_out, context=f"cat mixed {desc}")
+        assert r_out.dtype.name == str(t_out.dtype).replace("torch.", "")
+
+    @pytest.mark.parametrize("dtype_a,dtype_b,desc", MIXED_DTYPE_CASES,
+                             ids=[c[2] for c in MIXED_DTYPE_CASES])
+    def test_stack_mixed_dtype(self, dtype_a, dtype_b, desc):
+        a = np.arange(6, dtype=dtype_a).reshape(2, 3)
+        b = np.arange(6, 12, dtype=dtype_b).reshape(2, 3)
+        r_a, t_a = make_pair(a)
+        r_b, t_b = make_pair(b)
+        r_out = raxis.stack([r_a, r_b], dim=0)
+        t_out = torch.stack([t_a, t_b], dim=0)
+        check_match(r_out, t_out, context=f"stack mixed {desc}")
+        assert r_out.dtype.name == str(t_out.dtype).replace("torch.", "")
+
+    # -- Non-contiguous cases --
+
+    def test_cat_both_non_contiguous(self):
+        a = np.arange(12, dtype=np.float32).reshape(3, 4)
+        b = np.arange(12, 24, dtype=np.float32).reshape(3, 4)
+        r_a, t_a = make_pair(a)
+        r_b, t_b = make_pair(b)
+        r_a_t, t_a_t = r_a.transpose(0, 1), t_a.transpose(0, 1)
+        r_b_t, t_b_t = r_b.transpose(0, 1), t_b.transpose(0, 1)
+        check_match(
+            raxis.cat([r_a_t, r_b_t], dim=0),
+            torch.cat([t_a_t, t_b_t], dim=0),
+            context="cat both non-contiguous dim=0")
+        check_match(
+            raxis.cat([r_a_t, r_b_t], dim=1),
+            torch.cat([t_a_t, t_b_t], dim=1),
+            context="cat both non-contiguous dim=1")
+
+    def test_cat_mixed_contiguity(self):
+        a = np.arange(12, dtype=np.float32).reshape(3, 4)
+        b = np.ones((4, 3), dtype=np.float32)
+        r_a, t_a = make_pair(a)
+        r_b, t_b = make_pair(b)
+        r_a_t, t_a_t = r_a.transpose(0, 1), t_a.transpose(0, 1)
+        check_match(
+            raxis.cat([r_a_t, r_b], dim=0),
+            torch.cat([t_a_t, t_b], dim=0),
+            context="cat mixed contiguity")
+
+    def test_stack_non_contiguous(self):
+        a = np.arange(12, dtype=np.float32).reshape(3, 4)
+        b = np.arange(12, 24, dtype=np.float32).reshape(3, 4)
+        r_a, t_a = make_pair(a)
+        r_b, t_b = make_pair(b)
+        r_a_t, t_a_t = r_a.transpose(0, 1), t_a.transpose(0, 1)
+        r_b_t, t_b_t = r_b.transpose(0, 1), t_b.transpose(0, 1)
+        for dim in range(3):
+            check_match(
+                raxis.stack([r_a_t, r_b_t], dim=dim),
+                torch.stack([t_a_t, t_b_t], dim=dim),
+                context=f"stack non-contiguous dim={dim}")
+
+    def test_cat_non_contiguous_mixed_dtype(self):
+        a = np.arange(12, dtype=np.int32).reshape(3, 4)
+        b = np.arange(12, 24, dtype=np.float32).reshape(3, 4)
+        r_a, t_a = make_pair(a)
+        r_b, t_b = make_pair(b)
+        r_a_t, t_a_t = r_a.transpose(0, 1), t_a.transpose(0, 1)
+        r_b_t, t_b_t = r_b.transpose(0, 1), t_b.transpose(0, 1)
+        r_out = raxis.cat([r_a_t, r_b_t], dim=0)
+        t_out = torch.cat([t_a_t, t_b_t], dim=0)
+        check_match(r_out, t_out, context="cat non-contiguous mixed dtype")
+
+    def test_cat_sliced_inputs(self):
+        data = np.arange(20, dtype=np.float32).reshape(4, 5)
+        r, t = make_pair(data)
+        check_match(
+            raxis.cat([r[0:2], r[2:4]], dim=0),
+            torch.cat([t[0:2], t[2:4]], dim=0),
+            context="cat sliced inputs")
+
+    def test_stack_sliced_inputs(self):
+        data = np.arange(20, dtype=np.float32).reshape(4, 5)
+        r, t = make_pair(data)
+        check_match(
+            raxis.stack([r[0], r[1], r[2]], dim=0),
+            torch.stack([t[0], t[1], t[2]], dim=0),
+            context="stack sliced inputs")

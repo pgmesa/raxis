@@ -93,6 +93,20 @@ Tensor cat(ArrayRef<Tensor> tensors, int64_t dim) {
     }
  
     if (all_contiguous && all_same_dtype && out_device.is_cpu()) {
+        if (dim == 0) {
+            char* dst = static_cast<char*>(result.mutable_data_ptr());
+            for (const Tensor& t : tensors) {
+                if (cat_should_skip_tensor(t)) {
+                    continue;
+                }
+                int64_t nbytes = t.nbytes();
+                if (nbytes > 0) {
+                    std::memcpy(dst, t.data_ptr(), nbytes);
+                    dst += nbytes;
+                }
+            }
+            return result;
+        }
         cat_serial_stub(DeviceType::CPU, result, tensors, dim);
         return result;
     }
