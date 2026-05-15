@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <type_traits>
 
 #include <raxis/ops/dispatch_stub.h>
 #include <raxis/core/dtype.h>
@@ -96,12 +97,16 @@ scalar_t dot_naive(
  
 template <typename scalar_t>
 scalar_t dot_impl(
-    int64_t n, 
+    int64_t n,
     const scalar_t* x, int64_t incx,
     const scalar_t* y, int64_t incy
 ) {
     if (n == 1) { incx = 1; incy = 1; }
-    return detail::dot_naive(n, x, incx, y, incy);
+    if constexpr (std::is_same_v<scalar_t, float> || std::is_same_v<scalar_t, double>) {
+        return dot_impl(n, x, incx, y, incy);
+    } else {
+        return detail::dot_naive(n, x, incx, y, incy);
+    }
 }
  
 // BLAS-accelerated overloads
@@ -174,7 +179,11 @@ void gemv(
     scalar_t beta,
     scalar_t* y, int64_t incy
 ) {
-    detail::gemv_naive(trans, m, n, alpha, a, lda, x, incx, beta, y, incy);
+    if constexpr (std::is_same_v<scalar_t, float> || std::is_same_v<scalar_t, double>) {
+        gemv(trans, m, n, alpha, a, lda, x, incx, beta, y, incy);
+    } else {
+        detail::gemv_naive(trans, m, n, alpha, a, lda, x, incx, beta, y, incy);
+    }
 }
 
 } // namespace raxis::cpublas
