@@ -7,7 +7,6 @@
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/shape_utils.h>
 #include <raxis/tensor/tensor_indexing.h>
-#include <raxis/tensor/detail/tensor_impl.h>
 
 
 namespace raxis {
@@ -90,6 +89,17 @@ Tensor slice(const Tensor& self, int64_t dim, int64_t start, int64_t stop, int64
     new_strides[dim] = old_strides[dim] * step;
 
     return make_view(self, new_offset, new_shape, new_strides);
+}
+
+Tensor narrow(const Tensor& self, int64_t dim, int64_t start, int64_t length) {
+    RAXIS_CHECK(self.ndim() > 0, "narrow() cannot be applied to a 0-d tensor");
+    dim = wrap_dim(dim, self.ndim());
+    RAXIS_CHECK(length >= 0, "narrow(): length must be non-negative, got ", length);
+    RAXIS_CHECK(start >= 0 && start + length <= self.shape()[dim],
+        "narrow(): start (", start, ") + length (", length,
+        ") exceeds dimension size (", self.shape()[dim], ")");
+
+    return slice(self, dim, start, start + length);
 }
 
 Tensor unsqueeze(const Tensor& self, int64_t dim) {

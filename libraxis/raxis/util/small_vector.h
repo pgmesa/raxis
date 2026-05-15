@@ -212,6 +212,51 @@ public:
         return *p;
     }
 
+    iterator insert(const_iterator pos, const T& value) {
+        size_t idx = pos - data();
+        if (size_ == capacity_) {
+            grow(capacity_ * 2);
+        }
+        T* p = data() + idx;
+        if (idx < size_) {
+            // Shift elements right by one
+            if constexpr (std::is_trivially_copyable_v<T>) {
+                std::memmove(p + 1, p, (size_ - idx) * sizeof(T));
+            } else {
+                ::new (static_cast<void*>(data() + size_)) T(std::move(data()[size_ - 1]));
+                std::move_backward(p, data() + size_ - 1, data() + size_);
+                *p = value;
+                ++size_;
+                return p;
+            }
+        }
+        ::new (static_cast<void*>(p)) T(value);
+        ++size_;
+        return p;
+    }
+
+    iterator insert(const_iterator pos, T&& value) {
+        size_t idx = pos - data();
+        if (size_ == capacity_) {
+            grow(capacity_ * 2);
+        }
+        T* p = data() + idx;
+        if (idx < size_) {
+            if constexpr (std::is_trivially_copyable_v<T>) {
+                std::memmove(p + 1, p, (size_ - idx) * sizeof(T));
+            } else {
+                ::new (static_cast<void*>(data() + size_)) T(std::move(data()[size_ - 1]));
+                std::move_backward(p, data() + size_ - 1, data() + size_);
+                *p = std::move(value);
+                ++size_;
+                return p;
+            }
+        }
+        ::new (static_cast<void*>(p)) T(std::move(value));
+        ++size_;
+        return p;
+    }
+
     bool operator==(const SmallVector& other) const {
         return size_ == other.size_ && std::equal(begin(), end(), other.begin());
     }

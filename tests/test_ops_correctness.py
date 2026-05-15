@@ -1676,3 +1676,128 @@ class TestMatmul:
         r_a, t_a = make_pair(a_data, device)
         r_b, t_b = make_pair(b_data, device)
         check_match(r_a.matmul(r_b), t_a.matmul(t_b), context="matmul method")
+        
+        
+class TestCatStackUnbind:
+ 
+    def test_cat_basic(self):
+        a_r, a_t = make_pair(np.array([[1, 2], [3, 4]], dtype=np.float32))
+        b_r, b_t = make_pair(np.array([[5, 6], [7, 8]], dtype=np.float32))
+        check_match(raxis.cat([a_r, b_r], dim=0), torch.cat([a_t, b_t], dim=0),
+                     context="cat dim=0")
+        check_match(raxis.cat([a_r, b_r], dim=1), torch.cat([a_t, b_t], dim=1),
+                     context="cat dim=1")
+ 
+    def test_cat_negative_dim(self):
+        a_r, a_t = make_pair(np.array([[1, 2], [3, 4]], dtype=np.float32))
+        b_r, b_t = make_pair(np.array([[5, 6]], dtype=np.float32))
+        check_match(raxis.cat([a_r, b_r], dim=-2), torch.cat([a_t, b_t], dim=-2),
+                     context="cat dim=-2")
+ 
+    def test_cat_dtype_promotion(self):
+        a_r = raxis.tensor([1, 2, 3], dtype=raxis.int32)
+        b_r = raxis.tensor([4.0, 5.0, 6.0], dtype=raxis.float32)
+        a_t = torch.tensor([1, 2, 3], dtype=torch.int32)
+        b_t = torch.tensor([4.0, 5.0, 6.0], dtype=torch.float32)
+        r = raxis.cat([a_r, b_r])
+        t = torch.cat([a_t, b_t])
+        check_match(r, t, context="cat dtype promotion")
+        assert r.dtype == raxis.float32
+ 
+    def test_cat_single_tensor(self):
+        a_r, a_t = make_pair(np.array([1, 2, 3], dtype=np.float32))
+        check_match(raxis.cat([a_r]), torch.cat([a_t]),
+                     context="cat single tensor")
+ 
+    def test_cat_non_contiguous(self):
+        a_r, a_t = make_pair(np.arange(12, dtype=np.float32).reshape(3, 4))
+        a_r_t = a_r.transpose(0, 1)
+        a_t_t = a_t.transpose(0, 1)
+        b_r, b_t = make_pair(np.ones((4, 3), dtype=np.float32))
+        check_match(
+            raxis.cat([a_r_t, b_r], dim=0),
+            torch.cat([a_t_t, b_t], dim=0),
+            context="cat non-contiguous")
+ 
+    def test_cat_many_tensors(self):
+        rs = [raxis.tensor([float(i)]) for i in range(10)]
+        ts = [torch.tensor([float(i)]) for i in range(10)]
+        check_match(raxis.cat(rs), torch.cat(ts), context="cat many tensors")
+ 
+    def test_cat_3d_dim1(self):
+        a_r, a_t = make_pair(np.arange(24, dtype=np.float32).reshape(2, 3, 4))
+        b_r, b_t = make_pair(np.ones((2, 5, 4), dtype=np.float32))
+        check_match(
+            raxis.cat([a_r, b_r], dim=1),
+            torch.cat([a_t, b_t], dim=1),
+            context="cat 3d dim=1")
+ 
+    def test_stack_basic(self):
+        a_r, a_t = make_pair(np.array([1, 2, 3], dtype=np.float32))
+        b_r, b_t = make_pair(np.array([4, 5, 6], dtype=np.float32))
+        check_match(raxis.stack([a_r, b_r], dim=0), torch.stack([a_t, b_t], dim=0),
+                     context="stack dim=0")
+        check_match(raxis.stack([a_r, b_r], dim=1), torch.stack([a_t, b_t], dim=1),
+                     context="stack dim=1")
+ 
+    def test_stack_negative_dim(self):
+        a_r, a_t = make_pair(np.array([1, 2, 3], dtype=np.float32))
+        b_r, b_t = make_pair(np.array([4, 5, 6], dtype=np.float32))
+        check_match(raxis.stack([a_r, b_r], dim=-1), torch.stack([a_t, b_t], dim=-1),
+                     context="stack dim=-1")
+ 
+    def test_stack_2d(self):
+        a_r, a_t = make_pair(np.array([[1, 2], [3, 4]], dtype=np.float32))
+        b_r, b_t = make_pair(np.array([[5, 6], [7, 8]], dtype=np.float32))
+        for dim in range(3):
+            check_match(
+                raxis.stack([a_r, b_r], dim=dim),
+                torch.stack([a_t, b_t], dim=dim),
+                context=f"stack 2d dim={dim}")
+ 
+    def test_unbind_basic(self):
+        data = np.arange(6, dtype=np.float32).reshape(2, 3)
+        r, t = make_pair(data)
+        r_list = raxis.unbind(r, dim=0)
+        t_list = torch.unbind(t, dim=0)
+        assert len(r_list) == len(t_list)
+        for i, (ri, ti) in enumerate(zip(r_list, t_list)):
+            check_match(ri, ti, context=f"unbind dim=0 [{i}]")
+ 
+    def test_unbind_dim1(self):
+        data = np.arange(6, dtype=np.float32).reshape(2, 3)
+        r, t = make_pair(data)
+        r_list = raxis.unbind(r, dim=1)
+        t_list = torch.unbind(t, dim=1)
+        assert len(r_list) == len(t_list)
+        for i, (ri, ti) in enumerate(zip(r_list, t_list)):
+            check_match(ri, ti, context=f"unbind dim=1 [{i}]")
+ 
+    def test_unbind_returns_views(self):
+        r = raxis.tensor([[1.0, 2.0], [3.0, 4.0]])
+        parts = raxis.unbind(r, dim=0)
+        assert len(parts) == 2
+ 
+    def test_narrow_basic(self):
+        data = np.arange(10, dtype=np.float32)
+        r, t = make_pair(data)
+        check_match(r.narrow(0, 2, 5), t.narrow(0, 2, 5),
+                     context="narrow 1d")
+ 
+    def test_narrow_2d(self):
+        data = np.arange(12, dtype=np.float32).reshape(3, 4)
+        r, t = make_pair(data)
+        check_match(r.narrow(0, 1, 2), t.narrow(0, 1, 2),
+                     context="narrow 2d dim=0")
+        check_match(r.narrow(1, 0, 2), t.narrow(1, 0, 2),
+                     context="narrow 2d dim=1")
+ 
+    def test_stack_then_unbind_roundtrip(self):
+        a_r = raxis.tensor([1.0, 2.0, 3.0])
+        b_r = raxis.tensor([4.0, 5.0, 6.0])
+        stacked = raxis.stack([a_r, b_r], dim=0)
+        parts = raxis.unbind(stacked, dim=0)
+        check_match(parts[0], torch.tensor([1.0, 2.0, 3.0]),
+                     context="stack-unbind roundtrip [0]")
+        check_match(parts[1], torch.tensor([4.0, 5.0, 6.0]),
+                     context="stack-unbind roundtrip [1]")

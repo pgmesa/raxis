@@ -189,6 +189,10 @@ Tensor Tensor::slice(int64_t dim, int64_t start, int64_t stop, int64_t step) con
     return ::raxis::slice(*this, dim, start, stop, step);
 }
 
+Tensor Tensor::narrow(int64_t dim, int64_t start, int64_t length) const {
+    return ::raxis::narrow(*this, dim, start, length);
+}
+
 Tensor Tensor::mT() const { 
     return transpose(-2, -1);
 }

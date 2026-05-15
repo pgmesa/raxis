@@ -257,6 +257,54 @@ class BenchmarkRunner:
             ran = True
 
         return ran
+    
+    def bench_multi(self, name, configs, raxis_fn, torch_fn, numpy_fn=None):
+        """Benchmark ops that need multiple tensors built from a config.
+ 
+        configs: list of dicts with keys:
+            - shapes: list of shapes for input tensors
+            - label:  string label for the row
+        """
+        if not self._should_run(name):
+            return False
+ 
+        ran = False
+        for cfg in configs:
+            shapes = cfg["shapes"]
+            label = cfg["label"]
+ 
+            r_tensors = []
+            t_tensors = []
+            np_arrays = []
+            for idx, shape in enumerate(shapes):
+                data, r, t = self._make_tensors(shape, seed=42 + idx)
+                r_tensors.append(r)
+                t_tensors.append(t)
+                np_arrays.append(data)
+ 
+            r_time = self._time_fn(lambda: raxis_fn(r_tensors))
+            t_time = self._time_fn(lambda: torch_fn(t_tensors))
+            ratio = r_time / max(t_time, 1e-12)
+ 
+            np_time = None
+            if numpy_fn is not None and self.device == "cpu":
+                np_time = self._time_fn(lambda: numpy_fn(np_arrays))
+ 
+            status = "OK" if ratio < self.threshold else "SLOW"
+            self.results.append({
+                "name": name, "shape": label,
+                "raxis_ms": r_time * 1e3, "torch_ms": t_time * 1e3,
+                "ratio": ratio,
+                "np_ratio": (r_time / max(np_time, 1e-12)) if np_time else None,
+                "status": status,
+            })
+ 
+            np_ms = np_time * 1e3 if np_time else None
+            print_row(name, label, r_time * 1e3, t_time * 1e3, ratio,
+                      self.threshold, np_ms=np_ms)
+            ran = True
+ 
+        return ran
 
     def bench_backward(self, name, shapes, forward_fn, data_kw=None):
         if not self._should_run(name):
@@ -511,6 +559,61 @@ def run_all(runner):
         ("fill",  ALL, S2D,
          lambda r: r.fill_(3), lambda t: t.fill_(3), lambda n: n.fill(3)),
     ])
+    
+    # -- Cat / Stack / Unbind --
+    CAT_CONFIGS_DIM0 = [
+        {"shapes": [(500, 500)] * 2,  "label": "2x(500,500) dim0"},
+        {"shapes": [(1000, 1000)] * 2, "label": "2x(1000,1000) dim0"},
+        {"shapes": [(100, 1000)] * 10, "label": "10x(100,1000) dim0"},
+    ]
+ 
+    CAT_CONFIGS_DIM1 = [
+        {"shapes": [(500, 500)] * 2,  "label": "2x(500,500) dim1"},
+        {"shapes": [(1000, 1000)] * 2, "label": "2x(1000,1000) dim1"},
+        {"shapes": [(1000, 100)] * 10, "label": "10x(1000,100) dim1"},
+    ]
+ 
+    STACK_CONFIGS = [
+        {"shapes": [(500, 500)] * 2,  "label": "2x(500,500) dim0"},
+        {"shapes": [(1000, 1000)] * 2, "label": "2x(1000,1000) dim0"},
+        {"shapes": [(100, 100)] * 20, "label": "20x(100,100) dim0"},
+    ]
+ 
+    header_printed = False
+ 
+    for name, configs, r_fn, t_fn, np_fn in [
+        ("cat_dim0", CAT_CONFIGS_DIM0,
+         lambda ts: raxis.cat(ts, dim=0),
+         lambda ts: torch.cat(ts, dim=0),
+         lambda ns: np.concatenate(ns, axis=0)),
+        ("cat_dim1", CAT_CONFIGS_DIM1,
+         lambda ts: raxis.cat(ts, dim=1),
+         lambda ts: torch.cat(ts, dim=1),
+         lambda ns: np.concatenate(ns, axis=1)),
+        ("stack_dim0", STACK_CONFIGS,
+         lambda ts: raxis.stack(ts, dim=0),
+         lambda ts: torch.stack(ts, dim=0),
+         lambda ns: np.stack(ns, axis=0)),
+    ]:
+        if not dtype_allowed(runner.dtype_str, FLOAT):
+            continue
+        if not runner._should_run(name):
+            continue
+        if not header_printed:
+            print_header("Cat / Stack / Unbind")
+            header_printed = True
+        runner.bench_multi(name, configs, r_fn, t_fn, numpy_fn=np_fn)
+ 
+    # unbind uses the single-tensor bench since it takes one input
+    UNBIND_SHAPES = [(10, 1000), (100, 1000), (1000, 1000)]
+    if header_printed or runner._should_run("unbind"):
+        if not header_printed:
+            print_header("Cat / Stack / Unbind")
+            header_printed = True
+        runner.bench("unbind_dim0", UNBIND_SHAPES,
+                     lambda r: raxis.unbind(r, dim=0),
+                     lambda t: torch.unbind(t, dim=0),
+                     numpy_fn=None)
     
     # -- Dot --
     S_DOT = [(128,), (1024,), (8192,), (65536,)]

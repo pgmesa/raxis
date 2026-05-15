@@ -109,6 +109,7 @@ public:
     Tensor select(int64_t dim, int64_t index) const;
     Tensor slice(int64_t dim, const indexing::Slice& slice) const;
     Tensor slice(int64_t dim, int64_t start, int64_t stop, int64_t step = 1) const;
+    Tensor narrow(int64_t dim, int64_t start, int64_t length) const;
     Tensor unsqueeze(int64_t dim) const;
     Tensor squeeze(std::optional<int64_t> dim_opt = std::nullopt) const;
     Tensor mT() const;

@@ -148,6 +148,9 @@ PYBIND11_MODULE(_C, c) {
             self.index_put_(raxis::python::py_index_to_tensor_indices(idx), value);
         })
 
+        .def("narrow", &raxis::Tensor::narrow,
+            py::arg("dim"), py::arg("start"), py::arg("length"))
+
         // Shape / view operations
         .def("squeeze", &raxis::Tensor::squeeze, py::arg("dim") = py::none())
         .def("unsqueeze", &raxis::Tensor::unsqueeze, py::arg("dim"))
@@ -772,7 +775,7 @@ PYBIND11_MODULE(_C, c) {
         return raxis::broadcast_to(input, shape);
     }, py::arg("input"), py::arg("shape"));
 
-    c.def("broadcast_tensors",  [](std::vector<raxis::Tensor> tensors) {
+    c.def("broadcast_tensors", [](std::vector<raxis::Tensor> tensors) {
         return raxis::broadcast_tensors(tensors);
     }, py::arg("tensors"));
     c.def("broadcast_shapes", [](std::vector<raxis::Vec> shapes) {
@@ -783,6 +786,17 @@ PYBIND11_MODULE(_C, c) {
         }
         return raxis::broadcast_shapes(refs);
     }, py::arg("shapes"));
+
+    c.def("cat", [](std::vector<raxis::Tensor> tensors, int64_t dim) {
+        return raxis::cat(tensors, dim);
+    }, py::arg("tensors"), py::arg("dim") = 0);
+    c.def("concat", [](std::vector<raxis::Tensor> tensors, int64_t dim) {
+        return raxis::cat(tensors, dim);
+    }, py::arg("tensors"), py::arg("dim") = 0);
+    c.def("stack", [](std::vector<raxis::Tensor> tensors, int64_t dim) {
+        return raxis::stack(tensors, dim);
+    }, py::arg("tensors"), py::arg("dim") = 0);
+    c.def("unbind", &raxis::unbind, py::arg("input"), py::arg("dim") = 0);
 
     // Linear algebra
     c.def("dot", &raxis::dot, py::arg("input"), py::arg("other"));
