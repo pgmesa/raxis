@@ -7,10 +7,10 @@ function(add_example EXAMPLE_NAME SOURCE_FILE)
 
     target_link_libraries(${EXAMPLE_NAME}
         PRIVATE
-            raxis::raxis
+            Raxis::Raxis
     )
 endfunction()
 
 # Build each example
-add_example(example_add    example_add.cpp)
+add_example(example_add example_add.cpp)
 add_example(example_reduction example_reduction.cpp)

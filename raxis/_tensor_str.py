@@ -373,6 +373,12 @@ def _str(tensor) -> str:
     # Show dtype if not one of the "default" types
     if tensor.dtype.name not in _DEFAULT_DTYPE_NAMES:
         suffixes.append(f"dtype={tensor.dtype.name}")
+        
+    if tensor.requires_grad:
+        if tensor.grad_fn is not None:
+            suffixes.append(f"grad_fn=<{tensor.grad_fn.name()}>")
+        else:
+            suffixes.append("requires_grad=True")
 
     # Empty tensor
     if tensor.numel() == 0:

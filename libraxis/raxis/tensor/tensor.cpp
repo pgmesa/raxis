@@ -9,6 +9,9 @@
 
 #include <raxis/ops.h>
 
+#include <raxis/autograd/engine.h>
+#include <raxis/autograd/autograd_meta.h>
+
 #include <raxis/tensor/shape_utils.h>
 #include <raxis/tensor/detail/tensor_impl.h>
 #include <raxis/tensor/detail/storage_impl.h>
@@ -102,10 +105,6 @@ Device Tensor::device() const {
     return impl_->device();
 }
 
-bool Tensor::requires_grad() const {
-    return false; // TODO
-}
-
 TensorOptions Tensor::options() const {
     return TensorOptions()
         .dtype(dtype())
@@ -166,6 +165,105 @@ std::string Tensor::to_string() const {
        << ", dtype=" << impl_->dtype().name()
        << ", device='" << impl_->device().str() << "')";
     return os.str();
+}
+
+// ======================== Autograd =========================
+// Helper to lazily create the metadata
+static autograd::AutogradMeta& ensure_autograd_meta(detail::TensorImpl* impl) {
+    if (!impl->autograd_meta()) {
+        impl->set_autograd_meta(std::make_unique<autograd::AutogradMeta>());
+    }
+    return *impl->autograd_meta();
+}
+
+bool Tensor::requires_grad() const {
+    if (!defined()) return false;
+    auto* meta = impl_->autograd_meta();
+    return meta && meta->requires_grad;
+}
+
+Tensor& Tensor::requires_grad_(bool requires_grad) {
+    ensure_defined("requires_grad_");
+    RAXIS_CHECK(dtype().is_floating(),
+        "Only floating point tensors can require gradients");
+    RAXIS_CHECK(is_leaf(),
+        "You can only change requires_grad flags of leaf variables");
+    ensure_autograd_meta(impl_.get()).requires_grad = requires_grad;
+    return *this;
+}
+
+Tensor Tensor::grad() const {
+    if (!defined()) return Tensor{};
+    auto* meta = impl_->autograd_meta();
+    if (!meta) return Tensor{};
+    return meta->grad;
+}
+
+void Tensor::set_grad(const Tensor& grad) {
+    ensure_defined("set_grad");
+    ensure_autograd_meta(impl_.get()).grad = grad;
+}
+
+std::shared_ptr<autograd::Node> Tensor::grad_fn() const {
+    if (!defined()) return nullptr;
+    auto* meta = impl_->autograd_meta();
+    return meta ? meta->grad_fn : nullptr;
+}
+
+void Tensor::set_grad_fn(std::shared_ptr<autograd::Node> fn) {
+    ensure_defined("set_grad_fn");
+    ensure_autograd_meta(impl_.get()).grad_fn = std::move(fn);
+}
+
+uint32_t Tensor::output_nr() const {
+    if (!defined()) return 0;
+    auto* meta = impl_->autograd_meta();
+    return meta ? meta->output_nr : 0;
+}
+
+void Tensor::set_output_nr(uint32_t nr) {
+    ensure_defined("set_output_nr");
+    ensure_autograd_meta(impl_.get()).output_nr = nr;
+}
+
+void Tensor::set_requires_grad(bool requires_grad) {
+    ensure_defined("set_requires_grad");
+    ensure_autograd_meta(impl_.get()).requires_grad = requires_grad;
+}
+
+bool Tensor::is_leaf() const {
+    if (!defined()) return true;
+    auto* meta = impl_->autograd_meta();
+    return !meta || meta->is_leaf();
+}
+
+bool Tensor::retains_grad() const {
+    if (!defined()) return false;
+    auto* meta = impl_->autograd_meta();
+    if (!meta) return false;
+    if (meta->is_leaf() && meta->requires_grad) return true;
+    return meta->retains_grad;
+}
+
+void Tensor::retain_grad() const {
+    RAXIS_CHECK(requires_grad(),
+        "can't retain_grad on a tensor that does not require grad");
+    if (is_leaf()) return;
+    auto& meta = ensure_autograd_meta(impl_.get());
+    meta.retains_grad = true;
+    if (meta.grad_fn) {
+        meta.grad_fn->set_retained_tensor(*this);
+    }
+}
+
+Tensor Tensor::detach() const {
+    Tensor result = alias();
+    // No autograd_meta on the detached tensor, it starts clean.
+    return result;
+}
+
+void Tensor::backward(const Tensor& grad, bool retain_graph) const {
+    autograd::run_backward(*this, grad, retain_graph);
 }
 
 // ===================== View operations ======================

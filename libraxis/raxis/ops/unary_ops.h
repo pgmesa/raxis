@@ -2,6 +2,7 @@
 
 #include <raxis/export.h>
 #include <raxis/ops/dispatch_stub.h>
+#include <raxis/ops/op_macros.h>
 #include <raxis/tensor/tensor.h>
 
 
@@ -12,7 +13,7 @@ using unary_fn = void(*)(TensorIterator&);
 
 inline namespace CPU_CAPABILITY {
 
-void neg_kernel(TensorIterator &iter);
+void neg_kernel(TensorIterator& iter);
 void sqrt_kernel(TensorIterator& iter);
 void rsqrt_kernel(TensorIterator& iter);
 void reciprocal_kernel(TensorIterator& iter);
@@ -49,86 +50,36 @@ DECLARE_DISPATCH(unary_fn, tanh_stub);
 DECLARE_DISPATCH(unary_fn, erf_stub);
 DECLARE_DISPATCH(unary_fn, erfc_stub);
 
+// Differentiable unary ops
+RAXIS_DECLARE_UNARY_ARITHMETIC(neg)
+RAXIS_DECLARE_UNARY_ARITHMETIC(abs)
+RAXIS_DECLARE_UNARY_ARITHMETIC(ceil)
+RAXIS_DECLARE_UNARY_ARITHMETIC(floor)
+RAXIS_DECLARE_UNARY_ARITHMETIC(round)
+RAXIS_DECLARE_UNARY_ARITHMETIC(exp)
+RAXIS_DECLARE_UNARY_ARITHMETIC(expm1)
+RAXIS_DECLARE_UNARY_ARITHMETIC(log)
+RAXIS_DECLARE_UNARY_ARITHMETIC(log2)
+RAXIS_DECLARE_UNARY_ARITHMETIC(log10)
+RAXIS_DECLARE_UNARY_ARITHMETIC(log1p)
+RAXIS_DECLARE_UNARY_ARITHMETIC(sqrt)
+RAXIS_DECLARE_UNARY_ARITHMETIC(rsqrt)
+RAXIS_DECLARE_UNARY_ARITHMETIC(reciprocal)
+RAXIS_DECLARE_UNARY_ARITHMETIC(sigmoid)
+RAXIS_DECLARE_UNARY_ARITHMETIC(sin)
+RAXIS_DECLARE_UNARY_ARITHMETIC(cos)
+RAXIS_DECLARE_UNARY_ARITHMETIC(tan)
+RAXIS_DECLARE_UNARY_ARITHMETIC(asin)
+RAXIS_DECLARE_UNARY_ARITHMETIC(acos)
+RAXIS_DECLARE_UNARY_ARITHMETIC(atan)
+RAXIS_DECLARE_UNARY_ARITHMETIC(sinh)
+RAXIS_DECLARE_UNARY_ARITHMETIC(cosh)
+RAXIS_DECLARE_UNARY_ARITHMETIC(tanh)
+RAXIS_DECLARE_UNARY_ARITHMETIC(erf)
+RAXIS_DECLARE_UNARY_ARITHMETIC(erfc)
+
+// Non-differentiable
 RAXIS_API Tensor isnan(const Tensor& self);
-
-RAXIS_API Tensor neg(const Tensor& self);
-RAXIS_API Tensor& neg_(Tensor& self);
-
-RAXIS_API Tensor abs(const Tensor& self);
-RAXIS_API Tensor& abs_(Tensor& self);
-
-RAXIS_API Tensor ceil(const Tensor& self);
-RAXIS_API Tensor& ceil_(Tensor& self);
-
-RAXIS_API Tensor floor(const Tensor& self);
-RAXIS_API Tensor& floor_(Tensor& self);
-
-RAXIS_API Tensor round(const Tensor& self);
-RAXIS_API Tensor& round_(Tensor& self);
-
-RAXIS_API Tensor exp(const Tensor& self);
-RAXIS_API Tensor& exp_(Tensor& self);
-
-RAXIS_API Tensor expm1(const Tensor& self);
-RAXIS_API Tensor& expm1_(Tensor& self);
-
-RAXIS_API Tensor log(const Tensor& self);
-RAXIS_API Tensor& log_(Tensor& self);
-
-RAXIS_API Tensor log2(const Tensor& self);
-RAXIS_API Tensor& log2_(Tensor& self);
-
-RAXIS_API Tensor log10(const Tensor& self);
-RAXIS_API Tensor& log10_(Tensor& self);
-
-RAXIS_API Tensor log1p(const Tensor& self);
-RAXIS_API Tensor& log1p_(Tensor& self);
-
-RAXIS_API Tensor sqrt(const Tensor& self);
-RAXIS_API Tensor& sqrt_(Tensor& self);
-
-RAXIS_API Tensor rsqrt(const Tensor& a);
-RAXIS_API Tensor& rsqrt_(Tensor& a);
-
-RAXIS_API Tensor reciprocal(const Tensor& a);
-RAXIS_API Tensor& reciprocal_(Tensor& a);
-
-RAXIS_API Tensor sigmoid(const Tensor& self);
-RAXIS_API Tensor& sigmoid_(Tensor& self);
-
-RAXIS_API Tensor sin(const Tensor& self);
-RAXIS_API Tensor& sin_(Tensor& self);
-
-RAXIS_API Tensor cos(const Tensor& self);
-RAXIS_API Tensor& cos_(Tensor& self);
-
-RAXIS_API Tensor tan(const Tensor& self);
-RAXIS_API Tensor& tan_(Tensor& self);
-
-RAXIS_API Tensor asin(const Tensor& self);
-RAXIS_API Tensor& asin_(Tensor& self);
-
-RAXIS_API Tensor acos(const Tensor& self);
-RAXIS_API Tensor& acos_(Tensor& self);
-
-RAXIS_API Tensor atan(const Tensor& self);
-RAXIS_API Tensor& atan_(Tensor& self);
-
-RAXIS_API Tensor sinh(const Tensor& self);
-RAXIS_API Tensor& sinh_(Tensor& self);
-
-RAXIS_API Tensor cosh(const Tensor& self);
-RAXIS_API Tensor& cosh_(Tensor& self);
-
-RAXIS_API Tensor tanh(const Tensor& self);
-RAXIS_API Tensor& tanh_(Tensor& self);
-
-RAXIS_API Tensor erf(const Tensor& self);
-RAXIS_API Tensor& erf_(Tensor& self);
-
-RAXIS_API Tensor erfc(const Tensor& self);
-RAXIS_API Tensor& erfc_(Tensor& self);
-
 RAXIS_API Tensor logical_not(const Tensor& self);
 RAXIS_API Tensor& logical_not_(Tensor& self);
 

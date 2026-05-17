@@ -43,4 +43,29 @@ RAXIS_API Tensor dot(const Tensor& self, const Tensor& other);
 
 RAXIS_API Tensor matmul(const Tensor& tensor1, const Tensor& tensor2);
 
+
+namespace ops {
+
+RAXIS_API Tensor mm(const Tensor& mat1, const Tensor& mat2);
+
+RAXIS_API Tensor addmm(
+    const Tensor& self, const Tensor& mat1, const Tensor& mat2,
+    Scalar beta = 1, Scalar alpha = 1);
+
+RAXIS_API Tensor bmm(const Tensor& self, const Tensor& mat2);
+ 
+RAXIS_API Tensor addbmm(
+    const Tensor& self, const Tensor& batch1, const Tensor& batch2,
+    Scalar beta = 1, Scalar alpha = 1);
+ 
+RAXIS_API Tensor mv(const Tensor& mat, const Tensor& vec);
+ 
+RAXIS_API Tensor addmv(
+    const Tensor& self, const Tensor& mat, const Tensor& vec,
+    Scalar beta = 1, Scalar alpha = 1);
+
+RAXIS_API Tensor dot(const Tensor& self, const Tensor& other);
+
+}
+
 } // namespace raxis

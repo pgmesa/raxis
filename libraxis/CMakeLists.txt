@@ -16,7 +16,8 @@ file(GLOB_RECURSE RAXIS_SOURCES "${RAXIS_LIB_DIR}/*.cpp")
 list(FILTER RAXIS_SOURCES EXCLUDE REGEX ".*_kernel\\.cpp$")
 
 add_library(raxis SHARED ${RAXIS_SOURCES})
-add_library(raxis::raxis ALIAS raxis)
+set_target_properties(raxis PROPERTIES EXPORT_NAME Raxis)
+add_library(Raxis::Raxis ALIAS raxis)
 
 target_compile_definitions(raxis PRIVATE RAXIS_BUILD)
 
@@ -273,7 +274,7 @@ if(BUILD_PYTHON_BINDINGS)
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/raxis
         FILES_MATCHING
             PATTERN "*.h"
-            PATTERN "detail" EXCLUDE
+            # PATTERN "detail" EXCLUDE
     )
 
     write_basic_package_version_file(
@@ -291,6 +292,13 @@ if(BUILD_PYTHON_BINDINGS)
     install(FILES
         "${CMAKE_CURRENT_BINARY_DIR}/RaxisConfig.cmake"
         "${CMAKE_CURRENT_BINARY_DIR}/RaxisConfigVersion.cmake"
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/cmake/raxis"
+    )
+
+    install(
+        EXPORT raxisTargets
+        FILE RaxisTargets.cmake
+        NAMESPACE Raxis::
         DESTINATION "${CMAKE_INSTALL_DATADIR}/cmake/raxis"
     )
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <optional>
 
 #include <raxis/core/types.h>
@@ -11,7 +12,14 @@
 #include <raxis/tensor/detail/storage_impl.h>
 
 
-namespace raxis::detail {
+namespace raxis {
+
+namespace autograd {
+struct AutogradMeta;
+} // namespace autograd
+
+
+namespace detail {
 
 struct TensorImpl {
 public:
@@ -30,7 +38,7 @@ public:
         Dtype dtype);
 
     TensorImpl() = delete;
-    ~TensorImpl() = default;
+    ~TensorImpl();
     TensorImpl(const TensorImpl&) = delete;
     TensorImpl& operator=(const TensorImpl&) = delete;
     TensorImpl(TensorImpl&&) = delete;
@@ -52,6 +60,10 @@ public:
 
     const std::shared_ptr<StorageImpl>& storage() const;
 
+    // -- Autograd --
+    autograd::AutogradMeta* autograd_meta() const;
+    void set_autograd_meta(std::unique_ptr<autograd::AutogradMeta> meta);
+
 private:
     std::shared_ptr<StorageImpl> storage_;
     int64_t storage_offset_ = 0;
@@ -62,6 +74,10 @@ private:
 
     int64_t numel_;
     bool is_wrapped_number_ = false;
+
+    // Autograd metadata
+    std::unique_ptr<autograd::AutogradMeta> autograd_meta_;
 };
 
-}
+} // namespace detail
+} // namespace raxis

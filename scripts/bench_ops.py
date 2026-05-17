@@ -6,7 +6,7 @@ Usage:
     python bench_ops.py --device cuda          # all benchmarks, CUDA
     python bench_ops.py -k sum                 # filter by name substring
     python bench_ops.py --repeats 50           # more repeats for stability
-    python bench_ops.py --threshold 2         # flag anything >2x slower
+    python bench_ops.py --threshold 2          # flag anything >2x slower
     python bench_ops.py --no-color             # disable terminal colors
 """
 
@@ -125,7 +125,7 @@ def format_shape(*shapes):
 class BenchmarkRunner:
 
     def __init__(self, device="cpu", dtype="float32", warmup=5, repeats=20, threshold=10.0,
-                 target_ops=None, no_numpy=False):
+                 target_ops=None, no_numpy=False, forward_only=False, backward_only=False):
         self.device = device
         self.dtype = np.dtype(dtype)
         self.dtype_str = dtype
@@ -135,6 +135,8 @@ class BenchmarkRunner:
         self.target_ops = target_ops
         self.results = []
         self.no_numpy = no_numpy
+        self.forward_only = forward_only
+        self.backward_only = backward_only
 
     def _should_run(self, name):
         if self.target_ops is None:
@@ -391,8 +393,15 @@ class BenchmarkRunner:
 # ---------------------------------------------------------------------------
 # Benchmark definitions
 # ---------------------------------------------------------------------------
-
 def run_all(runner):
+    if not runner.backward_only:
+        run_forward_benchmarks(runner)
+        
+    if not runner.forward_only:
+        run_backward_benchmarks(runner)
+
+    
+def run_forward_benchmarks(runner):
     S2D = [(100, 100), (500, 500), (1000, 1000)]
     S_REDUCE = [(100, 100), (500, 500), (1000, 1000)]
 
@@ -673,22 +682,142 @@ def run_all(runner):
         lambda a, b: torch.matmul(a, b),
         lambda a, b: np.matmul(a, b)),
     ])
-
-    # -- Backward --
+                
+            
+def run_backward_benchmarks(runner):
+    S2D = [(100, 100), (500, 500), (1000, 1000)]
+    S_REDUCE = [(100, 100), (500, 500), (1000, 1000)]
+ 
+    # -- Binary arithmetic backward --
+    BINARY_BWD = [
+        ("add bwd",  FLOAT, S2D, lambda t: t + t),
+        ("sub bwd",  FLOAT, S2D, lambda t: t - t),
+        ("mul bwd",  FLOAT, S2D, lambda t: t * t),
+        ("div bwd",  FLOAT, S2D, lambda t: t / (t + 0.1)),
+    ]
+ 
     has_any = False
-    for name, cat, shapes, fn, kw in [
-        ("add",  FLOAT, S2D,      lambda t: t + t,   None),
-        ("mul",  FLOAT, S2D,      lambda t: t * t,   None),
-        ("sum",  FLOAT, S_REDUCE, lambda t: t.sum(), None),
-        ("exp",  FLOAT, S2D,      lambda t: t.exp(), None),
+    for name, cat, shapes, fn in BINARY_BWD:
+        if not dtype_allowed(runner.dtype_str, cat):
+            continue
+        if runner._should_run(name):
+            if not has_any:
+                print_header("Backward: Binary arithmetic")
+                has_any = True
+            runner.bench_backward(name, shapes, fn)
+ 
+    # -- Unary backward --
+    UNARY_BWD = [
+        ("neg bwd",        FLOAT, S2D, lambda t: t.neg()),
+        ("abs bwd",        FLOAT, S2D, lambda t: t.abs()),
+        ("exp bwd",        FLOAT, S2D, lambda t: t.exp()),
+        ("log bwd",        FLOAT, S2D, lambda t: t.log(), {"lo": 0.01, "hi": 10.0}),
+        ("sqrt bwd",       FLOAT, S2D, lambda t: t.sqrt(), {"lo": 0.01, "hi": 10.0}),
+        ("sigmoid bwd",    FLOAT, S2D, lambda t: t.sigmoid()),
+        ("tanh bwd",       FLOAT, S2D, lambda t: t.tanh()),
+        ("sin bwd",        FLOAT, S2D, lambda t: t.sin()),
+        ("cos bwd",        FLOAT, S2D, lambda t: t.cos()),
+        ("reciprocal bwd", FLOAT, S2D, lambda t: t.reciprocal(), {"lo": 0.1, "hi": 10.0}),
+    ]
+ 
+    has_any = False
+    for entry in UNARY_BWD:
+        name, cat, shapes, fn = entry[0], entry[1], entry[2], entry[3]
+        kw = entry[4] if len(entry) > 4 else None
+        if not dtype_allowed(runner.dtype_str, cat):
+            continue
+        if runner._should_run(name):
+            if not has_any:
+                print_header("Backward: Unary ops")
+                has_any = True
+            runner.bench_backward(name, shapes, fn, data_kw=kw)
+ 
+    # -- Reduction backward --
+    REDUCE_BWD = [
+        ("sum bwd",      FLOAT, S_REDUCE, lambda t: t.sum()),
+        ("sum_dim0 bwd", FLOAT, S_REDUCE, lambda t: t.sum(dim=0)),
+        ("sum_dim1 bwd", FLOAT, S_REDUCE, lambda t: t.sum(dim=1)),
+        ("mean bwd",     FLOAT, S_REDUCE, lambda t: t.mean()),
+        ("mean_dim0 bwd", FLOAT, S_REDUCE, lambda t: t.mean(dim=0)),
+    ]
+ 
+    has_any = False
+    for name, cat, shapes, fn in REDUCE_BWD:
+        if not dtype_allowed(runner.dtype_str, cat):
+            continue
+        if runner._should_run(name):
+            if not has_any:
+                print_header("Backward: Reductions")
+                has_any = True
+            runner.bench_backward(name, shapes, fn)
+ 
+    # -- Pow backward --
+    POW_BWD = [
+        ("pow_sq bwd",      FLOAT, S2D, lambda t: t.pow(2.0), {"lo": 0.01, "hi": 10.0}),
+        ("pow_cube bwd",    FLOAT, S2D, lambda t: t.pow(3.0), {"lo": 0.01, "hi": 10.0}),
+        ("pow_tensor bwd",  FLOAT, S2D, lambda t: torch.pow(t, t), {"lo": 0.5, "hi": 2.0}),
+    ]
+ 
+    has_any = False
+    for entry in POW_BWD:
+        name, cat, shapes, fn = entry[0], entry[1], entry[2], entry[3]
+        kw = entry[4] if len(entry) > 4 else None
+        if not dtype_allowed(runner.dtype_str, cat):
+            continue
+        if runner._should_run(name):
+            if not has_any:
+                print_header("Backward: Pow")
+                has_any = True
+            runner.bench_backward(name, shapes, fn, data_kw=kw)
+ 
+    # -- Matmul backward --
+    S_MM = [
+        (64, 64), (128, 128), (256, 256),
+    ]
+ 
+    has_any = False
+    for name, cat, shapes, fn in [
+        ("mm bwd", FLOAT, S_MM, lambda t: torch.mm(t, t.transpose(0, 1))),
     ]:
         if not dtype_allowed(runner.dtype_str, cat):
             continue
-        if runner._should_run(name + " bwd"):
+        if runner._should_run(name):
             if not has_any:
-                print_header("Backward")
+                print_header("Backward: Matmul")
                 has_any = True
-            runner.bench_backward(name, shapes, fn, data_kw=kw)
+            runner.bench_backward(name, shapes, fn)
+ 
+    # -- Shape ops backward --
+    SHAPE_BWD = [
+        ("reshape bwd",   FLOAT, S2D, lambda t: t.reshape(-1)),
+        ("transpose bwd", FLOAT, S2D, lambda t: t.transpose(0, 1)),
+    ]
+ 
+    has_any = False
+    for name, cat, shapes, fn in SHAPE_BWD:
+        if not dtype_allowed(runner.dtype_str, cat):
+            continue
+        if runner._should_run(name):
+            if not has_any:
+                print_header("Backward: Shape ops")
+                has_any = True
+            runner.bench_backward(name, shapes, fn)
+ 
+    # -- Composed backward --
+    COMPOSED_BWD = [
+        ("chain (a*b+c).sum() bwd", FLOAT, S2D, lambda t: (t * t + t).sum()),
+        ("sigmoid(mm) bwd",         FLOAT, S_MM, lambda t: torch.mm(t, t.T).sigmoid().sum()),
+    ]
+ 
+    has_any = False
+    for name, cat, shapes, fn in COMPOSED_BWD:
+        if not dtype_allowed(runner.dtype_str, cat):
+            continue
+        if runner._should_run(name):
+            if not has_any:
+                print_header("Backward: Composed")
+                has_any = True
+            runner.bench_backward(name, shapes, fn)
 
 
 def _run_section(runner, title, benchmarks):
@@ -755,6 +884,10 @@ def main():
     parser.add_argument("-k", "--filter", dest="target_ops", nargs='+', default=None)
     parser.add_argument("--no-color", action="store_true")
     parser.add_argument("--no-numpy", action="store_true", help="Skip NumPy benchmarks")
+    parser.add_argument("--forward-only", action="store_true",
+                        help="Run only forward benchmarks")
+    parser.add_argument("--backward-only", action="store_true",
+                        help="Run only backward benchmarks")
     args = parser.parse_args()
 
     if args.no_color or not sys.stdout.isatty():
@@ -782,6 +915,8 @@ def main():
         threshold=args.threshold,
         target_ops=args.target_ops,
         no_numpy=args.no_numpy,
+        forward_only=args.forward_only,
+        backward_only=args.backward_only,
     )
 
     run_all(runner)

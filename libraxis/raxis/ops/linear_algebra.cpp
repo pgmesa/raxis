@@ -441,15 +441,10 @@ static Tensor matmul_impl_(const Tensor& tensor1, const Tensor& tensor2) {
 Tensor matmul(const Tensor& tensor1, const Tensor& tensor2) {
     return matmul_impl_(tensor1, tensor2);
 }
-
+    
 // ---------------------------------------------------------------------------
 // mm
 // ---------------------------------------------------------------------------
-
-Tensor mm(const Tensor& mat1, const Tensor& mat2) {
-    Tensor result;
-    return mm_out(mat1, mat2, result);
-}
 
 Tensor& mm_out(const Tensor& mat1, const Tensor& mat2, Tensor& out) {
     RAXIS_CHECK(mat1.ndim() == 2, "mm: mat1 must be a matrix, got ", mat1.ndim(), "-D tensor");
@@ -460,18 +455,6 @@ Tensor& mm_out(const Tensor& mat1, const Tensor& mat2, Tensor& out) {
     }
     addmm_impl_cpu_(out, out, mat1, mat2, 0, 1);
     return out;
-}
-
-
-Tensor addmm(
-    const Tensor& self, 
-    const Tensor& mat1, 
-    const Tensor& mat2,
-    Scalar beta, 
-    Scalar alpha
-) {
-    Tensor result;
-    return addmm_out(self, mat1, mat2, beta, alpha, result);
 }
 
 Tensor& addmm_out(
@@ -493,12 +476,6 @@ Tensor& addmm_out(
     return out;
 }
 
-
-Tensor bmm(const Tensor& self, const Tensor& mat2) {
-    Tensor result;
-    return bmm_out(self, mat2, result);
-}
-
 Tensor& bmm_out(const Tensor& self, const Tensor& mat2, Tensor& out) {
     RAXIS_CHECK(self.ndim() == 3, "bmm: expected 3D tensor, got ", self.ndim(), "-D tensor");
     RAXIS_CHECK(mat2.ndim() == 3, "bmm: expected 3D tensor, got ", mat2.ndim(), "-D tensor");
@@ -510,17 +487,6 @@ Tensor& bmm_out(const Tensor& self, const Tensor& mat2, Tensor& out) {
     }
     bmm_impl_(out, self, mat2, 0, 1, true);
     return out;
-}
- 
-Tensor addbmm(
-    const Tensor& self, 
-    const Tensor& batch1, 
-    const Tensor& batch2,
-    Scalar beta, 
-    Scalar alpha
-) {
-    Tensor result;
-    return addbmm_out(self, batch1, batch2, beta, alpha, result);
 }
  
 Tensor& addbmm_out(
@@ -536,22 +502,48 @@ Tensor& addbmm_out(
     return out;
 }
 
+namespace ops {
+
+Tensor mm(const Tensor& mat1, const Tensor& mat2) {
+    Tensor result;
+    return mm_out(mat1, mat2, result);
+}
+
+Tensor addmm(
+    const Tensor& self, 
+    const Tensor& mat1, 
+    const Tensor& mat2,
+    Scalar beta, 
+    Scalar alpha
+) {
+    Tensor result;
+    return addmm_out(self, mat1, mat2, beta, alpha, result);
+}
+
+
+Tensor bmm(const Tensor& self, const Tensor& mat2) {
+    Tensor result;
+    return bmm_out(self, mat2, result);
+}
+
+Tensor addbmm(
+    const Tensor& self, 
+    const Tensor& batch1, 
+    const Tensor& batch2,
+    Scalar beta, 
+    Scalar alpha
+) {
+    Tensor result;
+    return addbmm_out(self, batch1, batch2, beta, alpha, result);
+}
+    
+} // namespace ops
+
 // ---------------------------------------------------------------------------
 // mv
 // ---------------------------------------------------------------------------
 static constexpr bool lda_cond(int64_t m, int64_t n, int64_t lda) {
     return n == 1 || lda >= std::max<int64_t>(1, m);
-}
- 
-Tensor addmv(
-    const Tensor& self, 
-    const Tensor& mat, 
-    const Tensor& vec,
-    Scalar beta, 
-    Scalar alpha
-) {
-    Tensor result;
-    return addmv_out(self, mat, vec, beta, alpha, result);
 }
  
 Tensor& addmv_out(
@@ -623,12 +615,6 @@ Tensor& addmv_out(
  
     return out;
 }
-
-
-Tensor mv(const Tensor& mat, const Tensor& vec) {
-    Tensor result;
-    return mv_out(mat, vec, result);
-}
  
 Tensor& mv_out(const Tensor& mat, const Tensor& vec, Tensor& out) {
     if (!out.defined()) {
@@ -637,9 +623,31 @@ Tensor& mv_out(const Tensor& mat, const Tensor& vec, Tensor& out) {
     return addmv_out(out, mat, vec, 0, 1, out);
 }
 
+namespace ops {
+
+Tensor addmv(
+    const Tensor& self, 
+    const Tensor& mat, 
+    const Tensor& vec,
+    Scalar beta, 
+    Scalar alpha
+) {
+    Tensor result;
+    return addmv_out(self, mat, vec, beta, alpha, result);
+}
+
+Tensor mv(const Tensor& mat, const Tensor& vec) {
+    Tensor result;
+    return mv_out(mat, vec, result);
+}
+ 
+} // namespace ops
+
 // ---------------------------------------------------------------------------
 // dot
 // ---------------------------------------------------------------------------
+namespace ops {
+
 Tensor dot(const Tensor& self, const Tensor& other) {
     RAXIS_CHECK(self.ndim() == 1 && other.ndim() == 1,
         "1D tensors expected, but got ", self.ndim(), "D and ", other.ndim(), "D tensors");
@@ -661,6 +669,8 @@ Tensor dot(const Tensor& self, const Tensor& other) {
     });
  
     return result;
+}
+
 }
 
 } // namespace raxis

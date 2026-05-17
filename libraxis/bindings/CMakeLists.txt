@@ -34,7 +34,7 @@ if(NOT pybind11_FOUND)
 endif()
 
 pybind11_add_module(raxis_bindings raxis_bindings.cpp)
-add_library(raxis::bindings ALIAS raxis_bindings)
+add_library(Raxis::Bindings ALIAS raxis_bindings)
 
 set_target_properties(raxis_bindings PROPERTIES
     CXX_STANDARD 20
@@ -45,4 +45,4 @@ set_target_properties(raxis_bindings PROPERTIES
     CXX_VISIBILITY_PRESET "hidden"
 )
 
-target_link_libraries(raxis_bindings PRIVATE raxis::raxis)
+target_link_libraries(raxis_bindings PRIVATE Raxis::Raxis)

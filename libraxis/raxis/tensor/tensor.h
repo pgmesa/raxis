@@ -4,6 +4,7 @@
 #include <vector>
 #include <stdexcept>
 #include <cstdint>
+#include <optional>
 
 #include <raxis/export.h>
 #include <raxis/core/dtype.h>
@@ -20,11 +21,14 @@
 namespace raxis {
 
 namespace indexing {
-
 struct TensorIndex;
 struct Slice;
+} // namespace indexing
 
-}
+namespace autograd { 
+struct AutogradMeta;
+class Node; 
+} // namespace autograd
 
 class RAXIS_API Tensor {
 public:
@@ -93,7 +97,6 @@ public:
     int64_t storage_offset() const;
     Dtype dtype() const;
     Device device() const;
-    bool requires_grad() const;
     TensorOptions options() const;
     bool is_contiguous() const;
     
@@ -104,6 +107,30 @@ public:
     bool is_wrapped_number() const;
 
     std::string to_string() const;
+
+    // ======================== Autograd =========================
+    bool requires_grad() const;
+    Tensor& requires_grad_(bool requires_grad = true);
+
+    void retain_grad() const;
+    bool retains_grad() const;
+    
+    Tensor grad() const;
+    void set_grad(const Tensor& grad);
+    
+    std::shared_ptr<autograd::Node> grad_fn() const;
+    void set_grad_fn(std::shared_ptr<autograd::Node> fn);
+    
+    uint32_t output_nr() const;
+    void set_output_nr(uint32_t nr);
+    
+    void set_requires_grad(bool requires_grad);
+    
+    bool is_leaf() const;
+    
+    Tensor detach() const;
+    
+    void backward(const Tensor& grad = {}, bool retain_graph = false) const;
 
     // ===================== View operations ======================
     Tensor alias() const;

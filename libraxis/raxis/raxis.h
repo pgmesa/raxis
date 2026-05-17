@@ -11,5 +11,9 @@
 #include <raxis/tensor/tensor_shape.h>
 #include <raxis/tensor/factories.h>
 
+#include <raxis/autograd/engine.h>
+#include <raxis/autograd/graph.h>
+#include <raxis/autograd/grad_mode.h>
+
 // Ops (dispatched)
 #include <raxis/ops.h>

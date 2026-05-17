@@ -55,3 +55,24 @@ from raxis._C import *
 from raxis._tensor_str import _str
 
 Tensor.__repr__ = _str
+
+class no_grad:
+    """Context manager that disables gradient computation."""
+    def __enter__(self):
+        self._prev = _C.is_grad_enabled()
+        _C.set_grad_enabled(False)
+        return self
+
+    def __exit__(self, *args):
+        _C.set_grad_enabled(self._prev)
+
+
+class enable_grad:
+    """Context manager that enables gradient computation."""
+    def __enter__(self):
+        self._prev = _C.is_grad_enabled()
+        _C.set_grad_enabled(True)
+        return self
+
+    def __exit__(self, *args):
+        _C.set_grad_enabled(self._prev)

@@ -12,8 +12,13 @@
 #include <raxis/tensor/shape_utils.h>
 #include <raxis/tensor/detail/storage_impl.h>
 
+#include <raxis/autograd/autograd_meta.h>
+
 
 namespace raxis::detail {
+
+// This must be here (not in header) because AutogradMeta is incomplete there
+TensorImpl::~TensorImpl() = default;
 
 TensorImpl::TensorImpl(
     DataPtr data,
@@ -90,6 +95,14 @@ int64_t TensorImpl::storage_offset() const {
 
 const std::shared_ptr<StorageImpl>& TensorImpl::storage() const {
     return storage_;
+}
+
+autograd::AutogradMeta* TensorImpl::autograd_meta() const { 
+    return autograd_meta_.get(); 
+}
+
+void TensorImpl::set_autograd_meta(std::unique_ptr<autograd::AutogradMeta> meta) {
+    autograd_meta_ = std::move(meta);
 }
 
 } // namespace raxis

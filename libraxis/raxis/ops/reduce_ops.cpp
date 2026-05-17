@@ -17,6 +17,7 @@
 #include <raxis/tensor/tensor.h>
 
 #include <raxis/ops/reduce_ops_utils.h>
+#include <raxis/ops/binary_ops.h>
 
 
 namespace raxis {
@@ -39,22 +40,6 @@ Tensor& sum_out(
 
     return result;
 }
-
-Tensor sum(
-    const Tensor& self, 
-    IntArrayRef dim,
-    bool keepdim,
-    std::optional<Dtype> opt_dtype
-) {
-    Dtype dtype = get_dtype_from_input(self, opt_dtype, /*promote_integers=*/true);
-    Tensor result = create_reduction_result(self, dim, keepdim, dtype);
-    return sum_out(result, self, dim, keepdim, dtype);
-}
-
-Tensor sum(const Tensor& self, std::optional<Dtype> dtype) {
-    return sum(self, {}, false, dtype);
-}
-
 
 Tensor& nansum_out(
     Tensor& result,
@@ -79,22 +64,6 @@ Tensor& nansum_out(
 
     return result;
 }
-
-Tensor nansum(
-    const Tensor& self, 
-    IntArrayRef dim,
-    bool keepdim,
-    std::optional<Dtype> opt_dtype
-) {
-    Dtype dtype = get_dtype_from_input(self, opt_dtype, /*promote_integers=*/true);
-    Tensor result = create_reduction_result(self, dim, keepdim, dtype);
-    return nansum_out(result, self, dim, keepdim, dtype);
-}
-
-Tensor nansum(const Tensor& self, std::optional<Dtype> dtype) {
-    return nansum(self, {}, false, dtype);
-}
-
 
 Tensor& mean_out(
     Tensor& result,
@@ -121,7 +90,7 @@ Tensor& mean_out(
         }
         
         // mean = sum / count (TODO: Implement mean kernel for cpu)
-        sum_out(result, self, dim, keepdim, dtype).div_(dim_prod);
+        ops::div_(sum_out(result, self, dim, keepdim, dtype), dim_prod);
     } else {
         auto iter = make_reduction("mean", self, result, dim, keepdim, dtype);
 
@@ -134,22 +103,6 @@ Tensor& mean_out(
 
     return result;
 }
-
-Tensor mean(
-    const Tensor& self,
-    IntArrayRef dim,
-    bool keepdim,
-    std::optional<Dtype> opt_dtype)
-{
-    Dtype dtype = get_dtype_from_input(self, opt_dtype, /*promote_integers=*/true);
-    Tensor result = create_reduction_result(self, dim, keepdim, dtype);
-    return mean_out(result, self, dim, keepdim, dtype);
-}
-
-Tensor mean(const Tensor& self, std::optional<Dtype> dtype) {
-    return mean(self, {}, false, dtype);
-}
-
 
 Tensor& nanmean_out(
     Tensor& result,
@@ -166,25 +119,9 @@ Tensor& nanmean_out(
     
     // nansum / count
     Tensor factor = self.isnan().logical_not_().sum(dim, keepdim);
-    nansum_out(result, self, dim, keepdim, out_dtype).div_(factor);
+    ops::div_(nansum_out(result, self, dim, keepdim, out_dtype), factor);
     return result;
 }
-
-Tensor nanmean(
-    const Tensor& self,
-    IntArrayRef dim,
-    bool keepdim,
-    std::optional<Dtype> opt_dtype)
-{
-    Dtype dtype = get_dtype_from_input(self, opt_dtype, /*promote_integers=*/true);
-    Tensor result = create_reduction_result(self, dim, keepdim, dtype);
-    return nanmean_out(result, self, dim, keepdim, opt_dtype);
-}
-
-Tensor nanmean(const Tensor& self, std::optional<Dtype> dtype) {
-    return nanmean(self, {}, false, dtype);
-}
-
 
 Tensor& prod_out(
     Tensor& result,
@@ -205,6 +142,72 @@ Tensor& prod_out(
     return result;
 }
 
+namespace ops {
+
+Tensor sum(
+    const Tensor& self, 
+    IntArrayRef dim,
+    bool keepdim,
+    std::optional<Dtype> opt_dtype
+) {
+    Dtype dtype = get_dtype_from_input(self, opt_dtype, /*promote_integers=*/true);
+    Tensor result = create_reduction_result(self, dim, keepdim, dtype);
+    return sum_out(result, self, dim, keepdim, dtype);
+}
+
+Tensor sum(const Tensor& self, std::optional<Dtype> dtype) {
+    return ops::sum(self, {}, false, dtype);
+}
+
+
+Tensor nansum(
+    const Tensor& self, 
+    IntArrayRef dim,
+    bool keepdim,
+    std::optional<Dtype> opt_dtype
+) {
+    Dtype dtype = get_dtype_from_input(self, opt_dtype, /*promote_integers=*/true);
+    Tensor result = create_reduction_result(self, dim, keepdim, dtype);
+    return nansum_out(result, self, dim, keepdim, dtype);
+}
+
+Tensor nansum(const Tensor& self, std::optional<Dtype> dtype) {
+    return ops::nansum(self, {}, false, dtype);
+}
+
+
+Tensor mean(
+    const Tensor& self,
+    IntArrayRef dim,
+    bool keepdim,
+    std::optional<Dtype> opt_dtype)
+{
+    Dtype dtype = get_dtype_from_input(self, opt_dtype, /*promote_integers=*/true);
+    Tensor result = create_reduction_result(self, dim, keepdim, dtype);
+    return mean_out(result, self, dim, keepdim, dtype);
+}
+
+Tensor mean(const Tensor& self, std::optional<Dtype> dtype) {
+    return ops::mean(self, {}, false, dtype);
+}
+
+
+Tensor nanmean(
+    const Tensor& self,
+    IntArrayRef dim,
+    bool keepdim,
+    std::optional<Dtype> opt_dtype)
+{
+    Dtype dtype = get_dtype_from_input(self, opt_dtype, /*promote_integers=*/true);
+    Tensor result = create_reduction_result(self, dim, keepdim, dtype);
+    return nanmean_out(result, self, dim, keepdim, opt_dtype);
+}
+
+Tensor nanmean(const Tensor& self, std::optional<Dtype> dtype) {
+    return ops::nanmean(self, {}, false, dtype);
+}
+
+
 Tensor prod(
     const Tensor& self, 
     IntArrayRef dim,
@@ -217,7 +220,7 @@ Tensor prod(
 }
 
 Tensor prod(const Tensor& self, std::optional<Dtype> dtype) {
-    return prod(self, {}, false, dtype);
+    return ops::prod(self, {}, false, dtype);
 }
 
 
@@ -256,6 +259,8 @@ Tensor amin(const Tensor& self, IntArrayRef dim, bool keepdim) {
     min_values_stub(iter.device_type(), iter);
     return result;
 }
+    
+} // namespace ops
 
 DEFINE_DISPATCH(sum_stub);
 DEFINE_DISPATCH(nansum_stub);

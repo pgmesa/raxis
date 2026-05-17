@@ -16,7 +16,7 @@
 
 namespace raxis {
 
-Tensor& add(const Tensor& a, const Tensor& b, Tensor& out) {
+Tensor& add_out(const Tensor& a, const Tensor& b, Tensor& out) {
     auto iter = iterator::binary_op_config()
         .add_output(out)
         .add_input(a)
@@ -28,7 +28,7 @@ Tensor& add(const Tensor& a, const Tensor& b, Tensor& out) {
     return out;
 }
 
-Tensor& sub(const Tensor& a, const Tensor& b, Tensor& out) {
+Tensor& sub_out(const Tensor& a, const Tensor& b, Tensor& out) {
     bool is_boolean_op = a.dtype().is_bool() && b.dtype().is_bool();
     RAXIS_CHECK(!is_boolean_op, 
         "Subtraction, the `-` operator, with two bool tensors is not supported.");
@@ -48,7 +48,7 @@ Tensor& sub(const Tensor& a, const Tensor& b, Tensor& out) {
     return out;
 }
 
-Tensor& mul(const Tensor& a, const Tensor& b, Tensor& out) {
+Tensor& mul_out(const Tensor& a, const Tensor& b, Tensor& out) {
     auto iter = iterator::binary_op_config()
         .add_output(out)
         .add_input(a)
@@ -60,7 +60,7 @@ Tensor& mul(const Tensor& a, const Tensor& b, Tensor& out) {
     return out;
 }
 
-Tensor& div(const Tensor& a, const Tensor& b, Tensor& out) {
+Tensor& div_out(const Tensor& a, const Tensor& b, Tensor& out) {
     auto iter = iterator::binary_float_op_config()
         .add_output(out)
         .add_input(a)
@@ -72,145 +72,174 @@ Tensor& div(const Tensor& a, const Tensor& b, Tensor& out) {
     return out;
 }
 
+namespace ops {
 
 Tensor add(const Tensor& a, const Tensor& b) {
     Tensor out;
-    add(a, b, out);
+    add_out(a, b, out);
     return out;
 }
 
 Tensor add(const Tensor& a, Scalar s) {
     Tensor out;
-    add(a, wrapped_scalar_tensor(s), out);
+    add_out(a, wrapped_scalar_tensor(s), out);
     return out;
 }
 
 
 Tensor sub(const Tensor& a, const Tensor& b) {
     Tensor out;
-    sub(a, b, out);
+    sub_out(a, b, out);
     return out;
 }
 
 Tensor sub(const Tensor& a, Scalar s) {
     Tensor out;
-    sub(a, wrapped_scalar_tensor(s), out);
+    sub_out(a, wrapped_scalar_tensor(s), out);
     return out;
 }
 
 
 Tensor mul(const Tensor& a, const Tensor& b) {
     Tensor out;
-    mul(a, b, out);
+    mul_out(a, b, out);
     return out;
 }
 
 Tensor mul(const Tensor& a, Scalar s) {
     Tensor out;
-    mul(a, wrapped_scalar_tensor(s), out);
+    mul_out(a, wrapped_scalar_tensor(s), out);
     return out;
 }
 
 
 Tensor div(const Tensor& a, const Tensor& b) {
     Tensor out;
-    div(a, b, out);
+    div_out(a, b, out);
     return out;
 }
 
 Tensor div(const Tensor& a, Scalar s) {
     Tensor out;
-    div(a, wrapped_scalar_tensor(s), out);
+    div_out(a, wrapped_scalar_tensor(s), out);
     return out;
 }
 
 // -- Reversed
 Tensor rsub(const Tensor& a, const Tensor& b) {
     Tensor out;
-    sub(b, a, out);
+    sub_out(b, a, out);
     return out;
 }
 
 Tensor rsub(const Tensor& a, Scalar s) {
     Tensor out;
-    sub(wrapped_scalar_tensor(s), a, out);
+    sub_out(wrapped_scalar_tensor(s), a, out);
     return out;
 }
 
 
 Tensor rdiv(const Tensor& a, const Tensor& b) {
     Tensor out;
-    div(b, a, out);
+    div_out(b, a, out);
     return out;
 }
 
 Tensor rdiv(const Tensor& a, Scalar s) {
     Tensor out;
-    div(wrapped_scalar_tensor(s), a, out);
+    div_out(wrapped_scalar_tensor(s), a, out);
     return out;
 }
 
 
 // In-place
 Tensor& add_(Tensor& a, const Tensor& b) {
-    return add(a, b, a);
+    return add_out(a, b, a);
 }
 
 Tensor& add_(Tensor& a, Scalar s) {
-    return add(a, wrapped_scalar_tensor(s), a);
+    return add_out(a, wrapped_scalar_tensor(s), a);
 }
 
 
 Tensor& sub_(Tensor& a, const Tensor& b) {
-    return sub(a, b, a);
+    return sub_out(a, b, a);
 }
 
 Tensor& sub_(Tensor& a, Scalar s) {
-    return sub(a, wrapped_scalar_tensor(s), a);
+    return sub_out(a, wrapped_scalar_tensor(s), a);
 }
 
 
 Tensor& mul_(Tensor& a, const Tensor& b) {
-    return mul(a, b, a);
+    return mul_out(a, b, a);
 }
 
 Tensor& mul_(Tensor& a, Scalar s) {
-    return mul(a, wrapped_scalar_tensor(s), a);
+    return mul_out(a, wrapped_scalar_tensor(s), a);
 }
 
 
 Tensor& div_(Tensor& a, const Tensor& b) {
-    return div(a, b, a);
+    return div_out(a, b, a);
 }
 
 Tensor& div_(Tensor& a, Scalar s) {
-    return div(a, wrapped_scalar_tensor(s), a);
+    return div_out(a, wrapped_scalar_tensor(s), a);
 }
 
 // -- Reversed
 Tensor& rsub_(Tensor& a, const Tensor& b) {
-    return sub(b, a, a);
+    return sub_out(b, a, a);
 }
 
 Tensor& rsub_(Tensor& a, Scalar s) {
-    return sub(wrapped_scalar_tensor(s), a, a);
+    return sub_out(wrapped_scalar_tensor(s), a, a);
 }
 
 
 Tensor& rdiv_(Tensor& a, const Tensor& b) {
-    return div(b, a, a);
+    return div_out(b, a, a);
 }
 
 Tensor& rdiv_(Tensor& a, Scalar s) {
-    return div(wrapped_scalar_tensor(s), a, a);
+    return div_out(wrapped_scalar_tensor(s), a, a);
 }
 
+
+Tensor maximum(const Tensor& a, const Tensor& b) {
+    Tensor out;
+    auto iter = iterator::binary_op_config()
+        .add_output(out)
+        .add_input(a)
+        .add_input(b)
+        .build();
+ 
+    maximum_stub(iter.device_type(), iter);
+    return iter.get_output(0);
+}
+ 
+Tensor minimum(const Tensor& a, const Tensor& b) {
+    Tensor out;
+    auto iter = iterator::binary_op_config()
+        .add_output(out)
+        .add_input(a)
+        .add_input(b)
+        .build();
+ 
+    minimum_stub(iter.device_type(), iter);
+    return iter.get_output(0);
+}
+
+} // namespace ops
 
 DEFINE_DISPATCH(add_stub);
 DEFINE_DISPATCH(sub_stub);
 DEFINE_DISPATCH(mul_stub);
 DEFINE_DISPATCH(div_stub);
 
+DEFINE_DISPATCH(maximum_stub);
+DEFINE_DISPATCH(minimum_stub);
 
 namespace {
  
@@ -241,31 +270,6 @@ Tensor eq(const Tensor& a, const Tensor& b) { return comparison_op(a, b, eq_stub
 Tensor eq(const Tensor& a, Scalar s)        { return eq(a, wrapped_scalar_tensor(s)); }
 Tensor ne(const Tensor& a, const Tensor& b) { return comparison_op(a, b, ne_stub); }
 Tensor ne(const Tensor& a, Scalar s)        { return ne(a, wrapped_scalar_tensor(s)); }
- 
-
-Tensor maximum(const Tensor& a, const Tensor& b) {
-    Tensor out;
-    auto iter = iterator::binary_op_config()
-        .add_output(out)
-        .add_input(a)
-        .add_input(b)
-        .build();
- 
-    maximum_stub(iter.device_type(), iter);
-    return iter.get_output(0);
-}
- 
-Tensor minimum(const Tensor& a, const Tensor& b) {
-    Tensor out;
-    auto iter = iterator::binary_op_config()
-        .add_output(out)
-        .add_input(a)
-        .add_input(b)
-        .build();
- 
-    minimum_stub(iter.device_type(), iter);
-    return iter.get_output(0);
-}
 
 Tensor logical_and(const Tensor& a, const Tensor& b) {
     Tensor out;
@@ -298,8 +302,6 @@ DEFINE_DISPATCH(lt_stub);
 DEFINE_DISPATCH(le_stub);
 DEFINE_DISPATCH(eq_stub);
 DEFINE_DISPATCH(ne_stub);
-DEFINE_DISPATCH(maximum_stub);
-DEFINE_DISPATCH(minimum_stub);
 DEFINE_DISPATCH(logical_and_stub);
 DEFINE_DISPATCH(logical_or_stub);
 

@@ -30,4 +30,21 @@ RAXIS_API Tensor reshape(const Tensor& self, IntArrayRef shape);
 RAXIS_API Tensor broadcast_to(const Tensor& self, IntArrayRef shape);
 RAXIS_API std::vector<Tensor> broadcast_tensors(ArrayRef<Tensor> tensors);
 
+namespace ops {
+
+RAXIS_API Tensor unsqueeze(const Tensor& self, int64_t dim);
+RAXIS_API Tensor squeeze(const Tensor& self, std::optional<int64_t> dim_opt = std::nullopt);
+RAXIS_API Tensor select(const Tensor& self, int64_t dim, int64_t index);
+RAXIS_API Tensor slice(const Tensor& self, int64_t dim, int64_t start, int64_t stop, int64_t step = 1);
+
+RAXIS_API Tensor transpose(const Tensor& self, int64_t dim0, int64_t dim1);
+RAXIS_API Tensor permute(const Tensor& self, IntArrayRef dims);
+RAXIS_API Tensor view(const Tensor& self, IntArrayRef shape);
+RAXIS_API Tensor reshape(const Tensor& self, IntArrayRef shape);
+
+RAXIS_API Tensor broadcast_to(const Tensor& self, IntArrayRef shape);
+    
+} // namespace ops
+
+
 } // namespace raxis

@@ -67,4 +67,12 @@ RAXIS_API Tensor pow(const Tensor& base, const Tensor& exp);
 RAXIS_API Tensor pow(const Tensor& base, Scalar exp);
 RAXIS_API Tensor pow(Scalar base, const Tensor& exp);
 
+namespace ops {
+
+RAXIS_API Tensor pow(const Tensor& base, const Tensor& exp);
+RAXIS_API Tensor pow(const Tensor& base, Scalar exp);
+RAXIS_API Tensor pow(Scalar base, const Tensor& exp);
+
+}
+
 } // namespace raxis

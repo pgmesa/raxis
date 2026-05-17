@@ -87,9 +87,15 @@ Tensor empty(IntArrayRef shape, TensorOptions options) {
     Dtype dtype = options.dtype();
     size_t nbytes = static_cast<size_t>(compute_numel(shape)) * dtype.itemsize();
     auto data_ptr = get_allocator(options.device().type())->allocate(nbytes);
-    return Tensor(std::make_shared<detail::TensorImpl>(
+    Tensor t(std::make_shared<detail::TensorImpl>(
         std::move(data_ptr), nbytes, shape, std::nullopt, dtype)
     );
+    if (options.requires_grad()) {
+        RAXIS_CHECK(dtype.is_floating(),
+            "Only floating point tensors can require gradients");
+        t.requires_grad_(true);
+    }
+    return t;
 }
 
 Tensor empty_strided(IntArrayRef shape, IntArrayRef strides, TensorOptions options) {

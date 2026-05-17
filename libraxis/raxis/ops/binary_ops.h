@@ -1,6 +1,7 @@
 #pragma once
 
 #include <raxis/export.h>
+#include <raxis/ops/op_macros.h>
 #include <raxis/ops/dispatch_stub.h>
 #include <raxis/tensor/tensor.h>
 
@@ -25,42 +26,28 @@ DECLARE_DISPATCH(binary_fn, minimum_stub);
 DECLARE_DISPATCH(binary_fn, logical_and_stub);
 DECLARE_DISPATCH(binary_fn, logical_or_stub);
 
+
+RAXIS_API Tensor& add_out(const Tensor& a, const Tensor& b, Tensor& out);
+RAXIS_API Tensor& sub_out(const Tensor& a, const Tensor& b, Tensor& out);
+RAXIS_API Tensor& mul_out(const Tensor& a, const Tensor& b, Tensor& out);
+RAXIS_API Tensor& div_out(const Tensor& a, const Tensor& b, Tensor& out);
+
+// --- Differentiable ---
 // Arithmetic
-RAXIS_API Tensor& add(const Tensor& a, const Tensor& b, Tensor& out);
-RAXIS_API Tensor& sub(const Tensor& a, const Tensor& b, Tensor& out);
-RAXIS_API Tensor& mul(const Tensor& a, const Tensor& b, Tensor& out);
-RAXIS_API Tensor& div(const Tensor& a, const Tensor& b, Tensor& out);
-
-RAXIS_API Tensor add(const Tensor& a, const Tensor& b);
-RAXIS_API Tensor add(const Tensor& a, Scalar s);
-RAXIS_API Tensor sub(const Tensor& a, const Tensor& b);
-RAXIS_API Tensor sub(const Tensor& a, Scalar s);
-RAXIS_API Tensor mul(const Tensor& a, const Tensor& b);
-RAXIS_API Tensor mul(const Tensor& a, Scalar s);
-RAXIS_API Tensor div(const Tensor& a, const Tensor& b);
-RAXIS_API Tensor div(const Tensor& a, Scalar s);
-
-// In-place
-RAXIS_API Tensor& add_(Tensor& a, const Tensor& b);
-RAXIS_API Tensor& add_(Tensor& a, Scalar s);
-RAXIS_API Tensor& sub_(Tensor& a, const Tensor& b);
-RAXIS_API Tensor& sub_(Tensor& a, Scalar s);
-RAXIS_API Tensor& mul_(Tensor& a, const Tensor& b);
-RAXIS_API Tensor& mul_(Tensor& a, Scalar s);
-RAXIS_API Tensor& div_(Tensor& a, const Tensor& b);
-RAXIS_API Tensor& div_(Tensor& a, Scalar s);
+RAXIS_DECLARE_BINARY_ARITHMETIC(add);
+RAXIS_DECLARE_BINARY_ARITHMETIC(sub);
+RAXIS_DECLARE_BINARY_ARITHMETIC(mul);
+RAXIS_DECLARE_BINARY_ARITHMETIC(div);
 
 // Reversed
-RAXIS_API Tensor rsub(const Tensor& a, const Tensor& b);
-RAXIS_API Tensor rsub(const Tensor& a, Scalar s);
-RAXIS_API Tensor rdiv(const Tensor& a, const Tensor& b);
-RAXIS_API Tensor rdiv(const Tensor& a, Scalar s);
+RAXIS_DECLARE_BINARY_REVERSED(sub)
+RAXIS_DECLARE_BINARY_REVERSED(div)
 
-RAXIS_API Tensor& rsub_(Tensor& a, const Tensor& b);
-RAXIS_API Tensor& rsub_(Tensor& a, Scalar s);
-RAXIS_API Tensor& rdiv_(Tensor& a, const Tensor& b);
-RAXIS_API Tensor& rdiv_(Tensor& a, Scalar s);
+// Elementwise
+RAXIS_DECLARE_BINARY_OP(maximum);
+RAXIS_DECLARE_BINARY_OP(minimum);
 
+// --- Non-differentiable ---
 // Comparison
 RAXIS_API Tensor gt(const Tensor& a, const Tensor& b);
 RAXIS_API Tensor gt(const Tensor& a, Scalar s);
@@ -74,10 +61,6 @@ RAXIS_API Tensor eq(const Tensor& a, const Tensor& b);
 RAXIS_API Tensor eq(const Tensor& a, Scalar s);
 RAXIS_API Tensor ne(const Tensor& a, const Tensor& b);
 RAXIS_API Tensor ne(const Tensor& a, Scalar s);
- 
-// Elementwise
-RAXIS_API Tensor maximum(const Tensor& a, const Tensor& b);
-RAXIS_API Tensor minimum(const Tensor& a, const Tensor& b);
  
 // Logical
 RAXIS_API Tensor logical_and(const Tensor& a, const Tensor& b);

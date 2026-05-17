@@ -28,7 +28,10 @@ Dtype compute_cat_output_dtype(ArrayRef<Tensor> tensors) {
 }
  
 } // namespace
- 
+
+namespace ops {
+
+
 Tensor cat(ArrayRef<Tensor> tensors, int64_t dim) {
     RAXIS_CHECK(!tensors.empty(), "cat(): expected a non-empty list of tensors");
  
@@ -169,7 +172,7 @@ Tensor stack(ArrayRef<Tensor> tensors, int64_t dim) {
         unsqueezed.push_back(t.unsqueeze(dim));
     }
  
-    return cat(unsqueezed, dim);
+    return ops::cat(unsqueezed, dim);
 }
  
 std::vector<Tensor> unbind(const Tensor& self, int64_t dim) {
@@ -182,6 +185,8 @@ std::vector<Tensor> unbind(const Tensor& self, int64_t dim) {
         result[i] = self.select(dim, i);
     }
     return result;
+}
+
 }
 
 DEFINE_DISPATCH(cat_serial_stub);

@@ -155,4 +155,89 @@ RAXIS_API Tensor amin(
     bool keepdim = false
 );
 
+
+namespace ops {
+
+RAXIS_API Tensor sum(
+    const Tensor& self,
+    std::optional<Dtype> dtype = std::nullopt
+);
+
+RAXIS_API Tensor sum(
+    const Tensor& self,
+    IntArrayRef dim,
+    bool keepdim = false,
+    std::optional<Dtype> dtype = std::nullopt
+);
+
+
+RAXIS_API Tensor nansum(
+    const Tensor& self,
+    std::optional<Dtype> dtype = std::nullopt
+);
+
+RAXIS_API Tensor nansum(
+    const Tensor& self,
+    IntArrayRef dim,
+    bool keepdim = false,
+    std::optional<Dtype> dtype = std::nullopt
+);
+
+
+RAXIS_API Tensor mean(
+    const Tensor& self,
+    std::optional<Dtype> dtype = std::nullopt
+);
+
+RAXIS_API Tensor mean(
+    const Tensor& self,
+    IntArrayRef dim,
+    bool keepdim = false,
+    std::optional<Dtype> dtype = std::nullopt
+);
+
+
+RAXIS_API Tensor nanmean(
+    const Tensor& self,
+    std::optional<Dtype> dtype = std::nullopt
+);
+
+RAXIS_API Tensor nanmean(
+    const Tensor& self,
+    IntArrayRef dim,
+    bool keepdim = false,
+    std::optional<Dtype> dtype = std::nullopt
+);
+
+
+RAXIS_API Tensor prod(
+    const Tensor& self,
+    std::optional<Dtype> dtype = std::nullopt
+);
+
+RAXIS_API Tensor prod(
+    const Tensor& self,
+    IntArrayRef dim,
+    bool keepdim = false,
+    std::optional<Dtype> dtype = std::nullopt
+);
+
+
+RAXIS_API Tensor max(const Tensor& self);
+RAXIS_API Tensor min(const Tensor& self);
+
+RAXIS_API Tensor amax(
+    const Tensor& self,
+    IntArrayRef dim = {},
+    bool keepdim = false
+);
+RAXIS_API Tensor amin(
+    const Tensor& self, 
+    IntArrayRef dim = {},
+    bool keepdim = false
+);
+    
+} // namespace ops
+
+
 } // namespace raxis

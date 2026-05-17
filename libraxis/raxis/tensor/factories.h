@@ -17,8 +17,6 @@
 
 namespace raxis {
 
-using Deleter = std::function<void(void*)>;
-
 RAXIS_API Tensor from_blob(
     void* data, 
     IntArrayRef shape, 

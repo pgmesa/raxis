@@ -28,9 +28,7 @@ Tensor make_view(
     return Tensor(std::move(impl));
 }
 
-Tensor alias(const Tensor& self) {
-    return make_view(self, self.storage_offset(), self.shape(), self.strides());
-}
+namespace ops {
 
 Tensor select(const Tensor& self, int64_t dim, int64_t index) {
     const int n = self.ndim();
@@ -58,12 +56,6 @@ Tensor select(const Tensor& self, int64_t dim, int64_t index) {
     return make_view(self, new_offset, new_shape, new_strides);
 }
 
-Tensor slice(const Tensor& self, int64_t dim, const indexing::Slice& slice) {
-    dim = wrap_dim(dim, self.ndim());
-    auto [start, stop, step] = slice.resolve(self.shape()[dim]);
-    return ::raxis::slice(self, dim, start, stop, step);
-}
-
 Tensor slice(const Tensor& self, int64_t dim, int64_t start, int64_t stop, int64_t step) {
     const int n = self.ndim();
     RAXIS_CHECK(n > 0, "slice() cannot be applied to a 0-d tensor");
@@ -89,17 +81,6 @@ Tensor slice(const Tensor& self, int64_t dim, int64_t start, int64_t stop, int64
     new_strides[dim] = old_strides[dim] * step;
 
     return make_view(self, new_offset, new_shape, new_strides);
-}
-
-Tensor narrow(const Tensor& self, int64_t dim, int64_t start, int64_t length) {
-    RAXIS_CHECK(self.ndim() > 0, "narrow() cannot be applied to a 0-d tensor");
-    dim = wrap_dim(dim, self.ndim());
-    RAXIS_CHECK(length >= 0, "narrow(): length must be non-negative, got ", length);
-    RAXIS_CHECK(start >= 0 && start + length <= self.shape()[dim],
-        "narrow(): start (", start, ") + length (", length,
-        ") exceeds dimension size (", self.shape()[dim], ")");
-
-    return slice(self, dim, start, start + length);
 }
 
 Tensor unsqueeze(const Tensor& self, int64_t dim) {
@@ -199,65 +180,6 @@ Tensor permute(const Tensor& self, IntArrayRef dims) {
     return make_view(self, self.storage_offset(), new_shape, new_strides);
 }
 
-Tensor swapdims(const Tensor& self, int64_t dim0, int64_t dim1) {
-    return transpose(self, dim0, dim1);
-}
-
-Tensor movedim(const Tensor& self, IntArrayRef src, IntArrayRef dst) {
-    const int n = self.ndim();
-    RAXIS_CHECK(src.size() == dst.size(),
-        "movedim(): source (", src.size(), " dims) and destination (",
-        dst.size(), " dims) must have the same number of dims");
-
-    if (n == 0) return alias(self);
-
-    // Normalize and validate
-    DimVector norm_src(src.size());
-    DimVector norm_dst(src.size());
-
-    for (size_t i = 0; i < src.size(); ++i) {
-        norm_src[i] = wrap_dim(src[i], n);
-        norm_dst[i] = wrap_dim(dst[i], n);
-    }
-
-    auto has_duplicates = [](DimVector v) {
-        std::sort(v.begin(), v.end());
-        return std::adjacent_find(v.begin(), v.end()) != v.end();
-    };
-    RAXIS_CHECK(!has_duplicates(norm_src), "movedim(): repeated dim in source");
-    RAXIS_CHECK(!has_duplicates(norm_dst), "movedim(): repeated dim in destination");
-
-    // Build permutation order
-    // 1) Place known mappings: order[dst[i]] = src[i]
-    DimVector order(n);
-    DimVector src_remaining(n);
-    DimVector dst_remaining(n);
-    std::iota(src_remaining.begin(), src_remaining.end(), 0);
-    std::iota(dst_remaining.begin(), dst_remaining.end(), 0);
-
-    for (size_t i = 0; i < norm_src.size(); ++i) {
-        order[norm_dst[i]] = norm_src[i];
-        src_remaining[norm_src[i]] = -1;
-        dst_remaining[norm_dst[i]] = -1;
-    }
-
-    // 2) Remove placed dims, leaving the "rest"
-    auto src_end = std::remove(src_remaining.begin(), src_remaining.end(), -1);
-    auto dst_end = std::remove(dst_remaining.begin(), dst_remaining.end(), -1);
-
-    // 3) Fill remaining positions
-    int64_t rest = std::distance(src_remaining.begin(), src_end);
-    for (int64_t i = 0; i < rest; ++i) {
-        order[dst_remaining[i]] = src_remaining[i];
-    }
-
-    return permute(self, order);
-}
-
-Tensor movedim(const Tensor& self, int64_t src, int64_t dst) {
-    return movedim(self, IntArrayRef(src), IntArrayRef(dst));
-}
-
 Tensor view(const Tensor& self, IntArrayRef new_shape) {
     DimVector resolved = resolve_shape(new_shape, self.numel());
     auto new_strides = compute_view_strides(self.shape(), self.strides(), resolved);
@@ -318,6 +240,88 @@ Tensor broadcast_to(const Tensor& self, IntArrayRef target_shape) {
     }
 
     return make_view(self, self.storage_offset(), new_shape, new_strides);
+}
+    
+} // namespace ops
+
+Tensor alias(const Tensor& self) {
+    return make_view(self, self.storage_offset(), self.shape(), self.strides());
+}
+
+Tensor slice(const Tensor& self, int64_t dim, const indexing::Slice& slice) {
+    dim = wrap_dim(dim, self.ndim());
+    auto [start, stop, step] = slice.resolve(self.shape()[dim]);
+    return ::raxis::slice(self, dim, start, stop, step);
+}
+
+Tensor narrow(const Tensor& self, int64_t dim, int64_t start, int64_t length) {
+    RAXIS_CHECK(self.ndim() > 0, "narrow() cannot be applied to a 0-d tensor");
+    dim = wrap_dim(dim, self.ndim());
+    RAXIS_CHECK(length >= 0, "narrow(): length must be non-negative, got ", length);
+    RAXIS_CHECK(start >= 0 && start + length <= self.shape()[dim],
+        "narrow(): start (", start, ") + length (", length,
+        ") exceeds dimension size (", self.shape()[dim], ")");
+
+    return slice(self, dim, start, start + length);
+}
+
+Tensor swapdims(const Tensor& self, int64_t dim0, int64_t dim1) {
+    return transpose(self, dim0, dim1);
+}
+
+Tensor movedim(const Tensor& self, IntArrayRef src, IntArrayRef dst) {
+    const int n = self.ndim();
+    RAXIS_CHECK(src.size() == dst.size(),
+        "movedim(): source (", src.size(), " dims) and destination (",
+        dst.size(), " dims) must have the same number of dims");
+
+    if (n == 0) return alias(self);
+
+    // Normalize and validate
+    DimVector norm_src(src.size());
+    DimVector norm_dst(src.size());
+
+    for (size_t i = 0; i < src.size(); ++i) {
+        norm_src[i] = wrap_dim(src[i], n);
+        norm_dst[i] = wrap_dim(dst[i], n);
+    }
+
+    auto has_duplicates = [](DimVector v) {
+        std::sort(v.begin(), v.end());
+        return std::adjacent_find(v.begin(), v.end()) != v.end();
+    };
+    RAXIS_CHECK(!has_duplicates(norm_src), "movedim(): repeated dim in source");
+    RAXIS_CHECK(!has_duplicates(norm_dst), "movedim(): repeated dim in destination");
+
+    // Build permutation order
+    // 1) Place known mappings: order[dst[i]] = src[i]
+    DimVector order(n);
+    DimVector src_remaining(n);
+    DimVector dst_remaining(n);
+    std::iota(src_remaining.begin(), src_remaining.end(), 0);
+    std::iota(dst_remaining.begin(), dst_remaining.end(), 0);
+
+    for (size_t i = 0; i < norm_src.size(); ++i) {
+        order[norm_dst[i]] = norm_src[i];
+        src_remaining[norm_src[i]] = -1;
+        dst_remaining[norm_dst[i]] = -1;
+    }
+
+    // 2) Remove placed dims, leaving the "rest"
+    auto src_end = std::remove(src_remaining.begin(), src_remaining.end(), -1);
+    auto dst_end = std::remove(dst_remaining.begin(), dst_remaining.end(), -1);
+
+    // 3) Fill remaining positions
+    int64_t rest = std::distance(src_remaining.begin(), src_end);
+    for (int64_t i = 0; i < rest; ++i) {
+        order[dst_remaining[i]] = src_remaining[i];
+    }
+
+    return permute(self, order);
+}
+
+Tensor movedim(const Tensor& self, int64_t src, int64_t dst) {
+    return movedim(self, IntArrayRef(src), IntArrayRef(dst));
 }
 
 std::vector<Tensor> broadcast_tensors(ArrayRef<Tensor> tensors) {

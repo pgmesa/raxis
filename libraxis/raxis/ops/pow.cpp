@@ -1,3 +1,4 @@
+
 #include <raxis/ops/pow.h>
 
 #include <raxis/ops/scalar_ops.h>
@@ -8,6 +9,8 @@
 
 
 namespace raxis {
+
+namespace ops {
 
 Tensor pow(const Tensor& base, const Tensor& exp) {
     Tensor out;
@@ -49,8 +52,10 @@ Tensor pow(Scalar base, const Tensor& exp) {
         iter.get_output(0).fill_(1);
         return iter.get_output(0);
     }
-    return pow(wrapped_scalar_tensor(base), exp);
+    return ops::pow(wrapped_scalar_tensor(base), exp);
 }
+
+} // namespace ops
 
 DEFINE_DISPATCH(pow_tensor_tensor_stub);
 DEFINE_DISPATCH(pow_tensor_scalar_stub);

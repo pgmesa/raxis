@@ -17,4 +17,12 @@ RAXIS_API Tensor cat(ArrayRef<Tensor> tensors, int64_t dim = 0);
 RAXIS_API Tensor stack(ArrayRef<Tensor> tensors, int64_t dim = 0);
 RAXIS_API std::vector<Tensor> unbind(const Tensor& self, int64_t dim = 0);
 
+namespace ops {
+
+RAXIS_API Tensor cat(ArrayRef<Tensor> tensors, int64_t dim = 0);
+RAXIS_API Tensor stack(ArrayRef<Tensor> tensors, int64_t dim = 0);
+RAXIS_API std::vector<Tensor> unbind(const Tensor& self, int64_t dim = 0);
+    
+} // namespace ops
+
 } // namespace raxis
