@@ -603,6 +603,24 @@ class TestComposedBackward:
         try_backward(r_out, t_out, [r], [t], context="layernorm-style",
                       atol=1e-3, rtol=1e-2)
 
+    def test_fan_out_of_broadcast_grad(self, device):
+        """A non-leaf used twice receives the stride-0 grad of sum() twice."""
+        r_x, t_x = make_grad_pair(randf(3, 4, seed=1), device)
+        r_z, t_z = r_x * 2, t_x * 2
+        r_z.retain_grad()
+        t_z.retain_grad()
+        (r_z + r_z).sum().backward()
+        (t_z + t_z).sum().backward()
+        check_match(r_z.grad, t_z.grad, context="fan-out retained grad")
+        check_match(r_x.grad, t_x.grad, context="fan-out leaf grad")
+
+    def test_leaf_grad_does_not_alias_user_gradient(self, device):
+        r_x, _ = make_grad_pair(randf(3, 4, seed=1), device)
+        gradient = raxis.ones((3, 4))
+        r_x.clone().backward(gradient)
+        gradient += 1
+        check_match(r_x.grad, torch.ones(3, 4), context="leaf grad alias")
+
 
 # ===========================================================================
 # IN-PLACE GUARDS

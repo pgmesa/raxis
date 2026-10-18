@@ -30,7 +30,11 @@ TensorList AccumulateGrad::apply(const TensorList& grads) {
     if (variable_.grad().defined()) {
         variable_.set_grad(variable_.grad() + grad);
     } else {
-        variable_.set_grad(grad);
+        // .grad must own its memory: optimizers update it in place, and the
+        // incoming grad can be a broadcast view or be shared with other nodes
+        // or with the gradient passed by the user to backward().
+        bool can_steal = grad.is_contiguous() && grad.use_count() == 1;
+        variable_.set_grad(can_steal ? grad : grad.clone());
     }
 
     return {};

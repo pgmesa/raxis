@@ -98,8 +98,11 @@ void run_backward(const Tensor& tensor, const Tensor& grad, bool retain_graph) {
             TensorList& next_grads = grad_buffer.at(edge.node.get());
             Tensor& slot = next_grads[edge.input_nr];
 
+            // Accumulate out of place: the slot may be a broadcast view (stride 0,
+            // e.g. from SumBackward0) or share memory with another slot or a
+            // retained .grad, so writing into it would corrupt them.
             if (slot.defined()) {
-                slot += out_grad;
+                slot = slot + out_grad;
             } else {
                 slot = out_grad;
             }
