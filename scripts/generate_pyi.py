@@ -79,7 +79,8 @@ def main():
         shutil.rmtree(stubs_path)
 
     # Generate new stubs
-    sys.argv = [None, f'raxis.{cpp_module_name}', '--output', '.']
+    # --exit-code: fail instead of writing stubs with unresolved types
+    sys.argv = [None, f'raxis.{cpp_module_name}', '--output', '.', '--exit-code']
     pybind11_stubgen.main()
 
     # Post-process all generated .pyi files

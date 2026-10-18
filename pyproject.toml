@@ -45,6 +45,7 @@ classifiers = [
 build = [
     "pybind11>=2.13.0,<3.0.0",
     "pybind11-stubgen>=2.5.0,<3.0.0",
+    "numpy>=2.0.0,<3.0.0",  # the stubs reference numpy types
     "mkl-devel>=2025.0; platform_machine == 'x86_64' or platform_machine == 'AMD64'",
     "mkl-static>=2025.0; platform_machine == 'x86_64' or platform_machine == 'AMD64'",
     "intel-openmp>=2025.0; platform_machine == 'x86_64' or platform_machine == 'AMD64'",
@@ -117,7 +118,7 @@ skip = "*-musllinux_*"
 # libraxis is built with CMake for each Python version, then setuptools only
 # packages it (see setup.py)
 before-build = [
-    "pip install \"pybind11>=2.13.0,<3.0.0\" \"pybind11-stubgen>=2.5.0,<3.0.0\" mkl-devel mkl-static intel-openmp",
+    "pip install \"pybind11>=2.13.0,<3.0.0\" \"pybind11-stubgen>=2.5.0,<3.0.0\" numpy mkl-devel mkl-static intel-openmp",
     "python {project}/scripts/build_libraxis.py",
 ]
 test-requires = ["pytest", "numpy", "torch"]
