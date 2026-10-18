@@ -206,6 +206,7 @@ PYBIND11_MODULE(_C, c) {
 
         .def("narrow", &raxis::Tensor::narrow,
             py::arg("dim"), py::arg("start"), py::arg("length"))
+        .def("select", &raxis::Tensor::select, py::arg("dim"), py::arg("index"))
 
         // Shape / view operations
         .def("squeeze", &raxis::Tensor::squeeze, py::arg("dim") = py::none())
@@ -816,6 +817,7 @@ PYBIND11_MODULE(_C, c) {
     // Shape operations
     c.def("squeeze", &raxis::squeeze, py::arg("input"), py::arg("dim") = py::none());
     c.def("unsqueeze", &raxis::unsqueeze, py::arg("input"), py::arg("dim"));
+    c.def("select", py::overload_cast<const raxis::Tensor&, int64_t, int64_t>(&raxis::select), py::arg("input"), py::arg("dim"), py::arg("index"));
     c.def("transpose", &raxis::transpose, py::arg("input"), py::arg("dim0"), py::arg("dim1"));
     c.def("permute", &raxis::permute, py::arg("input"), py::arg("dims"));
     c.def("swapdims", &raxis::swapdims, py::arg("input"), py::arg("dim0"), py::arg("dim1"));
