@@ -8,19 +8,14 @@ find_package(Python COMPONENTS Interpreter Development REQUIRED)
 message(STATUS "Python Interpreter: ${Python_EXECUTABLE}")
 message(STATUS "Python Version: ${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}")
 
-get_filename_component(PYTHON_EXECUTABLE_DIR ${Python_EXECUTABLE} DIRECTORY)
-
-if(WIN32)
-    list(APPEND CMAKE_PREFIX_PATH "${PYTHON_EXECUTABLE_DIR}\\Lib\\site-packages")
-elseif(UNIX)
-    execute_process(
-        COMMAND "${Python_EXECUTABLE}" -c
-            "import sysconfig; print(sysconfig.get_path('purelib'))"
-        OUTPUT_VARIABLE PYTHON_SITE_PACKAGES
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    list(APPEND CMAKE_PREFIX_PATH "${PYTHON_SITE_PACKAGES}")
-endif()
+# Ask the interpreter: deriving it from the executable path breaks on venvs
+execute_process(
+    COMMAND "${Python_EXECUTABLE}" -c
+        "import sysconfig; print(sysconfig.get_path('purelib'))"
+    OUTPUT_VARIABLE PYTHON_SITE_PACKAGES
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+list(APPEND CMAKE_PREFIX_PATH "${PYTHON_SITE_PACKAGES}")
 
 set(PYBIND11_PATH "" CACHE PATH "Path to pybind11 installation")
 if(PYBIND11_PATH)
