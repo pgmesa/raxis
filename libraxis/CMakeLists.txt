@@ -28,6 +28,8 @@ target_compile_definitions(raxis PRIVATE RAXIS_BUILD)
 if(NOT WIN32)
     target_compile_options(raxis PRIVATE -fvisibility=hidden)
     string(APPEND RAXIS_TARGET_CXX_FLAGS " -fvisibility=hidden")
+    # Installed next to its runtime dependencies (libiomp5.so) in raxis/lib
+    set_target_properties(raxis PROPERTIES INSTALL_RPATH "$ORIGIN")
 endif()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
@@ -310,5 +312,14 @@ if(BUILD_PYTHON_BINDINGS)
         install(FILES "${IOMP5_RUNTIME}"
             DESTINATION ${CMAKE_INSTALL_LIBDIR}
         )
+    endif()
+
+    # Ship the MSVC C++ runtime next to raxis.dll: Python only brings
+    # vcruntime140, not msvcp140, and an older msvcp140 found elsewhere on
+    # PATH can crash code built with a newer toolset
+    if(MSVC)
+        set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION ${CMAKE_INSTALL_LIBDIR})
+        set(CMAKE_INSTALL_UCRT_LIBRARIES OFF)
+        include(InstallRequiredSystemLibraries)
     endif()
 endif()

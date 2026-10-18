@@ -4,6 +4,7 @@ CMakeUserPresets.json
 raxis/include
 raxis/share
 raxis/_C.pyi
+raxis/_C/
 build_package.*
 build_debug.*
 

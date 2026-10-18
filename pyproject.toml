@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=64.0", "wheel"]
+requires = ["setuptools>=77.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -79,7 +79,7 @@ cu130 = [
 
 [tool.setuptools]
 packages = { find = { where = ["."], include = ["raxis", "raxis.*"]} }
-package-data = { "raxis.lib" = ["**/*"], "raxis" = ["include/**/*", "share/**/*"] }
+package-data = { "raxis.lib" = ["**/*"], "raxis" = ["include/**/*", "share/**/*", "_C/*.pyi"] }
 
 [tool.setuptools.dynamic]
 version = {attr = "raxis.__version__"}

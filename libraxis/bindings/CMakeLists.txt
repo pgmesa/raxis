@@ -38,6 +38,7 @@ set_target_properties(raxis_bindings PROPERTIES
     OUTPUT_NAME "_C"
     SUFFIX "${PYTHON_MODULE_EXTENSION}"
     CXX_VISIBILITY_PRESET "hidden"
+    INSTALL_RPATH "$ORIGIN"
 )
 
 target_link_libraries(raxis_bindings PRIVATE Raxis::Raxis)
