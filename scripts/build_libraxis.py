@@ -8,6 +8,7 @@ wheel (`uv build --wheel`), which is what the CI does for each Python version.
 Run it with the Python the extension is for: it builds against that
 interpreter and finds MKL in its environment (`uv sync --extra build`).
 """
+import os
 import sys
 import shutil
 import argparse
@@ -39,8 +40,10 @@ def main():
         shutil.rmtree(package_path / name, ignore_errors=True)
 
     # pip installs MKL's CMake config and libraries under <prefix>/Library on
-    # Windows and directly under <prefix> elsewhere
-    prefix = Path(sys.prefix)
+    # Windows and directly under <prefix> elsewhere. RAXIS_MKL_PREFIX points
+    # to an MKL installed outside this environment (`pip install --prefix`),
+    # which CI shares across Python versions
+    prefix = Path(os.environ.get('RAXIS_MKL_PREFIX', sys.prefix))
     if platform.system() == 'Windows':
         prefix = prefix / 'Library'
 

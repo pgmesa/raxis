@@ -128,6 +128,15 @@ test-environment = { PIP_EXTRA_INDEX_URL = "https://download.pytorch.org/whl/cpu
 
 [tool.cibuildwheel.linux]
 archs = ["x86_64"]
+# MKL takes ~2.5 GB once installed: install it once per container and share
+# it across Python versions (build_libraxis.py reads RAXIS_MKL_PREFIX), or
+# the runner runs out of disk
+before-all = "/opt/python/cp312-cp312/bin/python -m pip install --prefix /opt/mkl mkl-devel mkl-static intel-openmp"
+before-build = [
+    "pip install \"pybind11>=2.13.0,<3.0.0\" \"pybind11-stubgen>=2.5.0,<3.0.0\" numpy",
+    "python {project}/scripts/build_libraxis.py",
+]
+environment = { RAXIS_MKL_PREFIX = "/opt/mkl" }
 # libiomp5.so already ships in raxis/lib, next to libraxis.so (RUNPATH
 # $ORIGIN), and raxis/__init__.py loads that copy: a second, renamed copy
 # would mean two OpenMP runtimes in the process
