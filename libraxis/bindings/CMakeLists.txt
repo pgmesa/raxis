@@ -3,7 +3,9 @@ if(PYTHON_EXECUTABLE)
     set(Python_EXECUTABLE ${PYTHON_EXECUTABLE})
 endif()
 
-find_package(Python COMPONENTS Interpreter Development REQUIRED)
+# Development.Module, not Development: an extension module does not link
+# libpython, which manylinux images (where the wheels are built) do not ship
+find_package(Python COMPONENTS Interpreter Development.Module REQUIRED)
 
 message(STATUS "Python Interpreter: ${Python_EXECUTABLE}")
 message(STATUS "Python Version: ${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}")
