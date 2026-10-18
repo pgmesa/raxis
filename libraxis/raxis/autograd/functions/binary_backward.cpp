@@ -1,6 +1,8 @@
 
 #include <raxis/autograd/functions/binary_backward.h>
 
+#include <cmath>
+
 #include <raxis/autograd/variable.h>
 #include <raxis/ops/binary_ops.h>
 
