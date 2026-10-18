@@ -622,15 +622,13 @@ class TestInPlaceGuards:
             r.add_(1.0)
 
     def test_inplace_on_non_leaf_errors(self, device):
-        """In-place on a non-leaf tensor used in backward must raise."""
+        """In-place on a non-leaf tensor that requires grad must raise.
+
+        Stricter than PyTorch, which allows it and tracks modifications with
+        version counters. raxis has no version counters yet.
+        """
         r = raxis.tensor([1.0, 2.0, 3.0], requires_grad=True)
-        t = torch.tensor([1.0, 2.0, 3.0], requires_grad=True)
-
         r_out = r * 2.0
-        t_out = t * 2.0
-
-        with pytest.raises(RuntimeError):
-            t_out.add_(1.0)
 
         with pytest.raises(RuntimeError):
             r_out.add_(1.0)
@@ -807,11 +805,15 @@ class TestDetach:
     def test_backward_stops_at_detach(self, device):
         """Detach prevents gradients from flowing past the detach point."""
         r = raxis.tensor([1.0, 2.0, 3.0], requires_grad=True)
-        mid = (r * 2.0).detach()
-        out = (mid * 3.0).sum()
+        t = torch.tensor([1.0, 2.0, 3.0], requires_grad=True)
 
-        out.backward()
-        assert r.grad is None
+        # Only the direct path through r contributes: d/dr (mid * r) = mid
+        r_out = ((r * 2.0).detach() * r).sum()
+        t_out = ((t * 2.0).detach() * t).sum()
+        r_out.backward()
+        t_out.backward()
+
+        check_match(r.grad, t.grad, context="detach")
 
 
 # ===========================================================================
