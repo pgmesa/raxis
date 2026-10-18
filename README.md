@@ -1,105 +1,82 @@
-# Raxis
+# raxis
 
-## Install from pip
+raxis is a from-scratch re-implementation of the core of PyTorch, the ATen
+tensor library and the autograd engine, in C++20 with Python bindings. It is
+distilled from the PyTorch source: it keeps the techniques that make ATen fast
+(TensorIterator, vectorized kernels with runtime CPU dispatch, BLAS/MKL)
+without the breadth and indirection that make the original hard to read.
+
+The goal is a codebase that someone curious about how PyTorch works inside can
+read end to end, while running at PyTorch speed on CPU.
+
+> **Status: alpha.** CPU only. Tensors with views and broadcasting, type
+> promotion, elementwise ops, reductions, matmul, autograd, and an `nn`/`optim`
+> package with enough to train MLPs. CNN layers and CUDA are next.
+
+## Install
 
 ```bash
 pip install raxis
 ```
 
+Wheels for Windows and Linux (x86-64), Python 3.10 to 3.14. raxis has no
+runtime dependencies; numpy is optional (`.numpy()`, `raxis.from_numpy`).
+
+```python
+import raxis
+from raxis import nn, optim
+
+model = nn.Sequential(nn.Linear(784, 128), nn.ReLU(), nn.Linear(128, 10))
+optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
+
+x, y = raxis.randn((64, 784)), raxis.randint(0, 10, (64,))
+loss = nn.functional.cross_entropy(model(x), y)
+optimizer.zero_grad()
+loss.backward()
+optimizer.step()
+```
+
+The API follows PyTorch's, so most code only needs `torch` replaced by
+`raxis`.
+
+## Inside
+
+| Path | What it holds |
+|---|---|
+| `libraxis/raxis/tensor` | TensorImpl and storage, views and strides, type promotion, TensorIterator |
+| `libraxis/raxis/ops` | Operators and their CPU kernels, compiled once per ISA (AVX2, NEON, ...) and picked at runtime |
+| `libraxis/raxis/autograd` | Graph, engine and backward functions |
+| `libraxis/bindings` | pybind11 module `raxis._C` |
+| `raxis/` | Python package: `nn`, `optim`, tensor printing |
+
+Code taken from PyTorch keeps a `// From: aten/src/ATen/...` comment pointing
+to the original.
+
 ## Build from source
 
-### Prerequisites
-
-- C++20 compiler (MSVC 17+, GCC 12+, Clang 14+)
-- CMake 3.22+
-- [uv](https://docs.astral.sh/uv/) (manages Python and all Python-side dependencies)
-
-### Clone
+Requirements: a C++20 compiler (MSVC 17+, GCC 12+, Clang 14+), CMake 3.22+ and
+[uv](https://docs.astral.sh/uv/).
 
 ```bash
 git clone --recursive https://github.com/pgmesa/raxis.git
 cd raxis
-```
-
-If you already cloned without `--recursive`:
-
-```bash
-git submodule update --init
-```
-
-### Set up the environment
-
-```bash
-uv sync --extra dev
-```
-
-This creates `.venv` from `uv.lock` with everything needed to build, test and
-benchmark: pybind11, Intel MKL (x86 only), NumPy, pytest and PyTorch (used as
-the reference in tests and benchmarks).
-
-#### Intel MKL
-
-On x86, raxis uses Intel MKL for BLAS (matmul and friends) and VML
-(vectorized transcendental functions), with the Intel OpenMP runtime (iomp5)
-for threading. MKL is installed into the venv from PyPI (`mkl-devel`,
-`mkl-static`, `intel-openmp`) as part of the `build` extra, so no system-wide
-installation is needed. CMake finds it through `CMAKE_PREFIX_PATH`:
-
-| Platform | `CMAKE_PREFIX_PATH` |
-|---|---|
-| Windows | `.venv/Library` |
-| Linux | `.venv` |
-
-If MKL is not found, raxis falls back to a generic BLAS (e.g. OpenBLAS) and,
-if none is available, to its own naive kernels. Check the configure summary
-(`BLAS: Intel MKL ...`) to see which one is used.
-
-### Configure and build
-
-From `libraxis/` (Windows paths shown, see the table above for Linux):
-
-```bash
-cmake --preset release -DPython_EXECUTABLE=<abs path to .venv/Scripts/python.exe> -DCMAKE_PREFIX_PATH=<abs path to .venv/Library>
-cmake --build --preset release --target install
-```
-
-The `install` target places the compiled libraries inside the `raxis/` Python
-package, which `uv sync` already installed in editable mode.
-
-### Test and benchmark
-
-From the repository root:
-
-```bash
+uv sync --extra dev --extra cpu        # or --extra cu130 for CUDA PyTorch
+uv run python scripts/build_libraxis.py
 uv run pytest tests
-uv run python scripts/bench_ops.py -k sum
 ```
 
-### Examples
+`uv sync` installs the pinned build and test dependencies from `uv.lock`,
+including Intel MKL from PyPI and PyTorch, the reference the tests compare
+against. `build_libraxis.py` builds `libraxis` with CMake and installs it into
+the `raxis/` package. To work on the C++ side, `libraxis/CMakePresets.json`
+has `debug` and `release` presets; `CMakeLists.txt` lists the build options
+(`RAXIS_USE_*`).
 
-`examples/` has two notebooks that train an MLP with `raxis.nn`: binary
-classification of the two moons dataset (`basic_mlp.ipynb`) and MNIST digit
-classification (`mnist_mlp.ipynb`, ~98% test accuracy). Both switch between
-raxis and PyTorch with a single variable (`engine_str`). Their dependencies
-(matplotlib, scikit-learn, torchvision, ...) are in the `examples` extra,
-already included in `dev`. Select the `.venv` interpreter as the notebook
-kernel.
+`scripts/bench_ops.py` benchmarks each op against PyTorch and NumPy, and
+`examples/` has notebooks that train MLPs on two moons and MNIST with either
+raxis or PyTorch.
 
-### Build options
+## License
 
-| Option | Default | Description |
-|---|---|---|
-| `BUILD_PYTHON_BINDINGS` | `ON` | Build the Python module |
-| `BUILD_EXAMPLES` | `OFF` | Build C++ examples |
-| `RAXIS_USE_PARALLEL` | `ON` | Enable intra-op parallelism |
-| `RAXIS_USE_OPENMP` | `ON` | Use OpenMP instead of the native thread pool |
-| `RAXIS_USE_SIMD` | `ON` | Enable SIMD vectorized kernels with runtime CPU dispatch |
-| `RAXIS_USE_BLAS` | `ON` | Use a BLAS library for linear algebra |
-| `RAXIS_USE_MKL` | `ON` | Prefer Intel MKL over generic BLAS (x86 only) |
-| `RAXIS_USE_MIMALLOC` | `ON` | Use mimalloc for CPU memory allocation |
-
-Override via command line:
-
-```bash
-cmake --preset release -DRAXIS_USE_PARALLEL=OFF
-```
+MIT. raxis includes code derived from PyTorch (BSD-3-Clause) and links SLEEF,
+mimalloc and Intel MKL: see [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).
