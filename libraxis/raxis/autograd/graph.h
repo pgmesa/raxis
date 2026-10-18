@@ -58,9 +58,14 @@ public:
     void set_retained_tensor(const Tensor& t) { retained_tensor_ = t.weak_impl(); }
     Tensor retained_tensor() const { return Tensor(retained_tensor_.lock()); }
 
+    // Set once the node ran in a backward pass without retain_graph
+    void mark_released() { released_ = true; }
+    bool is_released() const { return released_; }
+
 private:
     EdgeList next_edges_;
     size_t num_inputs_ = 0;
+    bool released_ = false;
     std::weak_ptr<detail::TensorImpl> retained_tensor_;
 };
 

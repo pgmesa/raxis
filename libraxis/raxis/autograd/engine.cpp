@@ -60,6 +60,11 @@ void run_backward(const Tensor& tensor, const Tensor& grad, bool retain_graph) {
 
         TensorList& input_grads = grad_buffer[node.get()];
 
+        RAXIS_CHECK(!node->is_released(),
+            "Trying to backward through the graph a second time (", node->name(),
+            "). Specify retain_graph=True if you need to backward through the "
+            "graph a second time.");
+
         TensorList output_grads;
         {
             NoGradGuard guard;
@@ -101,6 +106,7 @@ void run_backward(const Tensor& tensor, const Tensor& grad, bool retain_graph) {
         }
 
         if (!retain_graph) {
+            node->mark_released();
             grad_buffer.erase(node.get());
         }
     }
