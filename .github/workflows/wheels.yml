@@ -1,0 +1,57 @@
+name: Wheels
+
+# Manual runs build and test the wheels and keep them as artifacts. Publishing
+# a GitHub release also uploads them to the release and to PyPI.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-24.04]
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      # Configured in [tool.cibuildwheel] in pyproject.toml
+      - uses: pypa/cibuildwheel@v4.2.1
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheels-${{ matrix.os }}
+          path: wheelhouse/*.whl
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-24.04
+    environment: pypi
+    permissions:
+      contents: write  # attach the wheels to the release
+      id-token: write  # PyPI trusted publishing
+
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: wheels-*
+          path: dist
+          merge-multiple: true
+
+      - name: Attach wheels to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/*.whl --repo "${{ github.repository }}"
+
+      - uses: pypa/gh-action-pypi-publish@release/v1

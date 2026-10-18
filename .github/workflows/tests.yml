@@ -1,0 +1,42 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-24.04]
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+
+      # CPU build of torch: same version as in uv.lock, without the CUDA libraries
+      - name: Install dependencies
+        run: uv sync --locked --extra dev --extra cpu --python 3.12
+
+      - name: Build libraxis
+        run: uv run --no-sync python scripts/build_libraxis.py --no-stubs
+
+      - name: Run tests
+        run: uv run --no-sync pytest tests -q

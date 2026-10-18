@@ -110,3 +110,30 @@ explicit = true
 name = "pytorch-cu130"
 url = "https://download.pytorch.org/whl/cu130"
 explicit = true
+
+[tool.cibuildwheel]
+build = "cp310-* cp311-* cp312-* cp313-* cp314-*"
+skip = "*-musllinux_*"
+# libraxis is built with CMake for each Python version, then setuptools only
+# packages it (see setup.py)
+before-build = [
+    "pip install \"pybind11>=2.13.0,<3.0.0\" \"pybind11-stubgen>=2.5.0,<3.0.0\" mkl-devel mkl-static intel-openmp",
+    "python {project}/scripts/build_libraxis.py",
+]
+test-requires = ["pytest", "numpy", "torch"]
+test-command = "pytest {project}/tests -q -x"
+# PyTorch's CPU wheels (PyPI's Linux wheels pull the CUDA libraries)
+test-environment = { PIP_EXTRA_INDEX_URL = "https://download.pytorch.org/whl/cpu" }
+
+[tool.cibuildwheel.linux]
+archs = ["x86_64"]
+# libiomp5.so already ships in raxis/lib, next to libraxis.so (RUNPATH
+# $ORIGIN), and raxis/__init__.py loads that copy: a second, renamed copy
+# would mean two OpenMP runtimes in the process
+repair-wheel-command = "auditwheel repair --exclude libiomp5.so -w {dest_dir} {wheel}"
+
+[tool.cibuildwheel.windows]
+archs = ["AMD64"]
+# raxis/lib already has every DLL it needs (iomp5 and the MSVC runtime):
+# delvewheel would add renamed copies of raxis.dll and libiomp5md.dll
+repair-wheel-command = ""
