@@ -777,7 +777,7 @@ def run_backward_benchmarks(runner):
  
     has_any = False
     for name, cat, shapes, fn in [
-        ("mm bwd", FLOAT, S_MM, lambda t: torch.mm(t, t.transpose(0, 1))),
+        ("mm bwd", FLOAT, S_MM, lambda t: t.mm(t.transpose(0, 1))),
     ]:
         if not dtype_allowed(runner.dtype_str, cat):
             continue
@@ -789,7 +789,7 @@ def run_backward_benchmarks(runner):
  
     # -- Shape ops backward --
     SHAPE_BWD = [
-        ("reshape bwd",   FLOAT, S2D, lambda t: t.reshape(-1)),
+        ("reshape bwd",   FLOAT, S2D, lambda t: t.reshape((-1,))),
         ("transpose bwd", FLOAT, S2D, lambda t: t.transpose(0, 1)),
     ]
  
@@ -806,7 +806,7 @@ def run_backward_benchmarks(runner):
     # -- Composed backward --
     COMPOSED_BWD = [
         ("chain (a*b+c).sum() bwd", FLOAT, S2D, lambda t: (t * t + t).sum()),
-        ("sigmoid(mm) bwd",         FLOAT, S_MM, lambda t: torch.mm(t, t.T).sigmoid().sum()),
+        ("sigmoid(mm) bwd",         FLOAT, S_MM, lambda t: t.mm(t.transpose(0, 1)).sigmoid().sum()),
     ]
  
     has_any = False
