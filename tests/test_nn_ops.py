@@ -310,3 +310,22 @@ class TestTensorFromNumpy:
     def test_non_contiguous(self):
         data = randf(4, 6)[:, ::2].T
         np.testing.assert_array_equal(np.array(raxis.tensor(data)), data)
+
+
+class TestIteration:
+
+    def test_iterates_over_dim0(self):
+        data = randf(3, 4)
+        rows = list(raxis.tensor(data))
+        assert len(rows) == 3
+        for row, expected in zip(rows, data):
+            np.testing.assert_array_equal(np.array(row), expected)
+
+    def test_rows_keep_the_graph(self):
+        x = raxis.rand((3, 2), requires_grad=True)
+        sum(row.sum() for row in x).backward()
+        np.testing.assert_array_equal(np.array(x.grad), np.ones((3, 2), dtype=np.float32))
+
+    def test_zero_dim_raises(self):
+        with pytest.raises(RuntimeError):
+            iter(raxis.tensor(1.0))

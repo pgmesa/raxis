@@ -153,7 +153,13 @@ PYBIND11_MODULE(_C, c) {
         }, py::arg("dtype") = py::none(), py::arg("copy") = py::none())
 
         .def("__len__", [](const raxis::Tensor& self) {
+            RAXIS_CHECK(self.ndim() > 0, "len() of a 0-d tensor");
             return self.shape()[0];
+        })
+        // Iterates over dim 0, as torch does (iter(self.unbind(0)))
+        .def("__iter__", [](const raxis::Tensor& self) {
+            RAXIS_CHECK(self.ndim() > 0, "iteration over a 0-d tensor");
+            return py::iter(py::cast(raxis::unbind(self, 0)));
         })
         
         // Autograd
