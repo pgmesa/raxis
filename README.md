@@ -75,6 +75,16 @@ uv run pytest tests
 uv run python scripts/bench_ops.py -k sum
 ```
 
+### Examples
+
+`examples/` has two notebooks that train an MLP with `raxis.nn`: binary
+classification of the two moons dataset (`basic_mlp.ipynb`) and MNIST digit
+classification (`mnist_mlp.ipynb`, ~98% test accuracy). Both switch between
+raxis and PyTorch with a single variable (`engine_str`). Their dependencies
+(matplotlib, scikit-learn, torchvision, ...) are in the `examples` extra,
+already included in `dev`. Select the `.venv` interpreter as the notebook
+kernel.
+
 ### Build options
 
 | Option | Default | Description |
