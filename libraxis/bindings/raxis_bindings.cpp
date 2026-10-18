@@ -185,7 +185,10 @@ PYBIND11_MODULE(_C, c) {
 
         .def("detach", &raxis::Tensor::detach)
 
-        .def("backward", &raxis::Tensor::backward,
+        .def("backward",
+            [](const raxis::Tensor& self, std::optional<raxis::Tensor> gradient, bool retain_graph) {
+                self.backward(gradient.value_or(raxis::Tensor{}), retain_graph);
+            },
             py::arg("gradient") = py::none(),
             py::arg("retain_graph") = false)
 
