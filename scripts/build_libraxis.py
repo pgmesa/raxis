@@ -51,6 +51,9 @@ def main():
         'cmake', '-S', libraxis_path, '-B', build_path,
         f'-DCMAKE_BUILD_TYPE={args.build_type}',
         f'-DCMAKE_INSTALL_PREFIX={package_path}',
+        # raxis/__init__.py loads from raxis/lib; GNUInstallDirs would pick
+        # lib64 on RHEL-based systems such as the manylinux images
+        '-DCMAKE_INSTALL_LIBDIR=lib',
         f'-DCMAKE_PREFIX_PATH={prefix}',
         f'-DPython_EXECUTABLE={sys.executable}',
     ]
