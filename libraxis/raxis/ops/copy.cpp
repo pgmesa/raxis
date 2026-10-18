@@ -22,6 +22,22 @@ Tensor& copy(const Tensor& a, Tensor& out) {
     return out;
 }
 
+namespace ops {
+
+Tensor clone(const Tensor& self) {
+    Tensor out = empty_like(self);
+    copy(self, out);
+    return out;
+}
+
+Tensor to_copy(const Tensor& self, Dtype dtype) {
+    Tensor out = empty_like(self, dtype);
+    copy(self, out);
+    return out;
+}
+
+} // namespace ops
+
 DEFINE_DISPATCH(copy_stub);
 
 }

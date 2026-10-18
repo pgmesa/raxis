@@ -352,17 +352,12 @@ Tensor& Tensor::copy_(const Tensor& other) const {
 }
 
 Tensor Tensor::clone() const {
-    Tensor out = empty_like(*this);
-    out.copy_(*this);
-    return out;
+    return ::raxis::clone(*this);
 }
 
 Tensor Tensor::to(Dtype new_dtype) const {
     if (dtype() == new_dtype) return *this;
-
-    Tensor out = empty_like(*this, new_dtype);
-    out.copy_(*this);
-    return out;
+    return ::raxis::to_copy(*this, new_dtype);
 }
 
 Tensor Tensor::to(Device new_device) const {

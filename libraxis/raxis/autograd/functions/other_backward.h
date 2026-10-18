@@ -135,4 +135,24 @@ private:
     int64_t step_;
 };
 
+// ============================================================
+// Copies
+// ============================================================
+
+class RAXIS_API CloneBackward0 : public Node {
+public:
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+};
+
+class RAXIS_API ToCopyBackward0 : public Node {
+public:
+    explicit ToCopyBackward0(const Tensor& self);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    Dtype self_dtype_;
+};
+
 } // namespace raxis::autograd

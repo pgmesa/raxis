@@ -160,4 +160,23 @@ TensorList SliceBackward0::apply(const TensorList& grads) {
     return {result};
 }
 
+
+// ============================================================
+// Copies
+// ============================================================
+
+std::string CloneBackward0::name() const { return "CloneBackward0"; }
+
+TensorList CloneBackward0::apply(const TensorList& grads) {
+    return {grads[0]};
+}
+
+ToCopyBackward0::ToCopyBackward0(const Tensor& self) : self_dtype_(self.dtype()) {}
+
+std::string ToCopyBackward0::name() const { return "ToCopyBackward0"; }
+
+TensorList ToCopyBackward0::apply(const TensorList& grads) {
+    return {grads[0].to(self_dtype_)};
+}
+
 } // namespace raxis::autograd

@@ -1,4 +1,5 @@
 
+#include <raxis/ops/copy.h>
 #include <raxis/ops/cat_ops.h>
 
 #include <raxis/tensor/tensor.h>
@@ -149,6 +150,33 @@ Tensor broadcast_to(const Tensor& self, IntArrayRef shape) {
     Tensor result = ops::broadcast_to(self, shape);
     if (autograd::requires_autograd(self)) {
         auto grad_fn = std::make_shared<autograd::BroadcastToBackward0>(self);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+
+// ============================================================
+// Copies
+// ============================================================
+
+Tensor clone(const Tensor& self) {
+    Tensor result = ops::clone(self);
+    if (autograd::requires_autograd(self)) {
+        auto grad_fn = std::make_shared<autograd::CloneBackward0>();
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor to_copy(const Tensor& self, Dtype dtype) {
+    Tensor result = ops::to_copy(self, dtype);
+    if (autograd::requires_autograd(self)) {
+        auto grad_fn = std::make_shared<autograd::ToCopyBackward0>(self);
         grad_fn->set_num_inputs(1);
         autograd::set_next_edges(grad_fn, self);
         autograd::set_autograd_meta(result, grad_fn);
