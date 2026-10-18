@@ -1,6 +1,7 @@
 #pragma once
 
 #include <raxis/autograd/graph.h>
+#include <raxis/autograd/saved_variable.h>
 #include <raxis/tensor/tensor.h>
 
 
@@ -62,7 +63,7 @@ public:
 
 private:
     Tensor self_;
-    Tensor result_;
+    SavedVariable result_;
 };
 
 class RAXIS_API ProdBackward1 : public Node {
@@ -74,7 +75,7 @@ public:
 
 private:
     Tensor self_;
-    Tensor result_;
+    SavedVariable result_;
     DimVector dim_;
     bool keepdim_;
 };
@@ -88,7 +89,7 @@ public:
 
 private:
     Tensor self_;
-    Tensor result_;
+    SavedVariable result_;
     DimVector dim_;
     bool keepdim_;
 };
@@ -102,7 +103,7 @@ public:
 
 private:
     Tensor self_;
-    Tensor result_;
+    SavedVariable result_;
     DimVector dim_;
     bool keepdim_;
 };
@@ -115,7 +116,7 @@ public:
 
 private:
     Tensor self_;
-    Tensor result_;
+    SavedVariable result_;
 };
 
 class RAXIS_API MinBackward0 : public Node {
@@ -126,7 +127,7 @@ public:
 
 private:
     Tensor self_;
-    Tensor result_;
+    SavedVariable result_;
 };
 
 

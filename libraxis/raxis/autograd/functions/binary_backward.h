@@ -1,6 +1,7 @@
 #pragma once
 
 #include <raxis/autograd/graph.h>
+#include <raxis/autograd/saved_variable.h>
 #include <raxis/tensor/tensor.h>
 
 
@@ -90,7 +91,7 @@ private:
     DimVector exp_shape_;
     Tensor base_;
     Tensor exp_;
-    Tensor result_;
+    SavedVariable result_;
 };
 
 class RAXIS_API PowBackward2 : public Node {
@@ -101,7 +102,7 @@ public:
 
 private:
     Scalar base_;
-    Tensor result_;
+    SavedVariable result_;
 };
 
 

@@ -129,7 +129,7 @@ TensorList PowBackward0::apply(const TensorList& grads) {
 PowBackward1::PowBackward1(const Tensor& base, const Tensor& exp, const Tensor& result)
     : base_requires_grad_(base.requires_grad()),
       exp_requires_grad_(exp.requires_grad()),
-      base_(base), exp_(exp), result_(result)
+      base_(base), exp_(exp), result_(result, /*is_output=*/true)
 {
     if (base_requires_grad_) base_shape_ = DimVector(base.shape());
     if (exp_requires_grad_) exp_shape_ = DimVector(exp.shape());
@@ -147,20 +147,20 @@ TensorList PowBackward1::apply(const TensorList& grads) {
     }
     if (exp_requires_grad_) {
         // d/dexp = result * log(base) * grad
-        grad_exp = unbroadcast(grad * result_ * base_.log(), exp_shape_);
+        grad_exp = unbroadcast(grad * result_.unpack() * base_.log(), exp_shape_);
     }
 
     return {grad_base, grad_exp};
 }
 
 PowBackward2::PowBackward2(Scalar base, const Tensor& exp, const Tensor& result)
-    : base_(base), result_(result) {}
+    : base_(base), result_(result, /*is_output=*/true) {}
 
 std::string PowBackward2::name() const { return "PowBackward2"; }
 
 TensorList PowBackward2::apply(const TensorList& grads) {
     // d/dexp = result * log(base)
-    return {grads[0] * result_ * std::log(base_.to<double>())};
+    return {grads[0] * result_.unpack() * std::log(base_.to<double>())};
 }
 
 

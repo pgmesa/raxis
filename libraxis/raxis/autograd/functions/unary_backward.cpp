@@ -30,19 +30,19 @@ TensorList AbsBackward0::apply(const TensorList& grads) {
 }
 
 
-ExpBackward0::ExpBackward0(const Tensor& result) : result_(result) {}
+ExpBackward0::ExpBackward0(const Tensor& result) : result_(result, /*is_output=*/true) {}
 std::string ExpBackward0::name() const { return "ExpBackward0"; }
 
 TensorList ExpBackward0::apply(const TensorList& grads) {
-    return {grads[0] * result_};
+    return {grads[0] * result_.unpack()};
 }
 
 
-Expm1Backward0::Expm1Backward0(const Tensor& result) : result_(result) {}
+Expm1Backward0::Expm1Backward0(const Tensor& result) : result_(result, /*is_output=*/true) {}
 std::string Expm1Backward0::name() const { return "Expm1Backward0"; }
 
 TensorList Expm1Backward0::apply(const TensorList& grads) {
-    return {grads[0] * (result_ + 1.0)};
+    return {grads[0] * (result_.unpack() + 1.0)};
 }
 
 
@@ -78,35 +78,36 @@ TensorList Log1PBackward0::apply(const TensorList& grads) {
 }
 
 
-SqrtBackward0::SqrtBackward0(const Tensor& result) : result_(result) {}
+SqrtBackward0::SqrtBackward0(const Tensor& result) : result_(result, /*is_output=*/true) {}
 std::string SqrtBackward0::name() const { return "SqrtBackward0"; }
 
 TensorList SqrtBackward0::apply(const TensorList& grads) {
-    return {grads[0] / (result_ * 2.0)};
+    return {grads[0] / (result_.unpack() * 2.0)};
 }
 
 
-RsqrtBackward0::RsqrtBackward0(const Tensor& result) : result_(result) {}
+RsqrtBackward0::RsqrtBackward0(const Tensor& result) : result_(result, /*is_output=*/true) {}
 std::string RsqrtBackward0::name() const { return "RsqrtBackward0"; }
 
 TensorList RsqrtBackward0::apply(const TensorList& grads) {
-    return {grads[0] * result_.pow(3) * -0.5};
+    return {grads[0] * result_.unpack().pow(3) * -0.5};
 }
 
 
-ReciprocalBackward0::ReciprocalBackward0(const Tensor& result) : result_(result) {}
+ReciprocalBackward0::ReciprocalBackward0(const Tensor& result) : result_(result, /*is_output=*/true) {}
 std::string ReciprocalBackward0::name() const { return "ReciprocalBackward0"; }
 
 TensorList ReciprocalBackward0::apply(const TensorList& grads) {
-    return {-(grads[0] * result_.pow(2))};
+    return {-(grads[0] * result_.unpack().pow(2))};
 }
 
 
-SigmoidBackward0::SigmoidBackward0(const Tensor& result) : result_(result) {}
+SigmoidBackward0::SigmoidBackward0(const Tensor& result) : result_(result, /*is_output=*/true) {}
 std::string SigmoidBackward0::name() const { return "SigmoidBackward0"; }
 
 TensorList SigmoidBackward0::apply(const TensorList& grads) {
-    return {grads[0] * result_ * result_.rsub(1.0)};
+    const Tensor& result = result_.unpack();
+    return {grads[0] * result * result.rsub(1.0)};
 }
 
 
@@ -126,11 +127,11 @@ TensorList CosBackward0::apply(const TensorList& grads) {
 }
 
 
-TanBackward0::TanBackward0(const Tensor& result) : result_(result) {}
+TanBackward0::TanBackward0(const Tensor& result) : result_(result, /*is_output=*/true) {}
 std::string TanBackward0::name() const { return "TanBackward0"; }
 
 TensorList TanBackward0::apply(const TensorList& grads) {
-    return {grads[0] * (result_.pow(2) + 1.0)};
+    return {grads[0] * (result_.unpack().pow(2) + 1.0)};
 }
 
 
@@ -174,11 +175,11 @@ TensorList CoshBackward0::apply(const TensorList& grads) {
 }
 
 
-TanhBackward0::TanhBackward0(const Tensor& result) : result_(result) {}
+TanhBackward0::TanhBackward0(const Tensor& result) : result_(result, /*is_output=*/true) {}
 std::string TanhBackward0::name() const { return "TanhBackward0"; }
 
 TensorList TanhBackward0::apply(const TensorList& grads) {
-    return {grads[0] * result_.pow(2).rsub(1.0)};
+    return {grads[0] * result_.unpack().pow(2).rsub(1.0)};
 }
 
 

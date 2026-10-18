@@ -66,15 +66,14 @@ void run_backward(const Tensor& tensor, const Tensor& grad, bool retain_graph) {
             output_grads = node->apply(input_grads);
         }
 
-        // Retain grad: save the incoming gradient on the tensor if requested
-        if (node->has_retained_tensor()) {
-            const Tensor& t = node->retained_tensor();
+        // Retain grad: save the incoming gradient on the tensor if it is still alive
+        if (Tensor t = node->retained_tensor(); t.defined()) {
             const Tensor& incoming = input_grads[0];
             if (incoming.defined()) {
                 if (t.grad().defined()) {
-                    const_cast<Tensor&>(t).set_grad(t.grad() + incoming);
+                    t.set_grad(t.grad() + incoming);
                 } else {
-                    const_cast<Tensor&>(t).set_grad(incoming);
+                    t.set_grad(incoming);
                 }
             }
         }

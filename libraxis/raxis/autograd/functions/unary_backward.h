@@ -1,6 +1,7 @@
 #pragma once
 
 #include <raxis/autograd/graph.h>
+#include <raxis/autograd/saved_variable.h>
 #include <raxis/tensor/tensor.h>
 
 
@@ -27,7 +28,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    Tensor result_;
+    SavedVariable result_;
 };
 
 class RAXIS_API Expm1Backward0 : public Node {
@@ -36,7 +37,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    Tensor result_;
+    SavedVariable result_;
 };
 
 class RAXIS_API LogBackward0 : public Node {
@@ -81,7 +82,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    Tensor result_;
+    SavedVariable result_;
 };
 
 class RAXIS_API RsqrtBackward0 : public Node {
@@ -90,7 +91,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    Tensor result_;
+    SavedVariable result_;
 };
 
 class RAXIS_API ReciprocalBackward0 : public Node {
@@ -99,7 +100,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    Tensor result_;
+    SavedVariable result_;
 };
 
 class RAXIS_API SigmoidBackward0 : public Node {
@@ -108,7 +109,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    Tensor result_;
+    SavedVariable result_;
 };
 
 class RAXIS_API SinBackward0 : public Node {
@@ -135,7 +136,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    Tensor result_;
+    SavedVariable result_;
 };
 
 class RAXIS_API AsinBackward0 : public Node {
@@ -189,7 +190,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    Tensor result_;
+    SavedVariable result_;
 };
 
 class RAXIS_API ErfBackward0 : public Node {

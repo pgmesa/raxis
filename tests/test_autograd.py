@@ -887,3 +887,62 @@ class TestRetainGrad:
         assert r_mid.grad is not None
         assert t_mid.grad is not None
         check_match(r_mid.grad, t_mid.grad, context="retain_grad")
+
+# ===========================================================================
+# GRAPH LIFETIME
+# ===========================================================================
+
+# Ops whose backward node saves the forward output. If the node stored the
+# output itself, output -> grad_fn -> node -> output would form a reference
+# cycle and the whole graph would leak.
+OUTPUT_SAVING_OPS = [
+    ("exp",        lambda x: x.exp()),
+    ("expm1",      lambda x: x.expm1()),
+    ("sqrt",       lambda x: x.sqrt()),
+    ("rsqrt",      lambda x: x.rsqrt()),
+    ("reciprocal", lambda x: x.reciprocal()),
+    ("sigmoid",    lambda x: x.sigmoid()),
+    ("tan",        lambda x: x.tan()),
+    ("tanh",       lambda x: x.tanh()),
+    ("pow_tensor", lambda x: x.pow(x)),
+    ("pow_scalar_base", lambda x: raxis.pow(2.0, x)),
+    ("prod",       lambda x: x.prod()),
+    ("prod_dim",   lambda x: x.prod(dim=1)),
+    ("amax",       lambda x: x.amax(dim=1)),
+    ("amin",       lambda x: x.amin(dim=1)),
+    ("max",        lambda x: x.max()),
+    ("min",        lambda x: x.min()),
+]
+
+
+class TestGraphLifetime:
+
+    @pytest.mark.parametrize("name, op", OUTPUT_SAVING_OPS,
+                             ids=[n for n, _ in OUTPUT_SAVING_OPS])
+    def test_output_not_owned_by_its_graph(self, name, op):
+        x = raxis.rand((4, 5), requires_grad=True)
+        y = op(x)
+        assert y.grad_fn is not None
+        assert y._use_count() == 1, f"{name}: output is kept alive by its own grad_fn"
+
+    def test_retain_grad_does_not_own_tensor(self):
+        x = raxis.rand((4, 5), requires_grad=True)
+        y = x * 2.0
+        y.retain_grad()
+        assert y._use_count() == 1
+
+    def test_backward_after_retained_tensor_is_freed(self):
+        r = raxis.tensor([1.0, 2.0, 3.0], requires_grad=True)
+        t = torch.tensor([1.0, 2.0, 3.0], requires_grad=True)
+
+        # AddBackward0 does not save its inputs, so deleting mid frees it
+        r_mid = r * 2.0
+        r_mid.retain_grad()
+        r_out = (r_mid + 1.0).sum()
+        del r_mid
+        r_out.backward()
+
+        t_out = (t * 2.0 + 1.0).sum()
+        t_out.backward()
+
+        check_match(r.grad, t.grad, context="retain_grad on freed tensor")

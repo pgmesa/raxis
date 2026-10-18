@@ -104,6 +104,9 @@ public:
     bool is_cuda() const;
 
     detail::TensorImpl* unsafe_get_tensor_impl() const;
+    // Non-owning handle for structures that must not keep the tensor alive
+    std::weak_ptr<detail::TensorImpl> weak_impl() const { return impl_; }
+    long use_count() const noexcept { return impl_.use_count(); }
     bool is_wrapped_number() const;
 
     std::string to_string() const;

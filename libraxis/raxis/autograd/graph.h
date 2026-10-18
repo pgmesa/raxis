@@ -52,14 +52,16 @@ public:
     const EdgeList& next_edges() const { return next_edges_; }
     size_t num_outputs() const { return next_edges_.size(); }
 
-    void set_retained_tensor(const Tensor& t) { retained_tensor_ = t; }
-    const Tensor& retained_tensor() const { return retained_tensor_; }
-    bool has_retained_tensor() const { return retained_tensor_.defined(); }
+    // The retained tensor is an output of this node and owns it through its
+    // grad_fn, so it is held weakly to avoid a reference cycle. Returns an
+    // undefined tensor if it was already freed.
+    void set_retained_tensor(const Tensor& t) { retained_tensor_ = t.weak_impl(); }
+    Tensor retained_tensor() const { return Tensor(retained_tensor_.lock()); }
 
 private:
     EdgeList next_edges_;
     size_t num_inputs_ = 0;
-    Tensor retained_tensor_;
+    std::weak_ptr<detail::TensorImpl> retained_tensor_;
 };
 
 } // namespace raxis::autograd

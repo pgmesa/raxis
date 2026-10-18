@@ -184,6 +184,7 @@ PYBIND11_MODULE(_C, c) {
         .def("retain_grad", &raxis::Tensor::retain_grad)
 
         .def("detach", &raxis::Tensor::detach)
+        .def("_use_count", &raxis::Tensor::use_count)
 
         .def("backward",
             [](const raxis::Tensor& self, std::optional<raxis::Tensor> gradient, bool retain_graph) {
