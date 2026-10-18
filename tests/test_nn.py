@@ -1,0 +1,245 @@
+
+import math
+
+import pytest
+import raxis
+import torch
+import numpy as np
+
+from raxis import nn
+from test_utils import check_match, randf_centered
+
+
+def copy_params(r_model, t_model):
+    """Give the torch model the same parameter values as the raxis model."""
+    r_params = dict(r_model.named_parameters())
+    with torch.no_grad():
+        for name, t_param in t_model.named_parameters():
+            t_param.copy_(torch.from_numpy(np.array(r_params[name].detach())))
+
+
+def mlp(lib, in_features=6, hidden=8, out_features=3, final=None):
+    lib.manual_seed(0)
+    layers =[lib.nn.Linear(in_features, hidden), lib.nn.ReLU(),
+              lib.nn.Linear(hidden, out_features)]
+    if final is not None:
+        layers.append(final(lib))
+    return lib.nn.Sequential(*layers)
+
+
+# ===========================================================================
+# MODULE
+# ===========================================================================
+
+class TestModule:
+
+    def test_registers_parameters_and_submodules(self):
+        model = mlp(raxis)
+        names = [name for name, _ in model.named_parameters()]
+        assert names == ["0.weight", "0.bias", "2.weight", "2.bias"]
+        assert all(isinstance(p, nn.Parameter) for p in model.parameters())
+        assert all(p.requires_grad and p.is_leaf for p in model.parameters())
+
+    def test_custom_module(self):
+        class Net(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.body = nn.Linear(4, 4)
+                self.head = nn.Linear(4, 1, bias=False)
+                self.scale = 2.0  # plain attribute, not registered
+
+            def forward(self, x):
+                return self.head(self.body(x)) * self.scale
+
+        net = Net()
+        assert [n for n, _ in net.named_parameters()] == ["body.weight", "body.bias", "head.weight"]
+        assert net(raxis.rand((5, 4))).shape == (5, 1)
+
+    def test_reassigning_a_parameter_name_unregisters_it(self):
+        layer = nn.Linear(2, 2)
+        layer.bias = None
+        assert [n for n, _ in layer.named_parameters()] == ["weight"]
+
+    def test_inplace_update_keeps_parameter(self):
+        layer = nn.Linear(3, 3)
+        with raxis.no_grad():
+            layer.weight *= 0.1
+        assert isinstance(layer.weight, nn.Parameter)
+        assert len(list(layer.parameters())) == 2
+
+    def test_train_eval_propagate(self):
+        model = nn.Sequential(nn.Linear(2, 2), nn.Sequential(nn.Dropout(0.5)))
+        model.eval()
+        assert all(not m.training for m in model.modules())
+        model.train()
+        assert all(m.training for m in model.modules())
+
+    def test_dropout_is_identity_in_eval(self):
+        model = nn.Sequential(nn.Dropout(0.9)).eval()
+        x = raxis.rand((10, 10))
+        check_match(model(x), torch.from_numpy(np.array(x)))
+
+    def test_apply_visits_every_module(self):
+        visited = []
+        model = mlp(raxis)
+        model.apply(lambda m: visited.append(type(m).__name__))
+        assert visited == ["Linear", "ReLU", "Linear", "Sequential"]
+
+    def test_zero_grad(self):
+        model = mlp(raxis)
+        model(raxis.rand((4, 6))).sum().backward()
+        assert all(p.grad is not None for p in model.parameters())
+        model.zero_grad()
+        assert all(p.grad is None for p in model.parameters())
+
+    def test_repr_matches_torch(self):
+        r = repr(mlp(raxis, final=lambda lib: lib.nn.LogSoftmax(dim=1)))
+        t = repr(mlp(torch, final=lambda lib: lib.nn.LogSoftmax(dim=1)))
+        assert r == t
+
+    def test_to_cuda_raises(self):
+        with pytest.raises(NotImplementedError):
+            mlp(raxis).to("cuda")
+
+
+# ===========================================================================
+# INIT
+# ===========================================================================
+
+class TestInit:
+
+    def test_linear_default_bounds(self):
+        layer = nn.Linear(100, 50)
+        bound = 1 / math.sqrt(100)
+        assert np.abs(np.array(layer.weight.detach())).max() <= bound
+        assert np.abs(np.array(layer.bias.detach())).max() <= bound
+
+    def test_xavier_uniform_bounds(self):
+        w = nn.init.xavier_uniform_(raxis.empty((200, 300)))
+        a = math.sqrt(6.0 / 500)
+        values = np.array(w)
+        assert np.abs(values).max() <= a
+        assert values.std() == pytest.approx(a / math.sqrt(3), rel=0.05)
+
+    @pytest.mark.parametrize("fn, expected_std", [
+        (lambda w: nn.init.kaiming_normal_(w, nonlinearity="relu"), math.sqrt(2.0 / 300)),
+        (lambda w: nn.init.xavier_normal_(w), math.sqrt(2.0 / 500)),
+    ], ids=["kaiming_normal", "xavier_normal"])
+    def test_normal_std(self, fn, expected_std):
+        values = np.array(fn(raxis.empty((200, 300))))
+        assert values.std() == pytest.approx(expected_std, rel=0.05)
+        assert values.mean() == pytest.approx(0.0, abs=expected_std * 0.05)
+
+    def test_init_on_parameter_keeps_it_a_leaf(self):
+        layer = nn.Linear(4, 4)
+        nn.init.zeros_(layer.bias)
+        assert layer.bias.is_leaf and layer.bias.grad_fn is None
+        assert (np.array(layer.bias.detach()) == 0).all()
+
+
+# ===========================================================================
+# TRAINING: same model, same weights, same data -> same trajectory as torch
+# ===========================================================================
+
+def train_both(r_model, t_model, r_opt, t_opt, r_loss_fn, t_loss_fn,
+               x, y, y_dtype, steps=20):
+    r_x, t_x = raxis.tensor(x), torch.from_numpy(x)
+    r_y = raxis.tensor(y, dtype=y_dtype[0])
+    t_y = torch.from_numpy(y).to(y_dtype[1])
+    r_losses, t_losses = [], []
+    for _ in range(steps):
+        for model, opt, loss_fn, xs, ys, losses in (
+            (r_model, r_opt, r_loss_fn, r_x, r_y, r_losses),
+            (t_model, t_opt, t_loss_fn, t_x, t_y, t_losses),
+        ):
+            opt.zero_grad()
+            loss = loss_fn(model(xs), ys)
+            loss.backward()
+            opt.step()
+            losses.append(loss.item())
+    return np.array(r_losses), np.array(t_losses)
+
+
+OPTIMIZERS = [
+    ("sgd", lambda lib, p: lib.optim.SGD(p, lr=0.1)),
+    ("sgd_momentum", lambda lib, p: lib.optim.SGD(p, lr=0.01, momentum=0.9)),
+    ("sgd_nesterov_wd", lambda lib, p: lib.optim.SGD(p, lr=0.01, momentum=0.9,
+                                                     nesterov=True, weight_decay=1e-2)),
+    ("adam", lambda lib, p: lib.optim.Adam(p, lr=1e-2)),
+    ("adam_wd", lambda lib, p: lib.optim.Adam(p, lr=1e-2, weight_decay=1e-2)),
+    ("adamw", lambda lib, p: lib.optim.AdamW(p, lr=1e-2)),
+]
+
+
+class TestTraining:
+
+    @pytest.mark.parametrize("name, make_opt", OPTIMIZERS, ids=[n for n, _ in OPTIMIZERS])
+    def test_regression_mse(self, name, make_opt):
+        r_model, t_model = mlp(raxis, out_features=1), mlp(torch, out_features=1)
+        copy_params(r_model, t_model)
+        x = randf_centered(16, 6, seed=1)
+        y = randf_centered(16, 1, seed=2)
+        r_losses, t_losses = train_both(
+            r_model, t_model,
+            make_opt(raxis, r_model.parameters()), make_opt(torch, t_model.parameters()),
+            nn.MSELoss(), torch.nn.MSELoss(), x, y, (raxis.float32, torch.float32))
+        np.testing.assert_allclose(r_losses, t_losses, rtol=1e-4, atol=1e-5)
+        assert r_losses[-1] < r_losses[0]
+
+    @pytest.mark.parametrize("name, make_opt", OPTIMIZERS[:2], ids=[n for n, _ in OPTIMIZERS[:2]])
+    def test_classification_log_softmax_nll(self, name, make_opt):
+        final = lambda lib: lib.nn.LogSoftmax(dim=1)
+        r_model, t_model = mlp(raxis, final=final), mlp(torch, final=final)
+        copy_params(r_model, t_model)
+        x = randf_centered(32, 6, seed=3)
+        y = np.random.RandomState(4).randint(0, 3, size=32).astype(np.int64)
+        r_losses, t_losses = train_both(
+            r_model, t_model,
+            make_opt(raxis, r_model.parameters()), make_opt(torch, t_model.parameters()),
+            nn.NLLLoss(), torch.nn.NLLLoss(), x, y, (raxis.long, torch.long))
+        np.testing.assert_allclose(r_losses, t_losses, rtol=1e-4, atol=1e-5)
+        assert r_losses[-1] < r_losses[0]
+
+    def test_classification_cross_entropy(self):
+        r_model, t_model = mlp(raxis), mlp(torch)
+        copy_params(r_model, t_model)
+        x = randf_centered(32, 6, seed=5)
+        y = np.random.RandomState(6).randint(0, 3, size=32).astype(np.int64)
+        r_losses, t_losses = train_both(
+            r_model, t_model,
+            raxis.optim.SGD(r_model.parameters(), lr=0.1),
+            torch.optim.SGD(t_model.parameters(), lr=0.1),
+            nn.CrossEntropyLoss(), torch.nn.CrossEntropyLoss(), x, y, (raxis.long, torch.long))
+        np.testing.assert_allclose(r_losses, t_losses, rtol=1e-4, atol=1e-5)
+
+    def test_optimizer_rejects_empty_params(self):
+        with pytest.raises(ValueError):
+            raxis.optim.SGD([], lr=0.1)
+
+
+# ===========================================================================
+# ACTIVATION MODULES
+# ===========================================================================
+
+ACTIVATIONS = [
+    ("ReLU", lambda lib: lib.nn.ReLU()),
+    ("LeakyReLU", lambda lib: lib.nn.LeakyReLU(0.2)),
+    ("SELU", lambda lib: lib.nn.SELU()),
+    ("Sigmoid", lambda lib: lib.nn.Sigmoid()),
+    ("Tanh", lambda lib: lib.nn.Tanh()),
+    ("Softmax", lambda lib: lib.nn.Softmax(dim=1)),
+    ("LogSoftmax", lambda lib: lib.nn.LogSoftmax(dim=1)),
+]
+
+
+@pytest.mark.parametrize("name, make", ACTIVATIONS, ids=[n for n, _ in ACTIVATIONS])
+def test_activation_modules(name, make):
+    data = randf_centered(5, 7)
+    r = raxis.tensor(data, requires_grad=True)
+    t = torch.tensor(data, requires_grad=True)
+    r_out, t_out = make(raxis)(r), make(torch)(t)
+    check_match(r_out, t_out, context=name)
+    grad = randf_centered(5, 7, seed=9)
+    r_out.backward(raxis.tensor(grad))
+    t_out.backward(torch.from_numpy(grad))
+    check_match(r.grad, t.grad, atol=1e-5, context=f"{name} grad")

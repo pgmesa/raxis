@@ -56,6 +56,33 @@ from raxis._tensor_str import _str
 
 Tensor.__repr__ = _str
 
+# Dtype aliases, as in torch
+float = float32
+double = float64
+int = int32
+long = int64
+
+
+def _return_self(method):
+    def inplace(self, *args, **kwargs):
+        method(self, *args, **kwargs)
+        return self
+    inplace.__name__ = method.__name__
+    inplace.__doc__ = method.__doc__
+    return inplace
+
+
+# pybind11 wraps the `Tensor&` returned by in-place methods in a new Python
+# object. Return `self` instead (as torch does), so `p *= 0.1` keeps `p` the
+# same object, and a Parameter stays a Parameter.
+for _name in dir(Tensor):
+    _is_inplace_method = _name.endswith("_") and not _name.startswith("_")
+    _is_inplace_operator = _name in ("__iadd__", "__isub__", "__imul__", "__itruediv__")
+    if _is_inplace_method or _is_inplace_operator:
+        setattr(Tensor, _name, _return_self(getattr(Tensor, _name)))
+del _name, _is_inplace_method, _is_inplace_operator
+
+
 class no_grad:
     """Context manager that disables gradient computation."""
     def __enter__(self):
@@ -76,3 +103,6 @@ class enable_grad:
 
     def __exit__(self, *args):
         _C.set_grad_enabled(self._prev)
+
+
+from raxis import nn, optim
