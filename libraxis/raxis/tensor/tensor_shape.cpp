@@ -269,6 +269,35 @@ Tensor swapdims(const Tensor& self, int64_t dim0, int64_t dim1) {
     return transpose(self, dim0, dim1);
 }
 
+// Merges dims [start_dim, end_dim] into one. A view when possible (reshape).
+// From: aten/src/ATen/native/TensorShape.cpp (flatten)
+Tensor flatten(const Tensor& self, int64_t start_dim, int64_t end_dim) {
+    if (self.ndim() == 0) {
+        return reshape(self, {1});
+    }
+    start_dim = wrap_dim(start_dim, self.ndim());
+    end_dim = wrap_dim(end_dim, self.ndim());
+    RAXIS_CHECK(start_dim <= end_dim,
+        "flatten() has invalid args: start_dim cannot come after end_dim");
+    if (start_dim == end_dim) {
+        return self;
+    }
+
+    DimVector shape;
+    for (int64_t d = 0; d < start_dim; ++d) {
+        shape.push_back(self.shape()[d]);
+    }
+    int64_t merged = 1;
+    for (int64_t d = start_dim; d <= end_dim; ++d) {
+        merged *= self.shape()[d];
+    }
+    shape.push_back(merged);
+    for (int64_t d = end_dim + 1; d < self.ndim(); ++d) {
+        shape.push_back(self.shape()[d]);
+    }
+    return reshape(self, shape);
+}
+
 Tensor movedim(const Tensor& self, IntArrayRef src, IntArrayRef dst) {
     const int n = self.ndim();
     RAXIS_CHECK(src.size() == dst.size(),

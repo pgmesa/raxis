@@ -441,6 +441,20 @@ static Tensor matmul_impl_(const Tensor& tensor1, const Tensor& tensor2) {
 Tensor matmul(const Tensor& tensor1, const Tensor& tensor2) {
     return matmul_impl_(tensor1, tensor2);
 }
+
+// The 2-D case with bias is a single addmm: BLAS adds the bias as the C term
+// of the gemm (beta = 1) instead of a separate broadcast add.
+// From: aten/src/ATen/native/Linear.cpp
+Tensor linear(const Tensor& input, const Tensor& weight, const Tensor& bias) {
+    if (input.ndim() == 2 && bias.defined()) {
+        return addmm(bias, input, weight.transpose(0, 1));
+    }
+    Tensor output = matmul(input, weight.transpose(0, 1));
+    if (bias.defined()) {
+        output = output + bias;
+    }
+    return output;
+}
     
 // ---------------------------------------------------------------------------
 // mm

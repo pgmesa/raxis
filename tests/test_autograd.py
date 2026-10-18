@@ -941,6 +941,9 @@ OUTPUT_SAVING_OPS = [
     ("amin",       lambda x: x.amin(dim=1)),
     ("max",        lambda x: x.max()),
     ("min",        lambda x: x.min()),
+    ("relu",       lambda x: x.relu()),
+    ("softmax",    lambda x: x.softmax(1)),
+    ("log_softmax", lambda x: x.log_softmax(1)),
 ]
 
 

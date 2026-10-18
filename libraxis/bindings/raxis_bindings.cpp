@@ -106,6 +106,9 @@ PYBIND11_MODULE(_C, c) {
 
     // Tensor
     py::class_<raxis::Tensor>(c, "Tensor")
+        // Aliases `data` (shares its TensorImpl). Lets Python subclasses such
+        // as nn.Parameter wrap an existing tensor.
+        .def(py::init([](const raxis::Tensor& data) { return data; }), py::arg("data"))
         .def_property_readonly("shape", [](const raxis::Tensor& self) -> py::tuple {
             pybind11::tuple py_shape = pybind11::cast(self.shape());
             return py_shape;
@@ -226,9 +229,11 @@ PYBIND11_MODULE(_C, c) {
         .def("view", [](const raxis::Tensor& self, raxis::Vec shape) {
             return self.view(shape);
         }, py::arg("shape"))
-        .def("reshape", [](const raxis::Tensor& self, raxis::Vec shape) {
+        .def("reshape", [](const raxis::Tensor& self, raxis::VecOrInt shape) {
             return self.reshape(shape);
         }, py::arg("shape"))
+        .def("flatten", &raxis::Tensor::flatten,
+            py::arg("start_dim") = 0, py::arg("end_dim") = -1)
         .def("broadcast_to", [](const raxis::Tensor& self, raxis::Vec shape) {
             return self.broadcast_to(shape);
         }, py::arg("shape"))
@@ -575,6 +580,9 @@ PYBIND11_MODULE(_C, c) {
         .def("rsqrt", &raxis::Tensor::rsqrt)
         .def("reciprocal", &raxis::Tensor::reciprocal)
         .def("sigmoid", &raxis::Tensor::sigmoid)
+        .def("relu", &raxis::Tensor::relu)
+        .def("softmax", &raxis::Tensor::softmax, py::arg("dim"))
+        .def("log_softmax", &raxis::Tensor::log_softmax, py::arg("dim"))
         .def("logical_not", &raxis::Tensor::logical_not)
         .def("expm1", &raxis::Tensor::expm1)
         .def("log2", &raxis::Tensor::log2)
@@ -603,6 +611,7 @@ PYBIND11_MODULE(_C, c) {
         .def("rsqrt_", &raxis::Tensor::rsqrt_)
         .def("reciprocal_", &raxis::Tensor::reciprocal_)
         .def("sigmoid_", &raxis::Tensor::sigmoid_)
+        .def("relu_", &raxis::Tensor::relu_)
         .def("logical_not_", &raxis::Tensor::logical_not_)
         .def("expm1_", &raxis::Tensor::expm1_)
         .def("log2_", &raxis::Tensor::log2_)
@@ -712,7 +721,16 @@ PYBIND11_MODULE(_C, c) {
     
     // Factories
     c.def("tensor", [](py::object data, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
-        auto t = raxis::python::tensor_from_python(data, dtype, device);
+        raxis::Tensor t;
+        if (py::isinstance<py::array>(data)) {
+            RAXIS_CHECK(!device || device->is_cpu(),
+                "tensor(): only CPU tensors can be created from a numpy array");
+            // tensor() always copies (from_numpy is the aliasing variant)
+            raxis::Tensor src = raxis::python::tensor_from_numpy(data.cast<py::array>());
+            t = dtype && *dtype != src.dtype() ? src.to(*dtype) : src.clone();
+        } else {
+            t = raxis::python::tensor_from_python(data, dtype, device);
+        }
         if (requires_grad) t.requires_grad_(true);
         return t;
     },
@@ -828,9 +846,11 @@ PYBIND11_MODULE(_C, c) {
     c.def("movedim", [](const raxis::Tensor& input, raxis::VecOrInt source, raxis::VecOrInt destination) {
         return raxis::movedim(input, source, destination);
     }, py::arg("input"), py::arg("source"), py::arg("destination"));
-    c.def("reshape", [](const raxis::Tensor& input, raxis::Vec shape) {
+    c.def("reshape", [](const raxis::Tensor& input, raxis::VecOrInt shape) {
         return raxis::reshape(input, shape);
     }, py::arg("input"), py::arg("shape"));
+    c.def("flatten", &raxis::flatten,
+        py::arg("input"), py::arg("start_dim") = 0, py::arg("end_dim") = -1);
     c.def("broadcast_to", [](const raxis::Tensor& input, raxis::Vec shape) {
         return raxis::broadcast_to(input, shape);
     }, py::arg("input"), py::arg("shape"));
@@ -1038,6 +1058,16 @@ PYBIND11_MODULE(_C, c) {
     c.def("sigmoid",
         py::overload_cast<const raxis::Tensor&>(&raxis::sigmoid),
         py::arg("input"));
+    c.def("relu",
+        py::overload_cast<const raxis::Tensor&>(&raxis::relu),
+        py::arg("input"));
+    c.def("relu_",
+        py::overload_cast<raxis::Tensor&>(&raxis::relu_),
+        py::arg("input"));
+    c.def("softmax", &raxis::softmax, py::arg("input"), py::arg("dim"));
+    c.def("log_softmax", &raxis::log_softmax, py::arg("input"), py::arg("dim"));
+    c.def("dropout", &raxis::dropout,
+        py::arg("input"), py::arg("p") = 0.5, py::arg("train") = true);
     c.def("logical_not",
         py::overload_cast<const raxis::Tensor&>(&raxis::logical_not),
         py::arg("input"));
@@ -1183,5 +1213,43 @@ PYBIND11_MODULE(_C, c) {
         py::arg("dim") = raxis::Vec{},
         py::arg("keepdim") = false
     );
+
+    // nn functions that torch exposes through torch._C._nn rather than at the
+    // top level; raxis.nn.functional wraps them
+    py::module_ nn = c.def_submodule("_nn");
+
+    nn.def("linear", [](const raxis::Tensor& input, const raxis::Tensor& weight,
+                        std::optional<raxis::Tensor> bias) {
+        return raxis::linear(input, weight, bias.value_or(raxis::Tensor{}));
+    }, py::arg("input"), py::arg("weight"), py::arg("bias") = py::none());
+
+    nn.def("nll_loss", [](const raxis::Tensor& input, const raxis::Tensor& target,
+                          const std::string& reduction, int64_t ignore_index) {
+        return raxis::nll_loss(input, target, raxis::parse_reduction(reduction), ignore_index);
+    }, py::arg("input"), py::arg("target"), py::arg("reduction") = "mean",
+       py::arg("ignore_index") = -100);
+
+    nn.def("cross_entropy", [](const raxis::Tensor& input, const raxis::Tensor& target,
+                               const std::string& reduction, int64_t ignore_index) {
+        return raxis::cross_entropy(input, target, raxis::parse_reduction(reduction), ignore_index);
+    }, py::arg("input"), py::arg("target"), py::arg("reduction") = "mean",
+       py::arg("ignore_index") = -100);
+
+    nn.def("mse_loss", [](const raxis::Tensor& input, const raxis::Tensor& target,
+                          const std::string& reduction) {
+        return raxis::mse_loss(input, target, raxis::parse_reduction(reduction));
+    }, py::arg("input"), py::arg("target"), py::arg("reduction") = "mean");
+
+    nn.def("binary_cross_entropy", [](const raxis::Tensor& input, const raxis::Tensor& target,
+                                      const std::string& reduction) {
+        return raxis::binary_cross_entropy(input, target, raxis::parse_reduction(reduction));
+    }, py::arg("input"), py::arg("target"), py::arg("reduction") = "mean");
+
+    nn.def("binary_cross_entropy_with_logits", [](const raxis::Tensor& input,
+                                                  const raxis::Tensor& target,
+                                                  const std::string& reduction) {
+        return raxis::binary_cross_entropy_with_logits(
+            input, target, raxis::parse_reduction(reduction));
+    }, py::arg("input"), py::arg("target"), py::arg("reduction") = "mean");
 
 } // pybind11_module

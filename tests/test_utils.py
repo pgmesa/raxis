@@ -26,7 +26,7 @@ def device(request):
 
 def randf(*shape, seed=42, lo=0.0, hi=1.0):
     rng = np.random.RandomState(seed)
-    return (rng.rand(*shape) * (hi - lo) + lo).astype(np.float32)
+    return np.asarray(rng.rand(*shape) * (hi - lo) + lo).astype(np.float32)
 
 def randf_positive(*shape, seed=42):
     return randf(*shape, seed=seed, lo=0.01, hi=10.0)

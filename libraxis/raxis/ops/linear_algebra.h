@@ -43,6 +43,9 @@ RAXIS_API Tensor dot(const Tensor& self, const Tensor& other);
 
 RAXIS_API Tensor matmul(const Tensor& tensor1, const Tensor& tensor2);
 
+// y = x @ weight.T + bias. weight: [out_features, in_features]
+RAXIS_API Tensor linear(const Tensor& input, const Tensor& weight, const Tensor& bias = {});
+
 
 namespace ops {
 

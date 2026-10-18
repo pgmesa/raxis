@@ -329,6 +329,10 @@ Tensor Tensor::reshape(IntArrayRef shape) const {
     return ::raxis::reshape(*this, shape);
 }
 
+Tensor Tensor::flatten(int64_t start_dim, int64_t end_dim) const {
+    return ::raxis::flatten(*this, start_dim, end_dim);
+}
+
 Tensor Tensor::broadcast_to(IntArrayRef target_shape) const {
     return ::raxis::broadcast_to(*this, target_shape);
 }
@@ -567,6 +571,9 @@ Tensor Tensor::sqrt() const { return ::raxis::sqrt(*this); }
 Tensor Tensor::rsqrt() const { return ::raxis::rsqrt(*this); }
 Tensor Tensor::reciprocal() const { return ::raxis::reciprocal(*this); }
 Tensor Tensor::sigmoid() const { return ::raxis::sigmoid(*this); }
+Tensor Tensor::relu() const { return ::raxis::relu(*this); }
+Tensor Tensor::softmax(int64_t dim) const { return ::raxis::softmax(*this, dim); }
+Tensor Tensor::log_softmax(int64_t dim) const { return ::raxis::log_softmax(*this, dim); }
 Tensor Tensor::logical_not() const { return ::raxis::logical_not(*this); }
 Tensor Tensor::expm1() const { return ::raxis::expm1(*this); }
 Tensor Tensor::log2() const { return ::raxis::log2(*this); }
@@ -595,6 +602,7 @@ Tensor& Tensor::sqrt_() const { return ::raxis::sqrt_(const_cast<Tensor&>(*this)
 Tensor& Tensor::rsqrt_() const { return ::raxis::rsqrt_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::reciprocal_() const { return ::raxis::reciprocal_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::sigmoid_() const { return ::raxis::sigmoid_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::relu_() const { return ::raxis::relu_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::logical_not_() const { return ::raxis::logical_not_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::expm1_() const { return ::raxis::expm1_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::log2_() const { return ::raxis::log2_(const_cast<Tensor&>(*this)); }

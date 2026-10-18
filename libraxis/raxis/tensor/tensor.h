@@ -151,6 +151,7 @@ public:
     Tensor movedim(int64_t src, int64_t dst) const;
     Tensor view(IntArrayRef shape) const;
     Tensor reshape(IntArrayRef shape) const;
+    Tensor flatten(int64_t start_dim = 0, int64_t end_dim = -1) const;
     Tensor broadcast_to(IntArrayRef shape) const;
 
     // ========================= Indexing =========================
@@ -282,6 +283,9 @@ public:
     Tensor rsqrt() const;
     Tensor reciprocal() const;
     Tensor sigmoid() const;
+    Tensor relu() const;
+    Tensor softmax(int64_t dim) const;
+    Tensor log_softmax(int64_t dim) const;
     Tensor logical_not() const;
     Tensor expm1() const;
     Tensor log2() const;
@@ -310,6 +314,7 @@ public:
     Tensor& rsqrt_() const;
     Tensor& reciprocal_() const;
     Tensor& sigmoid_() const;
+    Tensor& relu_() const;
     Tensor& logical_not_() const;
     Tensor& expm1_() const;
     Tensor& log2_() const;

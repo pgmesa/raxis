@@ -26,6 +26,7 @@ RAXIS_API Tensor movedim(const Tensor& self, IntArrayRef src, IntArrayRef dst);
 RAXIS_API Tensor movedim(const Tensor& self, int64_t src, int64_t dst);
 RAXIS_API Tensor view(const Tensor& self, IntArrayRef shape);
 RAXIS_API Tensor reshape(const Tensor& self, IntArrayRef shape);
+RAXIS_API Tensor flatten(const Tensor& self, int64_t start_dim = 0, int64_t end_dim = -1);
 
 RAXIS_API Tensor broadcast_to(const Tensor& self, IntArrayRef shape);
 RAXIS_API std::vector<Tensor> broadcast_tensors(ArrayRef<Tensor> tensors);
