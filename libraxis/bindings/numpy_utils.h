@@ -14,6 +14,16 @@ typedef std::ptrdiff_t ssize_t;
 
 namespace raxis::python {
 
+// numpy is optional, but py::isinstance<py::array> imports it and throws when
+// it is missing. If nothing has imported numpy yet, obj cannot be an ndarray
+inline bool is_numpy_array(const py::handle& obj) {
+    py::dict modules = py::module_::import("sys").attr("modules");
+    if (!modules.contains("numpy") || modules["numpy"].is_none()) {
+        return false;
+    }
+    return py::isinstance<py::array>(obj);
+}
+
 py::dtype numpy_dtype(const Dtype& dt) {
 
     switch (dt.kind()) {

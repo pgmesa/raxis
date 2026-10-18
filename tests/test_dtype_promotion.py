@@ -1,4 +1,7 @@
 
+import sys
+import subprocess
+
 import pytest
 import torch
 import raxis
@@ -205,6 +208,17 @@ class TestTensorCreationDtype:
         r = raxis.tensor([1.0, 2.5], dtype=r_dtype)
         assert_dtype_eq(r, t, f"float list -> {r_dtype}")
         assert_values_close(r, t)
+
+    def test_without_numpy(self):
+        """numpy is optional: tensor() must not import it."""
+        # A None entry in sys.modules makes `import numpy` fail, as if it
+        # were not installed
+        code = (
+            "import sys; sys.modules['numpy'] = None\n"
+            "import raxis\n"
+            "assert raxis.tensor([[1, 2], [3, 4]]).sum().item() == 10\n"
+        )
+        subprocess.run([sys.executable, "-c", code], check=True)
 
 
 # ============================================================================

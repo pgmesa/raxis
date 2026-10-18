@@ -728,7 +728,7 @@ PYBIND11_MODULE(_C, c) {
     // Factories
     c.def("tensor", [](py::object data, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
         raxis::Tensor t;
-        if (py::isinstance<py::array>(data)) {
+        if (raxis::python::is_numpy_array(data)) {
             RAXIS_CHECK(!device || device->is_cpu(),
                 "tensor(): only CPU tensors can be created from a numpy array");
             // tensor() always copies (from_numpy is the aliasing variant)
