@@ -755,7 +755,7 @@ def run_backward_benchmarks(runner):
     POW_BWD = [
         ("pow_sq bwd",      FLOAT, S2D, lambda t: t.pow(2.0), {"lo": 0.01, "hi": 10.0}),
         ("pow_cube bwd",    FLOAT, S2D, lambda t: t.pow(3.0), {"lo": 0.01, "hi": 10.0}),
-        ("pow_tensor bwd",  FLOAT, S2D, lambda t: torch.pow(t, t), {"lo": 0.5, "hi": 2.0}),
+        ("pow_tensor bwd",  FLOAT, S2D, lambda t: t.pow(t), {"lo": 0.5, "hi": 2.0}),
     ]
  
     has_any = False
