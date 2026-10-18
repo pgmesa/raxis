@@ -10,6 +10,7 @@
 #include <raxis/tensor/factories.h>
 #include <raxis/autograd/graph.h>
 #include <raxis/autograd/grad_mode.h>
+#include <raxis/autograd/variable.h>
 
 
 namespace raxis::autograd {
@@ -18,7 +19,7 @@ namespace raxis::autograd {
 void run_backward(const Tensor& tensor, const Tensor& grad, bool retain_graph) {
     RAXIS_CHECK(tensor.defined(),
         "Tensor passed to backward is not defined");
-    RAXIS_CHECK(tensor.requires_grad() && tensor.grad_fn(),
+    RAXIS_CHECK(tensor.requires_grad(),
         "Tensor does not require grad and does not have a grad_fn");
 
     Tensor grad_output = grad;
@@ -30,6 +31,13 @@ void run_backward(const Tensor& tensor, const Tensor& grad, bool retain_graph) {
 
     RAXIS_CHECK(grad_output.shape() == tensor.shape(),
         "Shape mismatch between grad and tensor");
+
+    // Backward on a leaf: the graph is just its AccumulateGrad
+    if (!tensor.grad_fn()) {
+        NoGradGuard guard;
+        AccumulateGrad(tensor).apply({grad_output});
+        return;
+    }
 
     // 1) Build topological order via DFS
     std::vector<NodePtr> topo;

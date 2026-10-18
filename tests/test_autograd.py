@@ -867,6 +867,15 @@ class TestLeafProperties:
         assert r.grad is not None
         assert t.grad is not None
 
+    def test_backward_on_leaf_accumulates_into_grad(self, device):
+        r = raxis.tensor([1.0, 2.0], requires_grad=True)
+        t = torch.tensor([1.0, 2.0], requires_grad=True)
+        r.backward(raxis.tensor([3.0, 4.0]))
+        t.backward(torch.tensor([3.0, 4.0]))
+        r.backward(raxis.tensor([1.0, 1.0]))
+        t.backward(torch.tensor([1.0, 1.0]))
+        check_match(r.grad, t.grad, context="leaf backward")
+
     def test_requires_grad_false_no_graph(self, device):
         r = raxis.tensor([1.0, 2.0])
         out = r * 2.0
