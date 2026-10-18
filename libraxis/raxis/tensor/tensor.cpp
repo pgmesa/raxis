@@ -105,11 +105,13 @@ Device Tensor::device() const {
     return impl_->device();
 }
 
+// requires_grad is deliberately left out (as in PyTorch): every *_like factory
+// and op output allocated with options() would otherwise become a leaf that
+// requires grad, silently cutting the graph.
 TensorOptions Tensor::options() const {
     return TensorOptions()
         .dtype(dtype())
-        .device(device())
-        .requires_grad(requires_grad());
+        .device(device());
 }
 
 Scalar Tensor::item() const {
