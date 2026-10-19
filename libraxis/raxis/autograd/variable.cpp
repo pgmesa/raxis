@@ -23,6 +23,40 @@ std::string AccumulateGrad::name() const {
     return "AccumulateGrad";
 }
 
+// From: torch/csrc/autograd/utils/grad_layout_contract.h
+// Gradient layout contract: .grad has the strides of the variable when the
+// variable is dense (a transposed weight gets a transposed grad), else it is
+// contiguous. Optimizers then update param and grad elementwise in the same
+// memory order, and the in-place accumulation of later backwards keeps the
+// layout.
+static bool obeys_layout_contract(const Tensor& grad, const Tensor& variable) {
+    if (!variable.is_non_overlapping_and_dense()) {
+        return grad.is_contiguous();
+    }
+    IntArrayRef grad_shape = grad.shape();
+    IntArrayRef grad_strides = grad.strides();
+    IntArrayRef variable_strides = variable.strides();
+    for (size_t i = 0; i < grad_shape.size(); i++) {
+        if (grad_shape[i] != 1) {
+            if (grad_strides[i] != variable_strides[i]) return false;
+        } else if (grad_strides[i] == 0) {
+            // A size 1 dim does not affect the layout, but stride 0 means the
+            // grad is a broadcast view of something else
+            return false;
+        }
+    }
+    return true;
+}
+
+static Tensor clone_obey_contract(const Tensor& grad, const Tensor& variable) {
+    if (!variable.is_non_overlapping_and_dense()) {
+        return grad.clone(MemoryFormat::Contiguous);
+    }
+    Tensor out = empty_strided(variable.shape(), variable.strides(), grad.dtype());
+    out.copy_(grad);
+    return out;
+}
+
 TensorList AccumulateGrad::apply(const TensorList& grads) {
     const Tensor& grad = grads[0];
     RAXIS_CHECK(grad.defined(), "AccumulateGrad received undefined gradient");
@@ -33,8 +67,8 @@ TensorList AccumulateGrad::apply(const TensorList& grads) {
         // .grad must own its memory: optimizers update it in place, and the
         // incoming grad can be a broadcast view or be shared with other nodes
         // or with the gradient passed by the user to backward().
-        bool can_steal = grad.is_contiguous() && grad.use_count() == 1;
-        variable_.set_grad(can_steal ? grad : grad.clone());
+        bool can_steal = grad.use_count() == 1 && obeys_layout_contract(grad, variable_);
+        variable_.set_grad(can_steal ? grad : clone_obey_contract(grad, variable_));
     }
 
     return {};
