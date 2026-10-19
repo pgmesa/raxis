@@ -1,6 +1,9 @@
 
+#include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
+#include <string_view>
 
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
@@ -12,6 +15,8 @@
 #include <raxis/util/parallel.h>
 #include <raxis/autograd/grad_mode.h>
 #include <raxis/autograd/graph.h>
+#include <raxis/autograd/saved_variable.h>
+#include <raxis/autograd/variable.h>
 
 #include "casters.h"
 #include "numpy_utils.h"
@@ -110,8 +115,55 @@ PYBIND11_MODULE(_C, c) {
     c.attr("pi") = raxis::pi;
     c.attr("e") = raxis::e;
 
-    py::class_<raxis::autograd::Node, std::shared_ptr<raxis::autograd::Node>>(c, "Node")
-        .def("name", &raxis::autograd::Node::name);
+    using raxis::autograd::Node;
+    using raxis::autograd::NodePtr;
+    using raxis::autograd::SavedVariable;
+
+    // Same introspection API as torch.autograd.graph.Node
+    py::class_<Node, NodePtr>(c, "Node")
+        .def("name", &Node::name)
+        .def("__repr__", [](const Node& self) { return "<" + self.name() + ">"; })
+        // One (node, input_nr) per input of the forward op, (None, 0) for
+        // inputs that do not require grad
+        .def_property_readonly("next_functions", [](const Node& self) {
+            const auto& edges = self.next_edges();
+            py::tuple out(edges.size());
+            for (size_t i = 0; i < edges.size(); ++i) {
+                py::object fn = edges[i].node ? py::cast(edges[i].node) : py::none();
+                out[i] = py::make_tuple(fn, edges[i].input_nr);
+            }
+            return out;
+        })
+        .def("_sequence_nr", &Node::sequence_nr)
+        // (name, tensor, released) per saved tensor; tensor is None once released
+        .def("_saved_variables", [](const Node& self) {
+            py::list out;
+            for (const SavedVariable* saved : self.saved_variables()) {
+                if (!saved->was_saved()) continue;
+                py::object t = saved->is_released() ? py::none() : py::cast(saved->unpack());
+                out.append(py::make_tuple(saved->name(), t, saved->is_released()));
+            }
+            return out;
+        })
+        // grad_fn._saved_self, grad_fn._saved_result, ... as in PyTorch.
+        // Raises after backward without retain_graph.
+        .def("__getattr__", [](const Node& self, const std::string& attr) -> py::object {
+            constexpr std::string_view prefix = "_saved_";
+            if (attr.starts_with(prefix)) {
+                std::string_view name = std::string_view(attr).substr(prefix.size());
+                for (const SavedVariable* saved : self.saved_variables()) {
+                    if (saved->was_saved() && name == saved->name()) {
+                        const raxis::Tensor& t = saved->unpack();
+                        return t.defined() ? py::cast(t) : py::none();
+                    }
+                }
+            }
+            throw py::attribute_error("'" + self.name() + "' object has no attribute '" + attr + "'");
+        });
+
+    // `variable` is defined after Tensor is registered, for the stubs
+    py::class_<raxis::autograd::AccumulateGrad, Node, std::shared_ptr<raxis::autograd::AccumulateGrad>>
+        accumulate_grad(c, "AccumulateGrad");
 
     // Tensor
     py::class_<raxis::Tensor>(c, "Tensor")
@@ -203,6 +255,11 @@ PYBIND11_MODULE(_C, c) {
 
         .def("detach", &raxis::Tensor::detach)
         .def("_use_count", &raxis::Tensor::use_count)
+        // Address of the TensorImpl: identifies the tensor across Python
+        // wrappers (each access to .grad or .variable creates a new one)
+        .def_property_readonly("_cdata", [](const raxis::Tensor& self) {
+            return reinterpret_cast<uintptr_t>(self.unsafe_get_tensor_impl());
+        })
 
         .def("backward",
             [](const raxis::Tensor& self, std::optional<raxis::Tensor> gradient, bool retain_graph) {
@@ -1420,5 +1477,7 @@ PYBIND11_MODULE(_C, c) {
         return raxis::binary_cross_entropy_with_logits(
             input, target, raxis::parse_reduction(reduction));
     }, py::arg("input"), py::arg("target"), py::arg("reduction") = "mean");
+
+    accumulate_grad.def_property_readonly("variable", &raxis::autograd::AccumulateGrad::variable);
 
 } // pybind11_module

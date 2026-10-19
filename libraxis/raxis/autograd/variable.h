@@ -34,6 +34,8 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 
+    const Tensor& variable() const { return variable_; }
+
 private:
     Tensor variable_;
 };
