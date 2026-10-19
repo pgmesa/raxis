@@ -19,7 +19,9 @@ set(RAXIS_EXAMPLES_DIR ${PROJECT_SOURCE_DIR}/examples)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Core library
-file(GLOB_RECURSE RAXIS_SOURCES "${RAXIS_LIB_DIR}/*.cpp")
+# CONFIGURE_DEPENDS re-runs the glob on every build, so new files are picked
+# up without re-configuring by hand
+file(GLOB_RECURSE RAXIS_SOURCES CONFIGURE_DEPENDS "${RAXIS_LIB_DIR}/*.cpp")
 list(FILTER RAXIS_SOURCES EXCLUDE REGEX ".*_kernel\\.cpp$")
 
 add_library(raxis SHARED ${RAXIS_SOURCES})
@@ -205,7 +207,7 @@ endif()
 
 include(cmake/DispatchCompile.cmake)
 
-file(GLOB_RECURSE RAXIS_KERNEL_SOURCES "${RAXIS_LIB_DIR}/ops/cpu/*_kernel.cpp")
+file(GLOB_RECURSE RAXIS_KERNEL_SOURCES CONFIGURE_DEPENDS "${RAXIS_LIB_DIR}/ops/cpu/*_kernel.cpp")
 raxis_add_dispatch_sources(raxis ${RAXIS_KERNEL_SOURCES})
 
 # ─────────────────────────────────────────────────────────────────────────────
