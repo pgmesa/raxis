@@ -46,30 +46,41 @@ Tensor log_softmax(const Tensor& self, int64_t dim) {
     return softmax_impl(self, dim, log_softmax_stub, "log_softmax");
 }
 
-// Composed from existing ops for now (3-4 kernel launches instead of one
-// fused loop); fusing them is a pending optimization.
-
-// d softmax: y * (g - sum(g * y))
-Tensor softmax_backward_data(const Tensor& grad, const Tensor& output, int64_t dim) {
+// From: aten/src/ATen/native/SoftMax.cpp (softmax_backward_cpu_out)
+// One fused kernel per row instead of composing mul, sum, sub and mul
+// (or exp): the row is read twice from cache instead of materializing
+// three temporaries.
+template <typename Stub>
+static Tensor softmax_backward_impl(const Tensor& grad, const Tensor& output, int64_t dim, Stub& stub) {
+    // A single element: softmax is constant 1 (log_softmax 0), gradient 0
     if (output.ndim() == 0) {
         return zeros_like(output);
     }
-    Tensor dot = ops::sum(grad * output, {dim}, /*keepdim=*/true);
-    return output * (grad - dot);
+    dim = wrap_dim(dim, output.ndim());
+    Tensor grad_c = grad.contiguous();
+    Tensor output_c = output.contiguous();
+    Tensor grad_input = empty(output.shape(), output.options());
+    if (output.numel() != 0) {
+        stub(output.device().type(), grad_input, grad_c, output_c, dim);
+    }
+    return grad_input;
+}
+
+// d softmax: y * (g - sum(g * y))
+Tensor softmax_backward_data(const Tensor& grad, const Tensor& output, int64_t dim) {
+    return softmax_backward_impl(grad, output, dim, softmax_backward_stub);
 }
 
 // d log_softmax: g - exp(y) * sum(g)
 Tensor log_softmax_backward_data(const Tensor& grad, const Tensor& output, int64_t dim) {
-    if (output.ndim() == 0) {
-        return zeros_like(output);
-    }
-    Tensor grad_sum = ops::sum(grad, {dim}, /*keepdim=*/true);
-    return grad - ops::exp(output) * grad_sum;
+    return softmax_backward_impl(grad, output, dim, log_softmax_backward_stub);
 }
 
 } // namespace ops
 
 DEFINE_DISPATCH(softmax_stub);
 DEFINE_DISPATCH(log_softmax_stub);
+DEFINE_DISPATCH(softmax_backward_stub);
+DEFINE_DISPATCH(log_softmax_backward_stub);
 
 } // namespace raxis
