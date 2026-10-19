@@ -1,6 +1,6 @@
-# raxis
+# Raxis
 
-raxis is a from-scratch re-implementation of the core of PyTorch, the ATen
+Raxis is a from-scratch re-implementation of the core of PyTorch, the ATen
 tensor library and the autograd engine, in C++20 with Python bindings. It is
 distilled from the PyTorch source: it keeps the techniques that make ATen fast
 (TensorIterator, vectorized kernels with runtime CPU dispatch, BLAS/MKL)
@@ -19,7 +19,7 @@ read end to end, while running at PyTorch speed on CPU.
 pip install raxis
 ```
 
-Wheels for Windows and Linux (x86-64), Python 3.10 to 3.14. raxis has no
+Wheels for Windows and Linux (x86-64), Python 3.10 to 3.14. Raxis has no
 runtime dependencies; numpy is optional (`.numpy()`, `raxis.from_numpy`).
 
 ```python
@@ -74,9 +74,9 @@ has `debug` and `release` presets; `CMakeLists.txt` lists the build options
 
 `scripts/bench_ops.py` benchmarks each op against PyTorch and NumPy, and
 `examples/` has notebooks that train MLPs on two moons and MNIST with either
-raxis or PyTorch.
+Raxis or PyTorch.
 
 ## License
 
-MIT. raxis includes code derived from PyTorch (BSD-3-Clause) and links SLEEF,
+MIT. Raxis includes code derived from PyTorch (BSD-3-Clause) and links SLEEF,
 mimalloc and Intel MKL: see [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).
