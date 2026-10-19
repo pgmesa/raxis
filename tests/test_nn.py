@@ -103,6 +103,54 @@ class TestModule:
 
 
 # ===========================================================================
+# HOOKS
+# ===========================================================================
+
+class TestHooks:
+
+    @pytest.mark.parametrize("lib", [raxis, torch], ids=["raxis", "torch"])
+    def test_call_order_and_arguments(self, lib):
+        model = mlp(lib)
+        calls = []
+        for name, module in model.named_modules():
+            module.register_forward_pre_hook(
+                lambda m, args, name=name: calls.append(("pre", name, len(args))))
+            module.register_forward_hook(
+                lambda m, args, out, name=name: calls.append(("post", name, tuple(out.shape))))
+        model(lib.ones((5, 6)))
+        assert calls == [
+            ("pre", "", 1),
+            ("pre", "0", 1), ("post", "0", (5, 8)),
+            ("pre", "1", 1), ("post", "1", (5, 8)),
+            ("pre", "2", 1), ("post", "2", (5, 3)),
+            ("post", "", (5, 3)),
+        ]
+
+    @pytest.mark.parametrize("lib", [raxis, torch], ids=["raxis", "torch"])
+    def test_hooks_replace_input_and_output(self, lib):
+        layer = lib.nn.ReLU()
+        layer.register_forward_pre_hook(lambda m, args: -args[0])  # single value
+        layer.register_forward_hook(lambda m, args, out: out * 2.0)
+        layer.register_forward_hook(lambda m, args, out: None)  # keeps the output
+        out = layer(lib.tensor([-1.0, 2.0]))
+        assert out.tolist() == [2.0, 0.0]
+
+    @pytest.mark.parametrize("lib", [raxis, torch], ids=["raxis", "torch"])
+    def test_remove(self, lib):
+        layer = lib.nn.ReLU()
+        calls = []
+        handle = layer.register_forward_hook(lambda m, args, out: calls.append(1))
+        layer(lib.ones(2))
+        handle.remove()
+        handle.remove()  # idempotent
+        layer(lib.ones(2))
+        with layer.register_forward_pre_hook(lambda m, args: calls.append(2)):
+            layer(lib.ones(2))
+        layer(lib.ones(2))
+        assert calls == [1, 2]
+
+
+# ===========================================================================
 # INIT
 # ===========================================================================
 

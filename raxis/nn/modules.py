@@ -3,6 +3,7 @@ from typing import Any, Callable, Iterator
 
 import raxis
 from raxis import Tensor
+from raxis.utils.hooks import RemovableHandle
 
 
 class Parameter(Tensor):
@@ -28,13 +29,45 @@ class Module:
         object.__setattr__(self, "_modules", OrderedDict())
         object.__setattr__(self, "_parameters", OrderedDict())
         object.__setattr__(self, "training", True)
+        object.__setattr__(self, "_forward_pre_hooks", OrderedDict())
+        object.__setattr__(self, "_forward_hooks", OrderedDict())
 
     def forward(self, *args, **kwargs) -> Tensor:
         raise NotImplementedError(
             f"Module [{type(self).__name__}] is missing the required 'forward' function")
 
+    # From: torch/nn/modules/module.py (Module._call_impl)
     def __call__(self, *args, **kwargs) -> Tensor:
-        return self.forward(*args, **kwargs)
+        if not (self._forward_pre_hooks or self._forward_hooks):
+            return self.forward(*args, **kwargs)
+
+        for hook in tuple(self._forward_pre_hooks.values()):
+            args_result = hook(self, args)
+            if args_result is not None:
+                args = args_result if isinstance(args_result, tuple) else (args_result,)
+        result = self.forward(*args, **kwargs)
+        for hook in tuple(self._forward_hooks.values()):
+            hook_result = hook(self, args, result)
+            if hook_result is not None:
+                result = hook_result
+        return result
+
+    # -- Hooks --
+
+    def register_forward_pre_hook(self, hook: Callable) -> RemovableHandle:
+        """hook(module, args) runs before forward. Returning something other
+        than None replaces the positional args (a single value is wrapped in a
+        tuple)."""
+        handle = RemovableHandle(self._forward_pre_hooks)
+        self._forward_pre_hooks[handle.id] = hook
+        return handle
+
+    def register_forward_hook(self, hook: Callable) -> RemovableHandle:
+        """hook(module, args, output) runs after forward. Returning something
+        other than None replaces the output."""
+        handle = RemovableHandle(self._forward_hooks)
+        self._forward_hooks[handle.id] = hook
+        return handle
 
     def __setattr__(self, name: str, value: Any) -> None:
         if "_modules" not in self.__dict__:
