@@ -198,6 +198,19 @@ public:
         return *this;
     }
 
+    // Iterates over `shape` with the `squash_dims` set to size 1: the kernel
+    // walks those dims itself (gather/scatter along dim, max(dim))
+    TensorIteratorConfig& declare_static_shape(IntArrayRef shape, IntArrayRef squash_dims) {
+        declare_static_shape(shape);
+        if (static_shape_->empty()) return *this;
+        for (int64_t dim : squash_dims) {
+            RAXIS_CHECK(dim >= 0 && dim < static_cast<int64_t>(static_shape_->size()),
+                "squash_dim ", dim, " must be in [0, ", static_shape_->size(), ").");
+            (*static_shape_)[dim] = 1;
+        }
+        return *this;
+    }
+
     TensorIteratorConfig& declare_static_device(Device device) {
         static_device_ = device;
         return *this;
@@ -278,6 +291,7 @@ public:
     // Type-erased 2D loop
     using loop2d_t = function_ref<
         void(char** data, const int64_t* strides, int64_t size0, int64_t size1)>;
+    using loop_subiter_t = function_ref<void(TensorIterator& sub_iter)>;
 
     int ndim() const {
         return static_cast<int>(shape_.size());
@@ -343,6 +357,31 @@ public:
 
     bool is_dim_reduced(int dim) const;
 
+    /// Number of reduced dims (stride 0 in the output). reorder_dimensions
+    /// moves them to the front.
+    int num_reduce_dims() const;
+
+    /// Fixes dims [start_dim, ndim) at `indices`, leaving them with size 1
+    void select_all_keeping_dim(int start_dim, IntArrayRef indices);
+
+    /// Offsets of this (sub-)iterator into the original tensors per dim
+    IntArrayRef view_offsets() const {
+        return view_offsets_;
+    }
+
+    void* data_ptr(int64_t idx) const {
+        return operands_[idx].data;
+    }
+
+    /// Points operand `idx` at other data with the same layout, to reuse one
+    /// iterator for many slices (index_select, index_add)
+    void unsafe_replace_operand(int64_t idx, void* data) {
+        operands_[idx].data = data;
+    }
+
+    /// 1-D with every operand contiguous (after coalescing), or one element
+    bool is_contiguous() const;
+
     PtrVector get_base_ptrs() const;
     StrideVector get_strides() const;
 
@@ -376,6 +415,11 @@ public:
     void serial_for_each(loop2d_t loop, Range range) const;
 
     void parallel_reduce(loop2d_t loop) const;
+
+    /// Calls `loop` with a sub-iterator for each output element of a
+    /// reduction, covering only the input elements reduced into it.
+    /// Parallelizes over output elements when there are enough of them.
+    void foreach_reduced_elt(loop_subiter_t loop, bool parallelize = true);
 
     /// Create a strides array for a Tensor with shape of this iterator. The
     /// parameter `element_size` specifies the size of Tensor's data type in

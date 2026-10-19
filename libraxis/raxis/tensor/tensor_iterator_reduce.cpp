@@ -11,6 +11,7 @@
 
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/factories.h>
+#include <raxis/tensor/detail/dim_counter.h>
 
 
 namespace raxis {
@@ -113,6 +114,47 @@ static std::tuple<int64_t, int64_t> round_columns(
         end = end - (end % multiple);
     }
     return std::make_tuple(begin, end);
+}
+
+// From: aten/src/ATen/native/TensorIteratorReduce.cpp
+// The reduced dims are at the front (reorder_dimensions), so fixing every
+// other dim at one index leaves a sub-iterator over exactly the input
+// elements of one output element.
+void TensorIterator::foreach_reduced_elt(loop_subiter_t loop, bool parallelize) {
+    RAXIS_INTERNAL_ASSERT(num_inputs() == 1);
+    RAXIS_INTERNAL_ASSERT(num_outputs() >= 1);
+
+    if (get_output(0).numel() == 0) {
+        return;
+    }
+    if (get_output(0).numel() == 1) {
+        loop(*this);
+    } else if (numel() < detail::GRAIN_SIZE || get_num_threads() == 1 ||
+               in_parallel_region() || !parallelize) {
+        int reduce_dims = num_reduce_dims();
+        IntArrayRef non_reduced_shape(shape().data() + reduce_dims, ndim() - reduce_dims);
+
+        int64_t non_reduced_numel = compute_numel(non_reduced_shape);
+        detail::DimCounter dims(non_reduced_shape, {0, non_reduced_numel});
+        while (!dims.is_done()) {
+            TensorIterator reduced = *this;
+            reduced.select_all_keeping_dim(reduce_dims, dims.values);
+            loop(reduced);
+            dims.increment({1, 1});
+        }
+    } else {
+        // Split a non-reduced dim between threads, then iterate serially
+        int dim = find_split_dim(*this);
+        int64_t cols = shape()[dim];
+        parallel_for(0, cols, 1, [&](int64_t begin, int64_t end) {
+            if (begin == end) {
+                return;
+            }
+            TensorIterator sub_iter(*this);
+            sub_iter.narrow(dim, begin, end - begin);
+            sub_iter.foreach_reduced_elt(loop, false);
+        });
+    }
 }
 
 static void parallel_dim_reduction(const TensorIterator& iter, loop2d_t loop) {

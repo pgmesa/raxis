@@ -721,6 +721,35 @@ TensorIterator TensorIterator::reduce_op(Tensor& out, const Tensor& a) {
         .build();
 }
 
+bool TensorIterator::is_contiguous() const {
+    if (numel() == 1) return true;
+    if (ndim() != 1) return false;
+    for (int i = 0; i < num_operands(); i++) {
+        if (operands_[i].stride_bytes[0] != element_size(i)) return false;
+    }
+    return true;
+}
+
+int TensorIterator::num_reduce_dims() const {
+    int count = 0;
+    for (int dim = 0; dim < ndim(); dim++) {
+        if (operands_[0].stride_bytes[dim] == 0) {
+            count++;
+        }
+    }
+    return count;
+}
+
+void TensorIterator::select_all_keeping_dim(int start_dim, IntArrayRef indices) {
+    RAXIS_INTERNAL_ASSERT(start_dim <= ndim());
+    for (int dim = start_dim; dim < ndim(); dim++) {
+        for (auto& op : operands_) {
+            op.data = static_cast<char*>(op.data) + op.stride_bytes[dim] * indices[dim - start_dim];
+        }
+        shape_[dim] = 1;
+    }
+}
+
 bool TensorIterator::is_dim_reduced(int dim) const {
     for (const auto& op : operands_) {
         if (op.is_output && op.stride_bytes[dim] == 0 && shape_[dim] > 1) {

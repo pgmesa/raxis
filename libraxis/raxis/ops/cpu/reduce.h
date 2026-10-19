@@ -7,9 +7,12 @@
 #include <raxis/ops/cpu/loops.h>
 #include <raxis/ops/cpu/vec/vec.h>
 
+#include <raxis/util/parallel.h>
+
 #include <algorithm>
 #include <cstdint>
 #include <utility>
+#include <vector>
 
 
 namespace raxis {
@@ -150,6 +153,90 @@ void cpu_reduce_kernel_vec(TensorIterator& iter, func_t op, vec_func_t vop, scal
             }
         }
     );
+}
+
+
+// From: aten/src/ATen/native/cpu/Reduce.h
+// Reduction whose accumulator is not just a value of the output type. `ops`
+// provides reduce(acc, value, index), combine(acc, acc), translate_idx and
+// project(acc) -> output value. The index given to reduce is the linear
+// position of the element among those reduced into the current output
+// element: with one reduced dim (argmax), its position along that dim.
+//
+// Each output element gets its own sub-iterator (foreach_reduced_elt). When
+// there is a single output element, threads reduce chunks into private
+// accumulators that are combined at the end.
+template <typename data_t, typename ops_t, typename acc_t>
+void binary_kernel_reduce(TensorIterator& iter, ops_t ops, acc_t init) {
+    iter.foreach_reduced_elt([&ops, &init](TensorIterator& sub_iter) {
+        auto reduction_body = [&ops, &sub_iter](acc_t acc, int64_t begin, int64_t end) -> acc_t {
+            int64_t index = begin;
+            sub_iter.serial_for_each(
+                [&acc, &ops, &index](char** data, const int64_t* strides, int64_t size0, int64_t size1) {
+                    // Operand 0 is the output, 1 the input; strides[2 + k]
+                    // are the outer strides
+                    const char* in_row = data[1];
+                    for (int64_t j = 0; j < size1; j++) {
+                        const char* in = in_row;
+                        for (int64_t i = 0; i < size0; i++) {
+                            acc = ops.reduce(acc, load<data_t>(in), index++);
+                            in += strides[1];
+                        }
+                        in_row += strides[3];
+                    }
+                },
+                {begin, end});
+            return ops.translate_idx(acc, sub_iter.view_offsets()[0]);
+        };
+
+        acc_t total_acc = init;
+        int64_t numel = sub_iter.numel();
+        if (numel < detail::GRAIN_SIZE || get_num_threads() == 1 || in_parallel_region()) {
+            total_acc = reduction_body(total_acc, 0, numel);
+        } else {
+            std::vector<acc_t> buffer(get_num_threads(), init);
+            parallel_for(0, numel, detail::GRAIN_SIZE, [&](int64_t begin, int64_t end) {
+                acc_t& acc = buffer[get_thread_num()];
+                acc = reduction_body(acc, begin, end);
+            });
+            for (const acc_t& acc : buffer) {
+                total_acc = ops.combine(total_acc, acc);
+            }
+        }
+
+        using out_t = decltype(ops.project(total_acc));
+        *static_cast<out_t*>(sub_iter.data_ptr(0)) = ops.project(total_acc);
+    });
+}
+
+// From: aten/src/ATen/native/cpu/Reduce.h
+// True when only the innermost dim (contiguous in the input) is reduced:
+// each output element then reduces one contiguous row
+inline bool is_reduce_lastdim(const TensorIterator& iter) {
+    return iter.num_reduce_dims() == 1 && iter.is_dim_reduced(0) &&
+           iter.num_inputs() == 1 &&
+           iter.get_operand(1).stride_bytes[0] == iter.element_size(1);
+}
+
+// Calls reduce_op(out, in, row_size) once per output element, in parallel
+// over output elements
+template <typename reduce_func_t>
+void binary_kernel_reduce_lastdim(TensorIterator& iter, reduce_func_t reduce_op) {
+    int64_t dim_size = iter.shape()[0];
+    int64_t grain_size = std::max<int64_t>(1, detail::GRAIN_SIZE / dim_size);
+    TensorIterator sub_iter(iter);
+    // Drop the reduced dim: the iteration runs over output elements only
+    sub_iter.narrow(0, 0, 1);
+    auto loop = [&](char** data, const int64_t* strides, int64_t size) {
+        char* out = data[0];
+        char* in = data[1];
+        for (int64_t i = 0; i < size; i++) {
+            reduce_op(out, in, dim_size);
+            out += strides[0];
+            in += strides[1];
+        }
+    };
+    sub_iter.for_each(loop, grain_size);
 }
 
 }
