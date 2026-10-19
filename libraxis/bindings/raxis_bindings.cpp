@@ -746,6 +746,28 @@ PYBIND11_MODULE(_C, c) {
         .def("max", &raxis::Tensor::max)
         .def("min", &raxis::Tensor::min)
 
+        .def("gather", &raxis::gather, py::arg("dim"), py::arg("index"))
+        .def("scatter",
+            py::overload_cast<const raxis::Tensor&, int64_t, const raxis::Tensor&, const raxis::Tensor&>(&raxis::scatter),
+            py::arg("dim"), py::arg("index"), py::arg("src"))
+        .def("scatter",
+            py::overload_cast<const raxis::Tensor&, int64_t, const raxis::Tensor&, raxis::Scalar>(&raxis::scatter),
+            py::arg("dim"), py::arg("index"), py::arg("value"))
+        .def("scatter_", [](raxis::Tensor& self, int64_t dim, const raxis::Tensor& index, const raxis::Tensor& src) -> raxis::Tensor& {
+            return raxis::scatter_(self, dim, index, src);
+        }, py::arg("dim"), py::arg("index"), py::arg("src"))
+        .def("scatter_", [](raxis::Tensor& self, int64_t dim, const raxis::Tensor& index, raxis::Scalar value) -> raxis::Tensor& {
+            return raxis::scatter_(self, dim, index, value);
+        }, py::arg("dim"), py::arg("index"), py::arg("value"))
+        .def("scatter_add", &raxis::scatter_add, py::arg("dim"), py::arg("index"), py::arg("src"))
+        .def("scatter_add_", [](raxis::Tensor& self, int64_t dim, const raxis::Tensor& index, const raxis::Tensor& src) -> raxis::Tensor& {
+            return raxis::scatter_add_(self, dim, index, src);
+        }, py::arg("dim"), py::arg("index"), py::arg("src"))
+        .def("index_select", &raxis::index_select, py::arg("dim"), py::arg("index"))
+        .def("index_add", &raxis::index_add, py::arg("dim"), py::arg("index"), py::arg("source"))
+        .def("index_add_", [](raxis::Tensor& self, int64_t dim, const raxis::Tensor& index, const raxis::Tensor& source) -> raxis::Tensor& {
+            return raxis::index_add_(self, dim, index, source);
+        }, py::arg("dim"), py::arg("index"), py::arg("source"))
         .def("argmax", [](const raxis::Tensor& self, std::optional<int64_t> dim, bool keepdim) {
             return raxis::argmax(self, dim, keepdim);
         }, py::arg("dim") = py::none(), py::arg("keepdim") = false)
@@ -1278,6 +1300,16 @@ PYBIND11_MODULE(_C, c) {
     c.def("min", py::overload_cast<const raxis::Tensor&>(&raxis::min),
         py::arg("input"));
 
+    c.def("gather", &raxis::gather, py::arg("input"), py::arg("dim"), py::arg("index"));
+    c.def("scatter",
+        py::overload_cast<const raxis::Tensor&, int64_t, const raxis::Tensor&, const raxis::Tensor&>(&raxis::scatter),
+        py::arg("input"), py::arg("dim"), py::arg("index"), py::arg("src"));
+    c.def("scatter",
+        py::overload_cast<const raxis::Tensor&, int64_t, const raxis::Tensor&, raxis::Scalar>(&raxis::scatter),
+        py::arg("input"), py::arg("dim"), py::arg("index"), py::arg("value"));
+    c.def("scatter_add", &raxis::scatter_add, py::arg("input"), py::arg("dim"), py::arg("index"), py::arg("src"));
+    c.def("index_select", &raxis::index_select, py::arg("input"), py::arg("dim"), py::arg("index"));
+    c.def("index_add", &raxis::index_add, py::arg("input"), py::arg("dim"), py::arg("index"), py::arg("source"));
     c.def("argmax", [](const raxis::Tensor& input, std::optional<int64_t> dim, bool keepdim) {
         return raxis::argmax(input, dim, keepdim);
     }, py::arg("input"), py::arg("dim") = py::none(), py::arg("keepdim") = false);

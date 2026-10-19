@@ -83,6 +83,70 @@ private:
 };
 
 // ============================================================
+// Gather / scatter / index_select
+// ============================================================
+
+class RAXIS_API GatherBackward0 : public Node {
+public:
+    GatherBackward0(const Tensor& self, int64_t dim, const Tensor& index);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    DimVector self_shape_;
+    int64_t dim_;
+    Tensor index_;
+};
+
+// scatter with a src tensor (inputs: self, src) or a value (input: self)
+class RAXIS_API ScatterBackward0 : public Node {
+public:
+    ScatterBackward0(int64_t dim, const Tensor& index, bool has_src);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    int64_t dim_;
+    Tensor index_;
+    bool has_src_;
+};
+
+class RAXIS_API ScatterAddBackward0 : public Node {
+public:
+    ScatterAddBackward0(int64_t dim, const Tensor& index);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    int64_t dim_;
+    Tensor index_;
+};
+
+class RAXIS_API IndexSelectBackward0 : public Node {
+public:
+    IndexSelectBackward0(const Tensor& self, int64_t dim, const Tensor& index);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    DimVector self_shape_;
+    int64_t dim_;
+    Tensor index_;
+};
+
+class RAXIS_API IndexAddBackward0 : public Node {
+public:
+    IndexAddBackward0(int64_t dim, const Tensor& index, const Tensor& source);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    int64_t dim_;
+    Tensor index_;
+    DimVector source_shape_;
+};
+
+// ============================================================
 // Shape ops
 // ============================================================
 

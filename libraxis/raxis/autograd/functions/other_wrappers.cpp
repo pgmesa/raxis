@@ -3,6 +3,7 @@
 #include <raxis/ops/cat_ops.h>
 #include <raxis/ops/scalar_ops.h>
 #include <raxis/ops/tensor_compare.h>
+#include <raxis/ops/tensor_advanced_indexing.h>
 
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/tensor_shape.h>
@@ -256,6 +257,109 @@ Tensor clamp_min(const Tensor& self, Scalar min) {
 
 Tensor clamp_max(const Tensor& self, Scalar max) {
     return clamp(self, std::nullopt, max);
+}
+
+// ============================================================
+// Gather / scatter / index_select
+// ============================================================
+
+static int64_t wrap_index_dim(int64_t dim, const Tensor& self) {
+    return wrap_dim(dim, std::max<int64_t>(self.ndim(), 1));
+}
+
+Tensor gather(const Tensor& self, int64_t dim, const Tensor& index) {
+    Tensor result = ops::gather(self, dim, index);
+    if (autograd::requires_autograd(self)) {
+        auto grad_fn = std::make_shared<autograd::GatherBackward0>(
+            self, wrap_index_dim(dim, self), index);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor scatter(const Tensor& self, int64_t dim, const Tensor& index, const Tensor& src) {
+    Tensor result = ops::scatter(self, dim, index, src);
+    if (autograd::requires_autograd(self, src)) {
+        auto grad_fn = std::make_shared<autograd::ScatterBackward0>(
+            wrap_index_dim(dim, self), index, /*has_src=*/true);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self, src);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor scatter(const Tensor& self, int64_t dim, const Tensor& index, Scalar value) {
+    Tensor result = ops::scatter(self, dim, index, value);
+    if (autograd::requires_autograd(self)) {
+        auto grad_fn = std::make_shared<autograd::ScatterBackward0>(
+            wrap_index_dim(dim, self), index, /*has_src=*/false);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor scatter_add(const Tensor& self, int64_t dim, const Tensor& index, const Tensor& src) {
+    Tensor result = ops::scatter_add(self, dim, index, src);
+    if (autograd::requires_autograd(self, src)) {
+        auto grad_fn = std::make_shared<autograd::ScatterAddBackward0>(wrap_index_dim(dim, self), index);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self, src);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor& scatter_(Tensor& self, int64_t dim, const Tensor& index, const Tensor& src) {
+    RAXIS_CHECK(!autograd::requires_autograd(self, src),
+        "a leaf Variable that requires grad is being used in an in-place operation (scatter_)");
+    return ops::scatter_(self, dim, index, src);
+}
+
+Tensor& scatter_(Tensor& self, int64_t dim, const Tensor& index, Scalar value) {
+    RAXIS_CHECK(!autograd::requires_autograd(self),
+        "a leaf Variable that requires grad is being used in an in-place operation (scatter_)");
+    return ops::scatter_(self, dim, index, value);
+}
+
+Tensor& scatter_add_(Tensor& self, int64_t dim, const Tensor& index, const Tensor& src) {
+    RAXIS_CHECK(!autograd::requires_autograd(self, src),
+        "a leaf Variable that requires grad is being used in an in-place operation (scatter_add_)");
+    return ops::scatter_add_(self, dim, index, src);
+}
+
+Tensor index_select(const Tensor& self, int64_t dim, const Tensor& index) {
+    Tensor result = ops::index_select(self, dim, index);
+    if (autograd::requires_autograd(self)) {
+        auto grad_fn = std::make_shared<autograd::IndexSelectBackward0>(
+            self, wrap_index_dim(dim, self), index);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor index_add(const Tensor& self, int64_t dim, const Tensor& index, const Tensor& source) {
+    Tensor result = ops::index_add(self, dim, index, source);
+    if (autograd::requires_autograd(self, source)) {
+        auto grad_fn = std::make_shared<autograd::IndexAddBackward0>(
+            wrap_index_dim(dim, self), index, source);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self, source);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor& index_add_(Tensor& self, int64_t dim, const Tensor& index, const Tensor& source) {
+    RAXIS_CHECK(!autograd::requires_autograd(self, source),
+        "a leaf Variable that requires grad is being used in an in-place operation (index_add_)");
+    return ops::index_add_(self, dim, index, source);
 }
 
 // ============================================================

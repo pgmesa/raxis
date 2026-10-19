@@ -5,6 +5,7 @@
 
 #include <raxis/ops/cat_ops.h>
 #include <raxis/ops/tensor_compare.h>
+#include <raxis/ops/tensor_advanced_indexing.h>
 #include <raxis/autograd/variable.h>
 #include <raxis/tensor/factories.h>
 
@@ -164,6 +165,80 @@ TensorList ClampBackward1::apply(const TensorList& grads) {
         return {ops::where(self_.lt(*max_), grad, 0)};
     }
     return {grad};
+}
+
+// ============================================================
+// Gather / scatter / index_select
+// ============================================================
+// From: tools/autograd/derivatives.yaml. Each op's gradient is another op
+// of the family: what gather reads, its backward adds back (scatter_add).
+
+GatherBackward0::GatherBackward0(const Tensor& self, int64_t dim, const Tensor& index)
+    : self_shape_(self.shape()), dim_(dim), index_(index) {}
+
+std::string GatherBackward0::name() const { return "GatherBackward0"; }
+
+// Elements read more than once accumulate their gradients
+TensorList GatherBackward0::apply(const TensorList& grads) {
+    Tensor grad_self = zeros(self_shape_, grads[0].options());
+    return {ops::scatter_add_(grad_self, dim_, index_, grads[0])};
+}
+
+
+ScatterBackward0::ScatterBackward0(int64_t dim, const Tensor& index, bool has_src)
+    : dim_(dim), index_(index), has_src_(has_src) {}
+
+std::string ScatterBackward0::name() const { return "ScatterBackward0"; }
+
+// Overwritten elements of self get no gradient; src gets the gradient of
+// the positions it was written to
+TensorList ScatterBackward0::apply(const TensorList& grads) {
+    const Tensor& grad = grads[0];
+    Tensor grad_self = ops::scatter(grad, dim_, index_, 0);
+    if (!has_src_) {
+        return {grad_self};
+    }
+    return {grad_self, ops::gather(grad, dim_, index_)};
+}
+
+
+ScatterAddBackward0::ScatterAddBackward0(int64_t dim, const Tensor& index)
+    : dim_(dim), index_(index) {}
+
+std::string ScatterAddBackward0::name() const { return "ScatterAddBackward0"; }
+
+TensorList ScatterAddBackward0::apply(const TensorList& grads) {
+    const Tensor& grad = grads[0];
+    return {grad, ops::gather(grad, dim_, index_)};
+}
+
+
+IndexSelectBackward0::IndexSelectBackward0(const Tensor& self, int64_t dim, const Tensor& index)
+    : self_shape_(self.shape()), dim_(dim), index_(index) {}
+
+std::string IndexSelectBackward0::name() const { return "IndexSelectBackward0"; }
+
+// Rows selected more than once accumulate their gradients (an embedding
+// lookup of a repeated token)
+TensorList IndexSelectBackward0::apply(const TensorList& grads) {
+    Tensor grad_self = zeros(self_shape_, grads[0].options());
+    return {ops::index_add_(grad_self, dim_, index_, grads[0])};
+}
+
+
+IndexAddBackward0::IndexAddBackward0(int64_t dim, const Tensor& index, const Tensor& source)
+    : dim_(dim), index_(index), source_shape_(source.shape()) {}
+
+std::string IndexAddBackward0::name() const { return "IndexAddBackward0"; }
+
+TensorList IndexAddBackward0::apply(const TensorList& grads) {
+    const Tensor& grad = grads[0];
+    Tensor grad_source = ops::index_select(grad, dim_, index_);
+    // A 0-d source was added as a single element
+    if (source_shape_.empty()) {
+        grad_source = grad_source.reshape({});
+    }
+    return {grad, grad_source};
 }
 
 // ============================================================
