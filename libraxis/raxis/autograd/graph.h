@@ -7,6 +7,8 @@
 
 #include <raxis/export.h>
 #include <raxis/core/types.h>
+#include <raxis/util/array_ref.h>
+#include <raxis/util/small_vector.h>
 #include <raxis/tensor/tensor.h>
 
 
@@ -14,6 +16,7 @@ namespace raxis::autograd {
 
 struct Edge;
 class Node;
+class SavedVariable;
 
 using NodePtr = std::shared_ptr<Node>;
 using EdgeList = std::vector<Edge>;
@@ -68,16 +71,24 @@ public:
     void set_retained_tensor(const Tensor& t) { retained_tensor_ = t.weak_impl(); }
     Tensor retained_tensor() const { return Tensor(retained_tensor_.lock()); }
 
-    // Set once the node ran in a backward pass without retain_graph
-    void mark_released() { released_ = true; }
-    bool is_released() const { return released_; }
+    // From: torch/csrc/autograd/function.h (release_variables)
+    // Frees the saved tensors once the node ran in a backward without
+    // retain_graph: memory goes down as the backward advances instead of
+    // staying at its peak until the graph is dropped.
+    void release_variables();
+
+    ArrayRef<SavedVariable*> saved_variables() const { return saved_variables_; }
 
 private:
+    friend class SavedVariable;
+    void register_saved_variable(SavedVariable* saved) { saved_variables_.push_back(saved); }
+
     uint64_t sequence_nr_;
     EdgeList next_edges_;
     size_t num_inputs_ = 0;
-    bool released_ = false;
     std::weak_ptr<detail::TensorImpl> retained_tensor_;
+    // Members of the derived node: valid while the node is alive
+    SmallVector<SavedVariable*, 2> saved_variables_;
 };
 
 } // namespace raxis::autograd

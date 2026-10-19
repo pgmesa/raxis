@@ -3,12 +3,20 @@
 #include <cstdint>
 #include <vector>
 
+#include <raxis/autograd/saved_variable.h>
+
 
 namespace raxis::autograd {
 
 uint64_t next_sequence_nr() {
     static thread_local uint64_t sequence_nr = 0;
     return sequence_nr++;
+}
+
+void Node::release_variables() {
+    for (SavedVariable* saved : saved_variables_) {
+        saved->release();
+    }
 }
 
 // From: torch/csrc/autograd/function.cpp (gatherFunctions)
@@ -35,6 +43,9 @@ Node::~Node() {
     while (!stack.empty()) {
         NodePtr node = std::move(stack.back());
         stack.pop_back();
+        // A saved input holds its grad_fn too, which would then be freed
+        // recursively when the node dies: drop it first
+        node->release_variables();
         gather_functions(node->next_edges_, stack);
     }
 }

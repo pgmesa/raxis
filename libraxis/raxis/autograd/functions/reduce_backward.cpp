@@ -102,74 +102,92 @@ TensorList MeanBackward1::apply(const TensorList& grads) {
 }
 
 
-ProdBackward0::ProdBackward0(const Tensor& self, const Tensor& result)
-    : self_(self), result_(result, /*is_output=*/true) {}
+ProdBackward0::ProdBackward0(const Tensor& self, const Tensor& result) {
+    self_.save(self);
+    result_.save(result, /*is_output=*/true);
+}
 
 std::string ProdBackward0::name() const { return "ProdBackward0"; }
 
 TensorList ProdBackward0::apply(const TensorList& grads) {
-    return {(grads[0] * result_.unpack()).broadcast_to(self_.shape()) / self_};
+    const Tensor& self = self_.unpack();
+    return {(grads[0] * result_.unpack()).broadcast_to(self.shape()) / self};
 }
 
 ProdBackward1::ProdBackward1(const Tensor& self, IntArrayRef dim, bool keepdim,
                              const Tensor& result)
-    : self_(self), result_(result, /*is_output=*/true), dim_(dim), keepdim_(keepdim) {}
+    : dim_(dim), keepdim_(keepdim)
+{
+    self_.save(self);
+    result_.save(result, /*is_output=*/true);
+}
 
 std::string ProdBackward1::name() const { return "ProdBackward1"; }
 
 TensorList ProdBackward1::apply(const TensorList& grads) {
     Tensor grad = grads[0];
     Tensor res = result_.unpack();
+    const Tensor& self = self_.unpack();
 
     if (!keepdim_ && !dim_.empty()) {
-        grad = unsqueeze_reduced_dims(grad, DimVector(self_.shape()), dim_);
-        res = unsqueeze_reduced_dims(res, DimVector(self_.shape()), dim_);
+        grad = unsqueeze_reduced_dims(grad, DimVector(self.shape()), dim_);
+        res = unsqueeze_reduced_dims(res, DimVector(self.shape()), dim_);
     }
 
     // grad * result / self, broadcast back
-    return {(grad * res).broadcast_to(self_.shape()) / self_};
+    return {(grad * res).broadcast_to(self.shape()) / self};
 }
 
 
 AmaxBackward0::AmaxBackward0(const Tensor& self, IntArrayRef dim, bool keepdim,
                              const Tensor& result)
-    : self_(self), result_(result, /*is_output=*/true), dim_(dim), keepdim_(keepdim) {}
+    : dim_(dim), keepdim_(keepdim)
+{
+    self_.save(self);
+    result_.save(result, /*is_output=*/true);
+}
 
 std::string AmaxBackward0::name() const { return "AmaxBackward0"; }
 
 TensorList AmaxBackward0::apply(const TensorList& grads) {
+    const Tensor& self = self_.unpack();
     Tensor grad = grads[0];
     Tensor res = result_.unpack();
 
     if (!keepdim_ && !dim_.empty()) {
-        grad = unsqueeze_reduced_dims(grad, DimVector(self_.shape()), dim_);
-        res = unsqueeze_reduced_dims(res, DimVector(self_.shape()), dim_);
+        grad = unsqueeze_reduced_dims(grad, DimVector(self.shape()), dim_);
+        res = unsqueeze_reduced_dims(res, DimVector(self.shape()), dim_);
     }
 
-    Tensor mask = (self_ == res.broadcast_to(self_.shape())).to(grad.dtype());
+    Tensor mask = (self == res.broadcast_to(self.shape())).to(grad.dtype());
     Tensor num_matches = mask.sum(dim_, /*keepdim=*/true);
-    return {grad.broadcast_to(self_.shape()) * mask / num_matches.broadcast_to(self_.shape())};
+    return {grad.broadcast_to(self.shape()) * mask / num_matches.broadcast_to(self.shape())};
 }
 
 
 AminBackward0::AminBackward0(const Tensor& self, IntArrayRef dim, bool keepdim,
                              const Tensor& result)
-    : self_(self), result_(result, /*is_output=*/true), dim_(dim), keepdim_(keepdim) {}
+    : dim_(dim), keepdim_(keepdim)
+{
+    self_.save(self);
+    result_.save(result, /*is_output=*/true);
+}
 
 std::string AminBackward0::name() const { return "AminBackward0"; }
 
 TensorList AminBackward0::apply(const TensorList& grads) {
+    const Tensor& self = self_.unpack();
     Tensor grad = grads[0];
     Tensor res = result_.unpack();
 
     if (!keepdim_ && !dim_.empty()) {
-        grad = unsqueeze_reduced_dims(grad, DimVector(self_.shape()), dim_);
-        res = unsqueeze_reduced_dims(res, DimVector(self_.shape()), dim_);
+        grad = unsqueeze_reduced_dims(grad, DimVector(self.shape()), dim_);
+        res = unsqueeze_reduced_dims(res, DimVector(self.shape()), dim_);
     }
 
-    Tensor mask = (self_ == res.broadcast_to(self_.shape())).to(grad.dtype());
+    Tensor mask = (self == res.broadcast_to(self.shape())).to(grad.dtype());
     Tensor num_matches = mask.sum(dim_, /*keepdim=*/true);
-    return {grad.broadcast_to(self_.shape()) * mask / num_matches.broadcast_to(self_.shape())};
+    return {grad.broadcast_to(self.shape()) * mask / num_matches.broadcast_to(self.shape())};
 }
 
 
@@ -198,18 +216,24 @@ static Tensor var_backward(
 }
 
 VarBackward0::VarBackward0(const Tensor& self, IntArrayRef dim, double correction, bool keepdim)
-    : self_(self), dim_(dim), correction_(correction), keepdim_(keepdim) {}
+    : dim_(dim), correction_(correction), keepdim_(keepdim)
+{
+    self_.save(self);
+}
 
 std::string VarBackward0::name() const { return "VarBackward0"; }
 
 TensorList VarBackward0::apply(const TensorList& grads) {
-    return {var_backward(grads[0], self_, dim_, correction_, keepdim_)};
+    return {var_backward(grads[0], self_.unpack(), dim_, correction_, keepdim_)};
 }
 
 StdBackward0::StdBackward0(
     const Tensor& self, const Tensor& result, IntArrayRef dim, double correction, bool keepdim)
-    : self_(self), result_(result, /*is_output=*/true), dim_(dim),
-      correction_(correction), keepdim_(keepdim) {}
+    : dim_(dim), correction_(correction), keepdim_(keepdim)
+{
+    self_.save(self);
+    result_.save(result, /*is_output=*/true);
+}
 
 std::string StdBackward0::name() const { return "StdBackward0"; }
 
@@ -217,11 +241,14 @@ std::string StdBackward0::name() const { return "StdBackward0"; }
 TensorList StdBackward0::apply(const TensorList& grads) {
     Tensor result = result_.unpack();
     Tensor grad_var = ops::where(result.eq(0.0), 0, grads[0] / (result * 2.0));
-    return {var_backward(grad_var, self_, dim_, correction_, keepdim_)};
+    return {var_backward(grad_var, self_.unpack(), dim_, correction_, keepdim_)};
 }
 
 MaxBackward0::MaxBackward0(const Tensor& self, int64_t dim, const Tensor& indices, bool keepdim)
-    : self_shape_(self.shape()), dim_(dim), indices_(indices), keepdim_(keepdim) {}
+    : self_shape_(self.shape()), dim_(dim), keepdim_(keepdim)
+{
+    indices_.save(indices);
+}
 
 std::string MaxBackward0::name() const { return "MaxBackward0"; }
 std::string MinBackward0::name() const { return "MinBackward0"; }
@@ -230,7 +257,7 @@ std::string MinBackward0::name() const { return "MinBackward0"; }
 // zeros with the incoming gradient scattered to the selected positions
 TensorList MaxBackward0::apply(const TensorList& grads) {
     Tensor grad = grads[0];
-    Tensor indices = indices_;
+    Tensor indices = indices_.unpack();
     if (!keepdim_ && !self_shape_.empty()) {
         grad = grad.unsqueeze(dim_);
         indices = indices.unsqueeze(dim_);
@@ -239,42 +266,54 @@ TensorList MaxBackward0::apply(const TensorList& grads) {
     return {ops::scatter_(grad_self, dim_, indices, grad)};
 }
 
-MaxBackward1::MaxBackward1(const Tensor& self, const Tensor& result)
-    : self_(self), result_(result, /*is_output=*/true) {}
+MaxBackward1::MaxBackward1(const Tensor& self, const Tensor& result) {
+    self_.save(self);
+    result_.save(result, /*is_output=*/true);
+}
 
 std::string MaxBackward1::name() const { return "MaxBackward1"; }
 
 TensorList MaxBackward1::apply(const TensorList& grads) {
-    Tensor mask = (self_ == result_.unpack().broadcast_to(self_.shape())).to(grads[0].dtype());
+    const Tensor& self = self_.unpack();
+    Tensor mask = (self == result_.unpack().broadcast_to(self.shape())).to(grads[0].dtype());
     Tensor num_matches = mask.sum();
-    return {grads[0].broadcast_to(self_.shape()) * mask / num_matches.broadcast_to(self_.shape())};
+    return {grads[0].broadcast_to(self.shape()) * mask / num_matches.broadcast_to(self.shape())};
 }
 
 
-MinBackward1::MinBackward1(const Tensor& self, const Tensor& result)
-    : self_(self), result_(result, /*is_output=*/true) {}
+MinBackward1::MinBackward1(const Tensor& self, const Tensor& result) {
+    self_.save(self);
+    result_.save(result, /*is_output=*/true);
+}
 
 std::string MinBackward1::name() const { return "MinBackward1"; }
 
 TensorList MinBackward1::apply(const TensorList& grads) {
-    Tensor mask = (self_ == result_.unpack().broadcast_to(self_.shape())).to(grads[0].dtype());
+    const Tensor& self = self_.unpack();
+    Tensor mask = (self == result_.unpack().broadcast_to(self.shape())).to(grads[0].dtype());
     Tensor num_matches = mask.sum();
-    return {grads[0].broadcast_to(self_.shape()) * mask / num_matches.broadcast_to(self_.shape())};
+    return {grads[0].broadcast_to(self.shape()) * mask / num_matches.broadcast_to(self.shape())};
 }
 
 
 NansumBackward0::NansumBackward0(const Tensor& self)
-    : self_(self), self_shape_(self.shape()) {}
+    : self_shape_(self.shape())
+{
+    self_.save(self);
+}
 
 std::string NansumBackward0::name() const { return "NansumBackward0"; }
 
 TensorList NansumBackward0::apply(const TensorList& grads) {
-    Tensor not_nan = self_.isnan().logical_not().to(grads[0].dtype());
+    Tensor not_nan = self_.unpack().isnan().logical_not().to(grads[0].dtype());
     return {grads[0].broadcast_to(self_shape_) * not_nan};
 }
 
 NansumBackward1::NansumBackward1(const Tensor& self, IntArrayRef dim, bool keepdim)
-    : self_(self), self_shape_(self.shape()), dim_(dim), keepdim_(keepdim) {}
+    : self_shape_(self.shape()), dim_(dim), keepdim_(keepdim)
+{
+    self_.save(self);
+}
 
 std::string NansumBackward1::name() const { return "NansumBackward1"; }
 
@@ -283,36 +322,43 @@ TensorList NansumBackward1::apply(const TensorList& grads) {
     if (!keepdim_ && !dim_.empty()) {
         grad = unsqueeze_reduced_dims(grad, self_shape_, dim_);
     }
-    Tensor not_nan = self_.isnan().logical_not().to(grad.dtype());
+    Tensor not_nan = self_.unpack().isnan().logical_not().to(grad.dtype());
     return {grad.broadcast_to(self_shape_) * not_nan};
 }
 
 
 NanmeanBackward0::NanmeanBackward0(const Tensor& self)
-    : self_(self), self_shape_(self.shape()) {}
+    : self_shape_(self.shape())
+{
+    self_.save(self);
+}
 
 std::string NanmeanBackward0::name() const { return "NanmeanBackward0"; }
 
 TensorList NanmeanBackward0::apply(const TensorList& grads) {
-    Tensor not_nan = self_.isnan().logical_not().to(grads[0].dtype());
+    Tensor not_nan = self_.unpack().isnan().logical_not().to(grads[0].dtype());
     Tensor count = not_nan.sum();
     return {grads[0].broadcast_to(self_shape_) * not_nan / count.broadcast_to(self_shape_)};
 }
 
 NanmeanBackward1::NanmeanBackward1(const Tensor& self, IntArrayRef dim, bool keepdim)
-    : self_(self), self_shape_(self.shape()), dim_(dim), keepdim_(keepdim) {}
+    : self_shape_(self.shape()), dim_(dim), keepdim_(keepdim)
+{
+    self_.save(self);
+}
 
 std::string NanmeanBackward1::name() const { return "NanmeanBackward1"; }
 
 TensorList NanmeanBackward1::apply(const TensorList& grads) {
+    const Tensor& self = self_.unpack();
     Tensor grad = grads[0];
-    Tensor count = count_nonnan(self_, dim_, /*keepdim=*/true);
+    Tensor count = count_nonnan(self, dim_, /*keepdim=*/true);
 
     if (!keepdim_ && !dim_.empty()) {
         grad = unsqueeze_reduced_dims(grad, self_shape_, dim_);
     }
 
-    Tensor not_nan = self_.isnan().logical_not().to(grad.dtype());
+    Tensor not_nan = self.isnan().logical_not().to(grad.dtype());
     return {grad.broadcast_to(self_shape_) * not_nan / count.broadcast_to(self_shape_)};
 }
 

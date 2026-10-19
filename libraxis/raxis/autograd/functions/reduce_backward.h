@@ -62,8 +62,8 @@ public:
     TensorList apply(const TensorList& grads) override;
 
 private:
-    Tensor self_;
-    SavedVariable result_;
+    SavedVariable self_{this, "self"};
+    SavedVariable result_{this, "result"};
 };
 
 class RAXIS_API ProdBackward1 : public Node {
@@ -74,8 +74,8 @@ public:
     TensorList apply(const TensorList& grads) override;
 
 private:
-    Tensor self_;
-    SavedVariable result_;
+    SavedVariable self_{this, "self"};
+    SavedVariable result_{this, "result"};
     DimVector dim_;
     bool keepdim_;
 };
@@ -88,8 +88,8 @@ public:
     TensorList apply(const TensorList& grads) override;
 
 private:
-    Tensor self_;
-    SavedVariable result_;
+    SavedVariable self_{this, "self"};
+    SavedVariable result_{this, "result"};
     DimVector dim_;
     bool keepdim_;
 };
@@ -102,8 +102,8 @@ public:
     TensorList apply(const TensorList& grads) override;
 
 private:
-    Tensor self_;
-    SavedVariable result_;
+    SavedVariable self_{this, "self"};
+    SavedVariable result_{this, "result"};
     DimVector dim_;
     bool keepdim_;
 };
@@ -115,7 +115,7 @@ public:
     TensorList apply(const TensorList& grads) override;
 
 private:
-    Tensor self_;
+    SavedVariable self_{this, "self"};
     DimVector dim_;
     double correction_;
     bool keepdim_;
@@ -128,8 +128,8 @@ public:
     TensorList apply(const TensorList& grads) override;
 
 private:
-    Tensor self_;
-    SavedVariable result_;
+    SavedVariable self_{this, "self"};
+    SavedVariable result_{this, "result"};
     DimVector dim_;
     double correction_;
     bool keepdim_;
@@ -145,7 +145,7 @@ public:
 private:
     DimVector self_shape_;
     int64_t dim_;
-    Tensor indices_;
+    SavedVariable indices_{this, "indices"};
     bool keepdim_;
 };
 
@@ -162,8 +162,8 @@ public:
     TensorList apply(const TensorList& grads) override;
 
 private:
-    Tensor self_;
-    SavedVariable result_;
+    SavedVariable self_{this, "self"};
+    SavedVariable result_{this, "result"};
 };
 
 class RAXIS_API MinBackward1 : public Node {
@@ -173,8 +173,8 @@ public:
     TensorList apply(const TensorList& grads) override;
 
 private:
-    Tensor self_;
-    SavedVariable result_;
+    SavedVariable self_{this, "self"};
+    SavedVariable result_{this, "result"};
 };
 
 
@@ -185,7 +185,7 @@ public:
     TensorList apply(const TensorList& grads) override;
 
 private:
-    Tensor self_;
+    SavedVariable self_{this, "self"};
     DimVector self_shape_;
 };
 
@@ -196,7 +196,7 @@ public:
     TensorList apply(const TensorList& grads) override;
 
 private:
-    Tensor self_;
+    SavedVariable self_{this, "self"};
     DimVector self_shape_;
     DimVector dim_;
     bool keepdim_;
@@ -210,7 +210,7 @@ public:
     TensorList apply(const TensorList& grads) override;
 
 private:
-    Tensor self_;
+    SavedVariable self_{this, "self"};
     DimVector self_shape_;
 };
 
@@ -221,7 +221,7 @@ public:
     TensorList apply(const TensorList& grads) override;
 
 private:
-    Tensor self_;
+    SavedVariable self_{this, "self"};
     DimVector self_shape_;
     DimVector dim_;
     bool keepdim_;

@@ -7,7 +7,9 @@
 
 namespace raxis::autograd {
 
-ReluBackward0::ReluBackward0(const Tensor& result) : result_(result, /*is_output=*/true) {}
+ReluBackward0::ReluBackward0(const Tensor& result) {
+    result_.save(result, /*is_output=*/true);
+}
 std::string ReluBackward0::name() const { return "ReluBackward0"; }
 
 // relu'(x) is 1 where x > 0, which is the same set as result > 0
@@ -17,7 +19,10 @@ TensorList ReluBackward0::apply(const TensorList& grads) {
 
 
 SoftmaxBackward0::SoftmaxBackward0(const Tensor& result, int64_t dim)
-    : result_(result, /*is_output=*/true), dim_(dim) {}
+    : dim_(dim)
+{
+    result_.save(result, /*is_output=*/true);
+}
 std::string SoftmaxBackward0::name() const { return "SoftmaxBackward0"; }
 
 TensorList SoftmaxBackward0::apply(const TensorList& grads) {
@@ -26,7 +31,10 @@ TensorList SoftmaxBackward0::apply(const TensorList& grads) {
 
 
 LogSoftmaxBackward0::LogSoftmaxBackward0(const Tensor& result, int64_t dim)
-    : result_(result, /*is_output=*/true), dim_(dim) {}
+    : dim_(dim)
+{
+    result_.save(result, /*is_output=*/true);
+}
 std::string LogSoftmaxBackward0::name() const { return "LogSoftmaxBackward0"; }
 
 TensorList LogSoftmaxBackward0::apply(const TensorList& grads) {
@@ -37,14 +45,17 @@ TensorList LogSoftmaxBackward0::apply(const TensorList& grads) {
 NllLossBackward0::NllLossBackward0(
     const Tensor& self, const Tensor& target,
     Reduction reduction, int64_t ignore_index, double total_weight)
-    : self_(self), target_(target), reduction_(reduction),
-      ignore_index_(ignore_index), total_weight_(total_weight) {}
+    : reduction_(reduction), ignore_index_(ignore_index), total_weight_(total_weight)
+{
+    self_.save(self);
+    target_.save(target);
+}
 std::string NllLossBackward0::name() const { return "NllLossBackward0"; }
 
 // Only self gets a gradient: target holds class indices
 TensorList NllLossBackward0::apply(const TensorList& grads) {
     return {ops::nll_loss_backward(
-        grads[0], self_, target_, reduction_, ignore_index_, total_weight_)};
+        grads[0], self_.unpack(), target_.unpack(), reduction_, ignore_index_, total_weight_)};
 }
 
 } // namespace raxis::autograd

@@ -25,7 +25,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    Tensor self_;
+    SavedVariable self_{this, "self"};
 };
 
 class RAXIS_API ExpBackward0 : public Node {
@@ -34,7 +34,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    SavedVariable result_;
+    SavedVariable result_{this, "result"};
 };
 
 class RAXIS_API Expm1Backward0 : public Node {
@@ -43,7 +43,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    SavedVariable result_;
+    SavedVariable result_{this, "result"};
 };
 
 class RAXIS_API LogBackward0 : public Node {
@@ -52,7 +52,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    Tensor self_;
+    SavedVariable self_{this, "self"};
 };
 
 class RAXIS_API Log2Backward0 : public Node {
@@ -61,7 +61,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    Tensor self_;
+    SavedVariable self_{this, "self"};
 };
 
 class RAXIS_API Log10Backward0 : public Node {
@@ -70,7 +70,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    Tensor self_;
+    SavedVariable self_{this, "self"};
 };
 
 class RAXIS_API Log1PBackward0 : public Node {
@@ -79,7 +79,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    Tensor self_;
+    SavedVariable self_{this, "self"};
 };
 
 class RAXIS_API SqrtBackward0 : public Node {
@@ -88,7 +88,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    SavedVariable result_;
+    SavedVariable result_{this, "result"};
 };
 
 class RAXIS_API RsqrtBackward0 : public Node {
@@ -97,7 +97,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    SavedVariable result_;
+    SavedVariable result_{this, "result"};
 };
 
 class RAXIS_API ReciprocalBackward0 : public Node {
@@ -106,7 +106,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    SavedVariable result_;
+    SavedVariable result_{this, "result"};
 };
 
 class RAXIS_API SigmoidBackward0 : public Node {
@@ -115,7 +115,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    SavedVariable result_;
+    SavedVariable result_{this, "result"};
 };
 
 class RAXIS_API SinBackward0 : public Node {
@@ -124,7 +124,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    Tensor self_;
+    SavedVariable self_{this, "self"};
 };
 
 class RAXIS_API CosBackward0 : public Node {
@@ -133,7 +133,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    Tensor self_;
+    SavedVariable self_{this, "self"};
 };
 
 class RAXIS_API TanBackward0 : public Node {
@@ -142,7 +142,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    SavedVariable result_;
+    SavedVariable result_{this, "result"};
 };
 
 class RAXIS_API AsinBackward0 : public Node {
@@ -151,7 +151,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    Tensor self_;
+    SavedVariable self_{this, "self"};
 };
 
 class RAXIS_API AcosBackward0 : public Node {
@@ -160,7 +160,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    Tensor self_;
+    SavedVariable self_{this, "self"};
 };
 
 class RAXIS_API AtanBackward0 : public Node {
@@ -169,7 +169,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    Tensor self_;
+    SavedVariable self_{this, "self"};
 };
 
 class RAXIS_API SinhBackward0 : public Node {
@@ -178,7 +178,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    Tensor self_;
+    SavedVariable self_{this, "self"};
 };
 
 class RAXIS_API CoshBackward0 : public Node {
@@ -187,7 +187,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    Tensor self_;
+    SavedVariable self_{this, "self"};
 };
 
 class RAXIS_API TanhBackward0 : public Node {
@@ -196,7 +196,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    SavedVariable result_;
+    SavedVariable result_{this, "result"};
 };
 
 class RAXIS_API ErfBackward0 : public Node {
@@ -205,7 +205,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    Tensor self_;
+    SavedVariable self_{this, "self"};
 };
 
 class RAXIS_API ErfcBackward0 : public Node {
@@ -214,7 +214,7 @@ public:
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 private:
-    Tensor self_;
+    SavedVariable self_{this, "self"};
 };
 
 } // namespace raxis::autograd

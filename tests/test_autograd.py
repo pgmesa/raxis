@@ -779,11 +779,38 @@ class TestRetainGraph:
         t_out = (t * t).sum()
         t_out.backward()
 
-        with pytest.raises(RuntimeError):
+        with pytest.raises(RuntimeError, match="backward through the graph a second time"):
             t_out.backward()
 
-        with pytest.raises(RuntimeError):
+        with pytest.raises(RuntimeError, match="backward through the graph a second time"):
             r_out.backward()
+
+    def test_backward_twice_without_saved_tensors(self):
+        # Only saved tensors are freed: a graph that saves none can run again
+        def run(x):
+            out = (x + 1.0).sum()
+            out.backward()
+            out.backward()
+            return x.grad
+        r, t = make_grad_pair(randf(3, 4))
+        check_match(run(r), run(t))
+
+    def test_saved_tensors_released_after_backward(self):
+        x = raxis.rand((4, 5), requires_grad=True)
+        a = x * 2.0
+        out = a.sin().sum()
+        assert a._use_count() == 2  # a and the SinBackward0 that saved it
+        out.backward()
+        assert a._use_count() == 1
+
+    def test_saved_tensors_kept_with_retain_graph(self):
+        x = raxis.rand((4, 5), requires_grad=True)
+        a = x * 2.0
+        out = a.sin().sum()
+        out.backward(retain_graph=True)
+        assert a._use_count() == 2
+        out.backward()
+        assert a._use_count() == 1
 
     def test_grad_accumulates(self, device):
         """Multiple backward calls accumulate gradients (without zeroing)."""
@@ -951,8 +978,10 @@ class TestEngine:
 
     DEPTH = 100_000
 
-    @pytest.mark.parametrize("op", [lambda y: y + 1.0, lambda y: y * 1.0, lambda y: y.exp() * 0.0 + y],
-                             ids=["add", "mul", "exp"])
+    # sin saves its input, which holds the previous node through its grad_fn
+    @pytest.mark.parametrize("op", [lambda y: y + 1.0, lambda y: y * 1.0, lambda y: y.exp() * 0.0 + y,
+                                    lambda y: y.sin() * 0.0 + y],
+                             ids=["add", "mul", "exp", "sin"])
     def test_deep_chain_backward(self, op):
         # A recursive engine (or recursive node destructors) overflows the stack here
         x = raxis.tensor([1.0], requires_grad=True)
@@ -962,11 +991,12 @@ class TestEngine:
         y.sum().backward()
         check_match(x.grad, torch.ones(1))
 
-    def test_deep_chain_freed_without_backward(self):
+    @pytest.mark.parametrize("op", [lambda y: y + 1.0, lambda y: y.sin()], ids=["add", "sin"])
+    def test_deep_chain_freed_without_backward(self, op):
         x = raxis.tensor([1.0], requires_grad=True)
         y = x
         for _ in range(self.DEPTH):
-            y = y + 1.0
+            y = op(y)
         del y
 
     def test_diamond(self):

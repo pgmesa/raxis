@@ -15,7 +15,7 @@ public:
     TensorList apply(const TensorList& grads) override;
 
 private:
-    SavedVariable result_;
+    SavedVariable result_{this, "result"};
 };
 
 
@@ -26,7 +26,7 @@ public:
     TensorList apply(const TensorList& grads) override;
 
 private:
-    SavedVariable result_;
+    SavedVariable result_{this, "result"};
     int64_t dim_;
 };
 
@@ -38,7 +38,7 @@ public:
     TensorList apply(const TensorList& grads) override;
 
 private:
-    SavedVariable result_;
+    SavedVariable result_{this, "result"};
     int64_t dim_;
 };
 
@@ -52,8 +52,8 @@ public:
     TensorList apply(const TensorList& grads) override;
 
 private:
-    Tensor self_;
-    Tensor target_;
+    SavedVariable self_{this, "self"};
+    SavedVariable target_{this, "target"};
     Reduction reduction_;
     int64_t ignore_index_;
     double total_weight_;

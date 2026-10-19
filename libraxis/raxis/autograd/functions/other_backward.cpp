@@ -125,29 +125,35 @@ TensorList SplitWithSizesBackward0::apply(const TensorList& grads) {
 // ============================================================
 
 WhereBackward0::WhereBackward0(const Tensor& condition, const Tensor& self, const Tensor& other)
-    : condition_(condition),
-      self_shape_(self.shape()),
+    : self_shape_(self.shape()),
       other_shape_(other.shape()),
       self_requires_grad_(self.requires_grad()),
-      other_requires_grad_(other.requires_grad()) {}
+      other_requires_grad_(other.requires_grad())
+{
+    condition_.save(condition);
+}
 
 std::string WhereBackward0::name() const { return "WhereBackward0"; }
 
 // Each element of the result came from self or from other: the gradient goes
 // back to the one that was selected and the other gets 0
 TensorList WhereBackward0::apply(const TensorList& grads) {
+    const Tensor& condition = condition_.unpack();
     const Tensor& grad = grads[0];
     Tensor grad_self, grad_other;
     if (self_requires_grad_)
-        grad_self = unbroadcast(ops::where(condition_, grad, 0), self_shape_);
+        grad_self = unbroadcast(ops::where(condition, grad, 0), self_shape_);
     if (other_requires_grad_)
-        grad_other = unbroadcast(ops::where(condition_, 0, grad), other_shape_);
+        grad_other = unbroadcast(ops::where(condition, 0, grad), other_shape_);
     return {grad_self, grad_other};
 }
 
 
 ClampBackward1::ClampBackward1(const Tensor& self, std::optional<Scalar> min, std::optional<Scalar> max)
-    : self_(self), min_(min), max_(max) {}
+    : min_(min), max_(max)
+{
+    self_.save(self);
+}
 
 std::string ClampBackward1::name() const { return "ClampBackward1"; }
 
@@ -156,13 +162,14 @@ std::string ClampBackward1::name() const { return "ClampBackward1"; }
 // bounds the derivative is not defined: torch 2.14 uses 0 there (up to 2.13
 // it used the subgradient 1, with >= and <=).
 TensorList ClampBackward1::apply(const TensorList& grads) {
+    const Tensor& self = self_.unpack();
     const Tensor& grad = grads[0];
     if (min_ && max_) {
-        return {ops::where(self_.gt(*min_).logical_and(self_.lt(*max_)), grad, 0)};
+        return {ops::where(self.gt(*min_).logical_and(self.lt(*max_)), grad, 0)};
     } else if (min_) {
-        return {ops::where(self_.gt(*min_), grad, 0)};
+        return {ops::where(self.gt(*min_), grad, 0)};
     } else if (max_) {
-        return {ops::where(self_.lt(*max_), grad, 0)};
+        return {ops::where(self.lt(*max_), grad, 0)};
     }
     return {grad};
 }
@@ -174,47 +181,60 @@ TensorList ClampBackward1::apply(const TensorList& grads) {
 // of the family: what gather reads, its backward adds back (scatter_add).
 
 GatherBackward0::GatherBackward0(const Tensor& self, int64_t dim, const Tensor& index)
-    : self_shape_(self.shape()), dim_(dim), index_(index) {}
+    : self_shape_(self.shape()), dim_(dim)
+{
+    index_.save(index);
+}
 
 std::string GatherBackward0::name() const { return "GatherBackward0"; }
 
 // Elements read more than once accumulate their gradients
 TensorList GatherBackward0::apply(const TensorList& grads) {
     Tensor grad_self = zeros(self_shape_, grads[0].options());
-    return {ops::scatter_add_(grad_self, dim_, index_, grads[0])};
+    return {ops::scatter_add_(grad_self, dim_, index_.unpack(), grads[0])};
 }
 
 
 ScatterBackward0::ScatterBackward0(int64_t dim, const Tensor& index, bool has_src)
-    : dim_(dim), index_(index), has_src_(has_src) {}
+    : dim_(dim), has_src_(has_src)
+{
+    index_.save(index);
+}
 
 std::string ScatterBackward0::name() const { return "ScatterBackward0"; }
 
 // Overwritten elements of self get no gradient; src gets the gradient of
 // the positions it was written to
 TensorList ScatterBackward0::apply(const TensorList& grads) {
+    const Tensor& index = index_.unpack();
     const Tensor& grad = grads[0];
-    Tensor grad_self = ops::scatter(grad, dim_, index_, 0);
+    Tensor grad_self = ops::scatter(grad, dim_, index, 0);
     if (!has_src_) {
         return {grad_self};
     }
-    return {grad_self, ops::gather(grad, dim_, index_)};
+    return {grad_self, ops::gather(grad, dim_, index)};
 }
 
 
 ScatterAddBackward0::ScatterAddBackward0(int64_t dim, const Tensor& index)
-    : dim_(dim), index_(index) {}
+    : dim_(dim)
+{
+    index_.save(index);
+}
 
 std::string ScatterAddBackward0::name() const { return "ScatterAddBackward0"; }
 
 TensorList ScatterAddBackward0::apply(const TensorList& grads) {
     const Tensor& grad = grads[0];
-    return {grad, ops::gather(grad, dim_, index_)};
+    return {grad, ops::gather(grad, dim_, index_.unpack())};
 }
 
 
 IndexSelectBackward0::IndexSelectBackward0(const Tensor& self, int64_t dim, const Tensor& index)
-    : self_shape_(self.shape()), dim_(dim), index_(index) {}
+    : self_shape_(self.shape()), dim_(dim)
+{
+    index_.save(index);
+}
 
 std::string IndexSelectBackward0::name() const { return "IndexSelectBackward0"; }
 
@@ -222,18 +242,21 @@ std::string IndexSelectBackward0::name() const { return "IndexSelectBackward0"; 
 // lookup of a repeated token)
 TensorList IndexSelectBackward0::apply(const TensorList& grads) {
     Tensor grad_self = zeros(self_shape_, grads[0].options());
-    return {ops::index_add_(grad_self, dim_, index_, grads[0])};
+    return {ops::index_add_(grad_self, dim_, index_.unpack(), grads[0])};
 }
 
 
 IndexAddBackward0::IndexAddBackward0(int64_t dim, const Tensor& index, const Tensor& source)
-    : dim_(dim), index_(index), source_shape_(source.shape()) {}
+    : dim_(dim), source_shape_(source.shape())
+{
+    index_.save(index);
+}
 
 std::string IndexAddBackward0::name() const { return "IndexAddBackward0"; }
 
 TensorList IndexAddBackward0::apply(const TensorList& grads) {
     const Tensor& grad = grads[0];
-    Tensor grad_source = ops::index_select(grad, dim_, index_);
+    Tensor grad_source = ops::index_select(grad, dim_, index_.unpack());
     // A 0-d source was added as a single element
     if (source_shape_.empty()) {
         grad_source = grad_source.reshape({});

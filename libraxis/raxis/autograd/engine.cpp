@@ -145,11 +145,6 @@ void run_backward(const Tensor& tensor, const Tensor& grad, bool retain_graph) {
         NodeTask task = ready.pop();
         Node& node = *task.node;
 
-        RAXIS_CHECK(!node.is_released(),
-            "Trying to backward through the graph a second time (", node.name(),
-            "). Specify retain_graph=True if you need to backward through the "
-            "graph a second time.");
-
         TensorList outputs = node.apply(task.inputs);
 
         // Retain grad: save the incoming gradient on the tensor if it is still alive
@@ -168,7 +163,7 @@ void run_backward(const Tensor& tensor, const Tensor& grad, bool retain_graph) {
         task.inputs.clear();
 
         if (!retain_graph) {
-            node.mark_released();
+            node.release_variables();
         }
 
         const EdgeList& edges = node.next_edges();

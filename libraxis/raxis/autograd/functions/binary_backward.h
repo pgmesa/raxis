@@ -46,8 +46,8 @@ private:
     bool b_requires_grad_;
     DimVector a_shape_;
     DimVector b_shape_;
-    Tensor a_;
-    Tensor b_;
+    SavedVariable a_{this, "self"};
+    SavedVariable b_{this, "other"};
 };
 
 
@@ -62,8 +62,8 @@ private:
     bool b_requires_grad_;
     DimVector a_shape_;
     DimVector b_shape_;
-    Tensor a_;
-    Tensor b_;
+    SavedVariable a_{this, "self"};
+    SavedVariable b_{this, "other"};
 };
 
 
@@ -74,7 +74,7 @@ public:
     TensorList apply(const TensorList& grads) override;
 
 private:
-    Tensor base_;
+    SavedVariable base_{this, "self"};
     Scalar exp_;
 };
 
@@ -89,9 +89,9 @@ private:
     bool exp_requires_grad_;
     DimVector base_shape_;
     DimVector exp_shape_;
-    Tensor base_;
-    Tensor exp_;
-    SavedVariable result_;
+    SavedVariable base_{this, "self"};
+    SavedVariable exp_{this, "exponent"};
+    SavedVariable result_{this, "result"};
 };
 
 class RAXIS_API PowBackward2 : public Node {
@@ -102,7 +102,7 @@ public:
 
 private:
     Scalar base_;
-    SavedVariable result_;
+    SavedVariable result_{this, "result"};
 };
 
 
@@ -117,8 +117,8 @@ private:
     bool b_requires_grad_;
     DimVector a_shape_;
     DimVector b_shape_;
-    Tensor a_;
-    Tensor b_;
+    SavedVariable a_{this, "self"};
+    SavedVariable b_{this, "other"};
 };
 
 // MinimumBackward0: grad flows where a <= b
@@ -132,8 +132,8 @@ private:
     bool b_requires_grad_;
     DimVector a_shape_;
     DimVector b_shape_;
-    Tensor a_;
-    Tensor b_;
+    SavedVariable a_{this, "self"};
+    SavedVariable b_{this, "other"};
 };
 
 } // namespace raxis::autograd

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <raxis/autograd/graph.h>
+#include <raxis/autograd/saved_variable.h>
 #include <raxis/tensor/tensor.h>
 
 
@@ -15,8 +16,8 @@ public:
 private:
     bool self_requires_grad_;
     bool other_requires_grad_;
-    Tensor self_;
-    Tensor other_;
+    SavedVariable self_{this, "self"};
+    SavedVariable other_{this, "other"};
 };
 
 class RAXIS_API MvBackward0 : public Node {
@@ -28,8 +29,8 @@ public:
 private:
     bool mat_requires_grad_;
     bool vec_requires_grad_;
-    Tensor mat_;
-    Tensor vec_;
+    SavedVariable mat_{this, "mat"};
+    SavedVariable vec_{this, "vec"};
 };
 
 class RAXIS_API MmBackward0 : public Node {
@@ -41,8 +42,8 @@ public:
 private:
     bool mat1_requires_grad_;
     bool mat2_requires_grad_;
-    Tensor mat1_;
-    Tensor mat2_;
+    SavedVariable mat1_{this, "mat1"};
+    SavedVariable mat2_{this, "mat2"};
 };
 
 class RAXIS_API BmmBackward0 : public Node {
@@ -54,8 +55,8 @@ public:
 private:
     bool self_requires_grad_;
     bool mat2_requires_grad_;
-    Tensor self_;
-    Tensor mat2_;
+    SavedVariable self_{this, "self"};
+    SavedVariable mat2_{this, "mat2"};
 };
 
 class RAXIS_API AddmmBackward0 : public Node {
@@ -70,8 +71,8 @@ private:
     bool mat1_requires_grad_;
     bool mat2_requires_grad_;
     DimVector self_shape_;
-    Tensor mat1_;
-    Tensor mat2_;
+    SavedVariable mat1_{this, "mat1"};
+    SavedVariable mat2_{this, "mat2"};
     Scalar beta_;
     Scalar alpha_;
 };
@@ -88,8 +89,8 @@ private:
     bool mat_requires_grad_;
     bool vec_requires_grad_;
     DimVector self_shape_;
-    Tensor mat_;
-    Tensor vec_;
+    SavedVariable mat_{this, "mat"};
+    SavedVariable vec_{this, "vec"};
     Scalar beta_;
     Scalar alpha_;
 };
@@ -106,8 +107,8 @@ private:
     bool batch1_requires_grad_;
     bool batch2_requires_grad_;
     DimVector self_shape_;
-    Tensor batch1_;
-    Tensor batch2_;
+    SavedVariable batch1_{this, "batch1"};
+    SavedVariable batch2_{this, "batch2"};
     Scalar beta_;
     Scalar alpha_;
     int64_t batch_size_;

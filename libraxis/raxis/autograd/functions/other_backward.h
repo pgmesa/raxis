@@ -1,6 +1,7 @@
 #pragma once
 
 #include <raxis/autograd/graph.h>
+#include <raxis/autograd/saved_variable.h>
 #include <raxis/tensor/tensor.h>
 
 
@@ -63,7 +64,7 @@ public:
     TensorList apply(const TensorList& grads) override;
 
 private:
-    Tensor condition_;
+    SavedVariable condition_{this, "condition"};
     DimVector self_shape_;
     DimVector other_shape_;
     bool self_requires_grad_;
@@ -77,7 +78,7 @@ public:
     TensorList apply(const TensorList& grads) override;
 
 private:
-    Tensor self_;
+    SavedVariable self_{this, "self"};
     std::optional<Scalar> min_;
     std::optional<Scalar> max_;
 };
@@ -95,7 +96,7 @@ public:
 private:
     DimVector self_shape_;
     int64_t dim_;
-    Tensor index_;
+    SavedVariable index_{this, "index"};
 };
 
 // scatter with a src tensor (inputs: self, src) or a value (input: self)
@@ -107,7 +108,7 @@ public:
 
 private:
     int64_t dim_;
-    Tensor index_;
+    SavedVariable index_{this, "index"};
     bool has_src_;
 };
 
@@ -119,7 +120,7 @@ public:
 
 private:
     int64_t dim_;
-    Tensor index_;
+    SavedVariable index_{this, "index"};
 };
 
 class RAXIS_API IndexSelectBackward0 : public Node {
@@ -131,7 +132,7 @@ public:
 private:
     DimVector self_shape_;
     int64_t dim_;
-    Tensor index_;
+    SavedVariable index_{this, "index"};
 };
 
 class RAXIS_API IndexAddBackward0 : public Node {
@@ -142,7 +143,7 @@ public:
 
 private:
     int64_t dim_;
-    Tensor index_;
+    SavedVariable index_{this, "index"};
     DimVector source_shape_;
 };
 
