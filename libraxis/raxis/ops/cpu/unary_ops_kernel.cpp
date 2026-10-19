@@ -122,6 +122,34 @@ void abs_kernel(TensorIterator& iter) {
     });
 }
 
+// From: aten/src/ATen/native/cpu/UnaryOpsKernel.cpp
+// (0 < a) - (a < 0) is branchless and gives 0 for 0, -0 and NaN. The vector
+// version turns each comparison mask into 0 or 1 with a blend.
+void sign_kernel(TensorIterator& iter) {
+    if (iter.common_dtype().is_bool()) {
+        cpu_kernel(iter, [](bool a) -> bool { return a; });
+        return;
+    }
+    iter.common_dtype().dispatch_all_types_except_bool([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+        const Vectorized<scalar_t> zero_vec(static_cast<scalar_t>(0));
+        const Vectorized<scalar_t> one_vec(static_cast<scalar_t>(1));
+        cpu_kernel_vec(iter,
+            [](scalar_t a) -> scalar_t {
+                if constexpr (std::is_unsigned_v<scalar_t>) {
+                    return static_cast<scalar_t>(a > 0);
+                } else {
+                    return static_cast<scalar_t>((scalar_t(0) < a) - (a < scalar_t(0)));
+                }
+            },
+            [=](Vectorized<scalar_t> a) {
+                auto left = Vectorized<scalar_t>::blendv(zero_vec, one_vec, zero_vec < a);
+                auto right = Vectorized<scalar_t>::blendv(zero_vec, one_vec, a < zero_vec);
+                return left - right;
+            }
+        );
+    });
+}
+
 void ceil_kernel(TensorIterator& iter) {
     iter.common_dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
         cpu_kernel_vec(iter,
@@ -201,6 +229,7 @@ void logical_not_kernel(TensorIterator& iter) {
 
 REGISTER_DISPATCH(neg_stub, &neg_kernel);
 REGISTER_DISPATCH(abs_stub, &abs_kernel);
+REGISTER_DISPATCH(sign_stub, &sign_kernel);
 REGISTER_DISPATCH(ceil_stub, &ceil_kernel);
 REGISTER_DISPATCH(floor_stub, &floor_kernel);
 REGISTER_DISPATCH(round_stub, &round_kernel);

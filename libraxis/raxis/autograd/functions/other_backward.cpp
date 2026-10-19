@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include <raxis/ops/cat_ops.h>
+#include <raxis/ops/tensor_compare.h>
 #include <raxis/autograd/variable.h>
 #include <raxis/tensor/factories.h>
 
@@ -116,6 +117,53 @@ TensorList SplitWithSizesBackward0::apply(const TensorList& grads) {
         }
     }
     return {cat(all_grads, dim_)};
+}
+
+// ============================================================
+// where / clamp
+// ============================================================
+
+WhereBackward0::WhereBackward0(const Tensor& condition, const Tensor& self, const Tensor& other)
+    : condition_(condition),
+      self_shape_(self.shape()),
+      other_shape_(other.shape()),
+      self_requires_grad_(self.requires_grad()),
+      other_requires_grad_(other.requires_grad()) {}
+
+std::string WhereBackward0::name() const { return "WhereBackward0"; }
+
+// Each element of the result came from self or from other: the gradient goes
+// back to the one that was selected and the other gets 0
+TensorList WhereBackward0::apply(const TensorList& grads) {
+    const Tensor& grad = grads[0];
+    Tensor grad_self, grad_other;
+    if (self_requires_grad_)
+        grad_self = unbroadcast(ops::where(condition_, grad, 0), self_shape_);
+    if (other_requires_grad_)
+        grad_other = unbroadcast(ops::where(condition_, 0, grad), other_shape_);
+    return {grad_self, grad_other};
+}
+
+
+ClampBackward1::ClampBackward1(const Tensor& self, std::optional<Scalar> min, std::optional<Scalar> max)
+    : self_(self), min_(min), max_(max) {}
+
+std::string ClampBackward1::name() const { return "ClampBackward1"; }
+
+// From: torch/csrc/autograd/FunctionsManual.cpp (clamp_backward)
+// The gradient passes where the input was strictly inside (min, max). At the
+// bounds the derivative is not defined: torch 2.14 uses 0 there (up to 2.13
+// it used the subgradient 1, with >= and <=).
+TensorList ClampBackward1::apply(const TensorList& grads) {
+    const Tensor& grad = grads[0];
+    if (min_ && max_) {
+        return {ops::where(self_.gt(*min_).logical_and(self_.lt(*max_)), grad, 0)};
+    } else if (min_) {
+        return {ops::where(self_.gt(*min_), grad, 0)};
+    } else if (max_) {
+        return {ops::where(self_.lt(*max_), grad, 0)};
+    }
+    return {grad};
 }
 
 // ============================================================

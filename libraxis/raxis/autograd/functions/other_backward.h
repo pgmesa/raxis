@@ -56,6 +56,32 @@ private:
     int64_t dim_;
 };
 
+class RAXIS_API WhereBackward0 : public Node {
+public:
+    WhereBackward0(const Tensor& condition, const Tensor& self, const Tensor& other);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    Tensor condition_;
+    DimVector self_shape_;
+    DimVector other_shape_;
+    bool self_requires_grad_;
+    bool other_requires_grad_;
+};
+
+class RAXIS_API ClampBackward1 : public Node {
+public:
+    ClampBackward1(const Tensor& self, std::optional<Scalar> min, std::optional<Scalar> max);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    Tensor self_;
+    std::optional<Scalar> min_;
+    std::optional<Scalar> max_;
+};
+
 // ============================================================
 // Shape ops
 // ============================================================

@@ -601,6 +601,7 @@ PYBIND11_MODULE(_C, c) {
         .def("isnan", &raxis::Tensor::isnan)
         .def("neg", &raxis::Tensor::neg)
         .def("abs", &raxis::Tensor::abs)
+        .def("sign", &raxis::Tensor::sign)
         .def("ceil", &raxis::Tensor::ceil)
         .def("floor", &raxis::Tensor::floor)
         .def("round", &raxis::Tensor::round)
@@ -632,6 +633,25 @@ PYBIND11_MODULE(_C, c) {
 
         .def("neg_", &raxis::Tensor::neg_)
         .def("abs_", &raxis::Tensor::abs_)
+        .def("sign_", &raxis::Tensor::sign_)
+        .def("clamp", [](const raxis::Tensor& self, std::optional<raxis::Scalar> min, std::optional<raxis::Scalar> max) {
+            return raxis::clamp(self, min, max);
+        }, py::arg("min") = py::none(), py::arg("max") = py::none())
+        .def("clip", [](const raxis::Tensor& self, std::optional<raxis::Scalar> min, std::optional<raxis::Scalar> max) {
+            return raxis::clamp(self, min, max);
+        }, py::arg("min") = py::none(), py::arg("max") = py::none())
+        .def("clamp_", [](raxis::Tensor& self, std::optional<raxis::Scalar> min, std::optional<raxis::Scalar> max) -> raxis::Tensor& {
+            return raxis::clamp_(self, min, max);
+        }, py::arg("min") = py::none(), py::arg("max") = py::none())
+        .def("clamp_min", &raxis::clamp_min, py::arg("min"))
+        .def("clamp_max", &raxis::clamp_max, py::arg("max"))
+        // x.where(condition, y) is where(condition, x, y)
+        .def("where", [](const raxis::Tensor& self, const raxis::Tensor& condition, const raxis::Tensor& other) {
+            return raxis::where(condition, self, other);
+        }, py::arg("condition"), py::arg("other"))
+        .def("where", [](const raxis::Tensor& self, const raxis::Tensor& condition, raxis::Scalar other) {
+            return raxis::where(condition, self, other);
+        }, py::arg("condition"), py::arg("other"))
         .def("ceil_", &raxis::Tensor::ceil_)
         .def("floor_", &raxis::Tensor::floor_)
         .def("round_", &raxis::Tensor::round_)
@@ -1072,6 +1092,23 @@ PYBIND11_MODULE(_C, c) {
     c.def("neg",
         py::overload_cast<const raxis::Tensor&>(&raxis::neg),
         py::arg("input"));
+    c.def("sign", py::overload_cast<const raxis::Tensor&>(&raxis::sign), py::arg("input"));
+    c.def("clamp", [](const raxis::Tensor& input, std::optional<raxis::Scalar> min, std::optional<raxis::Scalar> max) {
+        return raxis::clamp(input, min, max);
+    }, py::arg("input"), py::arg("min") = py::none(), py::arg("max") = py::none());
+    c.def("clip", [](const raxis::Tensor& input, std::optional<raxis::Scalar> min, std::optional<raxis::Scalar> max) {
+        return raxis::clamp(input, min, max);
+    }, py::arg("input"), py::arg("min") = py::none(), py::arg("max") = py::none());
+    c.def("clamp_min", &raxis::clamp_min, py::arg("input"), py::arg("min"));
+    c.def("clamp_max", &raxis::clamp_max, py::arg("input"), py::arg("max"));
+    c.def("where", py::overload_cast<const raxis::Tensor&, const raxis::Tensor&, const raxis::Tensor&>(&raxis::where),
+        py::arg("condition"), py::arg("input"), py::arg("other"));
+    c.def("where", py::overload_cast<const raxis::Tensor&, const raxis::Tensor&, raxis::Scalar>(&raxis::where),
+        py::arg("condition"), py::arg("input"), py::arg("other"));
+    c.def("where", py::overload_cast<const raxis::Tensor&, raxis::Scalar, const raxis::Tensor&>(&raxis::where),
+        py::arg("condition"), py::arg("input"), py::arg("other"));
+    c.def("where", py::overload_cast<const raxis::Tensor&, raxis::Scalar, raxis::Scalar>(&raxis::where),
+        py::arg("condition"), py::arg("input"), py::arg("other"));
     c.def("abs",
         py::overload_cast<const raxis::Tensor&>(&raxis::abs),
         py::arg("input"));

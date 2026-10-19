@@ -22,6 +22,7 @@ void reciprocal_kernel(TensorIterator& iter);
 
 DECLARE_DISPATCH(unary_fn, neg_stub);
 DECLARE_DISPATCH(unary_fn, abs_stub);
+DECLARE_DISPATCH(unary_fn, sign_stub);
 DECLARE_DISPATCH(unary_fn, ceil_stub);
 DECLARE_DISPATCH(unary_fn, floor_stub);
 DECLARE_DISPATCH(unary_fn, round_stub);
@@ -53,6 +54,7 @@ DECLARE_DISPATCH(unary_fn, erfc_stub);
 // Differentiable unary ops
 RAXIS_DECLARE_UNARY_ARITHMETIC(neg)
 RAXIS_DECLARE_UNARY_ARITHMETIC(abs)
+RAXIS_DECLARE_UNARY_ARITHMETIC(sign)
 RAXIS_DECLARE_UNARY_ARITHMETIC(ceil)
 RAXIS_DECLARE_UNARY_ARITHMETIC(floor)
 RAXIS_DECLARE_UNARY_ARITHMETIC(round)

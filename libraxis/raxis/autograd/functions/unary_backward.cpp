@@ -2,6 +2,9 @@
 
 #include <cmath>
 
+#include <raxis/ops/unary_ops.h>
+#include <raxis/tensor/factories.h>
+
 
 namespace raxis::autograd {
 
@@ -23,10 +26,17 @@ TensorList NegBackward0::apply(const TensorList& grads) {
 AbsBackward0::AbsBackward0(const Tensor& self) : self_(self) {}
 std::string AbsBackward0::name() const { return "AbsBackward0"; }
 
+// d|x|/dx = sign(x), with 0 at x = 0 (subgradient), as in torch
 TensorList AbsBackward0::apply(const TensorList& grads) {
-    Tensor pos = (self_ > 0.0).to(self_.dtype());
-    Tensor neg = (self_ < 0.0).to(self_.dtype());
-    return {grads[0] * (pos - neg)};
+    return {grads[0] * ops::sign(self_)};
+}
+
+
+std::string SignBackward0::name() const { return "SignBackward0"; }
+
+// sign is piecewise constant
+TensorList SignBackward0::apply(const TensorList& grads) {
+    return {zeros_like(grads[0])};
 }
 
 

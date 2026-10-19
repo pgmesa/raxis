@@ -1,10 +1,13 @@
 
 #include <raxis/ops/copy.h>
 #include <raxis/ops/cat_ops.h>
+#include <raxis/ops/scalar_ops.h>
+#include <raxis/ops/tensor_compare.h>
 
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/tensor_shape.h>
 #include <raxis/tensor/shape_utils.h>
+#include <raxis/tensor/type_promotion.h>
 
 #include <raxis/autograd/grad_mode.h>
 #include <raxis/autograd/variable.h>
@@ -196,6 +199,64 @@ Tensor broadcast_to(const Tensor& self, IntArrayRef shape) {
     return expand(self, shape);
 }
 
+
+// ============================================================
+// where / clamp
+// ============================================================
+
+Tensor where(const Tensor& condition, const Tensor& self, const Tensor& other) {
+    Tensor result = ops::where(condition, self, other);
+    if (autograd::requires_autograd(self, other)) {
+        auto grad_fn = std::make_shared<autograd::WhereBackward0>(condition, self, other);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self, other);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor where(const Tensor& condition, const Tensor& self, Scalar other) {
+    return where(condition, self, wrapped_scalar_tensor(other, self.device()));
+}
+
+Tensor where(const Tensor& condition, Scalar self, const Tensor& other) {
+    return where(condition, wrapped_scalar_tensor(self, other.device()), other);
+}
+
+// From: aten/src/ATen/native/TensorCompare.cpp
+// Two scalars give a tensor of their promoted dtype (float scalars give the
+// default float dtype) with the shape of the condition
+Tensor where(const Tensor& condition, Scalar self, Scalar other) {
+    Tensor self_t = wrapped_scalar_tensor(self, condition.device());
+    Tensor other_t = wrapped_scalar_tensor(other, condition.device());
+    Dtype dtype = result_type({self_t, other_t});
+    return ops::where(condition, self_t.to(dtype), other_t.to(dtype));
+}
+
+Tensor clamp(const Tensor& self, std::optional<Scalar> min, std::optional<Scalar> max) {
+    Tensor result = ops::clamp(self, min, max);
+    if (autograd::requires_autograd(self)) {
+        auto grad_fn = std::make_shared<autograd::ClampBackward1>(self, min, max);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor& clamp_(Tensor& self, std::optional<Scalar> min, std::optional<Scalar> max) {
+    RAXIS_CHECK(!autograd::requires_autograd(self),
+        "a leaf Variable that requires grad is being used in an in-place operation (clamp_)");
+    return ops::clamp_(self, min, max);
+}
+
+Tensor clamp_min(const Tensor& self, Scalar min) {
+    return clamp(self, min, std::nullopt);
+}
+
+Tensor clamp_max(const Tensor& self, Scalar max) {
+    return clamp(self, std::nullopt, max);
+}
 
 // ============================================================
 // Copies

@@ -61,6 +61,7 @@ Tensor& neg_(Tensor& self) {
 }
 
 RAXIS_UNARY_OP(abs, unary_op_config, abs_stub)
+RAXIS_UNARY_OP(sign, unary_op_config, sign_stub)
 
 // Integer identity ops
 Tensor ceil(const Tensor& self) {
@@ -190,6 +191,7 @@ Tensor& logical_not_(Tensor& self) {
 
 DEFINE_DISPATCH(neg_stub);
 DEFINE_DISPATCH(abs_stub);
+DEFINE_DISPATCH(sign_stub);
 DEFINE_DISPATCH(ceil_stub);
 DEFINE_DISPATCH(floor_stub);
 DEFINE_DISPATCH(round_stub);

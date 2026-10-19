@@ -62,4 +62,12 @@ Dtype compute_promoted_dtype(const PromotionState& state) {
     );
 }
 
+Dtype result_type(ArrayRef<Tensor> tensors) {
+    PromotionState state;
+    for (const Tensor& t : tensors) {
+        state = update_promotion_state(t, state);
+    }
+    return compute_promoted_dtype(state);
+}
+
 } // namespace raxis

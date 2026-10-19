@@ -561,6 +561,7 @@ Tensor Tensor::logical_or (const Tensor& other) const { return ::raxis::logical_
 // ====================== Unary Operations =====================
 Tensor Tensor::neg() const { return ::raxis::neg(*this); }
 Tensor Tensor::abs() const { return ::raxis::abs(*this); }
+Tensor Tensor::sign() const { return ::raxis::sign(*this); }
 Tensor Tensor::ceil() const { return ::raxis::ceil(*this); }
 Tensor Tensor::floor() const { return ::raxis::floor(*this); }
 Tensor Tensor::round() const { return ::raxis::round(*this); }
@@ -592,6 +593,7 @@ Tensor Tensor::erfc() const { return ::raxis::erfc(*this); }
 
 Tensor& Tensor::neg_() const { return ::raxis::neg_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::abs_() const { return ::raxis::abs_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::sign_() const { return ::raxis::sign_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::ceil_() const { return ::raxis::ceil_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::floor_() const { return ::raxis::floor_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::round_() const { return ::raxis::round_(const_cast<Tensor&>(*this)); }

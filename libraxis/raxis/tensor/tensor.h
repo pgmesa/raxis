@@ -277,6 +277,7 @@ public:
     // ====================== Unary Operations =====================
     Tensor neg() const;
     Tensor abs() const;
+    Tensor sign() const;
     Tensor ceil() const;
     Tensor floor() const;
     Tensor round() const;
@@ -308,6 +309,7 @@ public:
     
     Tensor& neg_() const;
     Tensor& abs_() const;
+    Tensor& sign_() const;
     Tensor& ceil_() const;
     Tensor& floor_() const;
     Tensor& round_() const;

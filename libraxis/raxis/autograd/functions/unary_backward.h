@@ -13,6 +13,12 @@ public:
     TensorList apply(const TensorList& grads) override;
 };
 
+class RAXIS_API SignBackward0 : public Node {
+public:
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+};
+
 class RAXIS_API AbsBackward0 : public Node {
 public:
     explicit AbsBackward0(const Tensor& self);
