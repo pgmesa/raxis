@@ -327,5 +327,6 @@ class TestIteration:
         np.testing.assert_array_equal(np.array(x.grad), np.ones((3, 2), dtype=np.float32))
 
     def test_zero_dim_raises(self):
-        with pytest.raises(RuntimeError):
+        # TypeError, as torch
+        with pytest.raises(TypeError):
             iter(raxis.tensor(1.0))

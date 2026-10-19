@@ -41,6 +41,9 @@ PYBIND11_MODULE(_C, c) {
     py::register_exception_translator([](std::exception_ptr p) {
         try {
             if (p) std::rethrow_exception(p);
+        } catch (const py::builtin_exception& e) {
+            // py::type_error, py::index_error, ...: keep their Python type
+            e.set_error();
         } catch (const std::exception& e) {
             PyErr_SetString(PyExc_RuntimeError, e.what());
         }
@@ -164,7 +167,7 @@ PYBIND11_MODULE(_C, c) {
         })
         // Iterates over dim 0, as torch does (iter(self.unbind(0)))
         .def("__iter__", [](const raxis::Tensor& self) {
-            RAXIS_CHECK(self.ndim() > 0, "iteration over a 0-d tensor");
+            if (self.ndim() == 0) throw py::type_error("iteration over a 0-d tensor");
             return py::iter(py::cast(raxis::unbind(self, 0)));
         })
         
