@@ -2,6 +2,7 @@
 #include <raxis/autograd/functions/reduce_backward.h>
 
 #include <bitset>
+#include <limits>
 
 #include <raxis/autograd/variable.h>
 #include <raxis/tensor/factories.h>

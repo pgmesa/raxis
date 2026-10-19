@@ -1,6 +1,7 @@
 #include <raxis/ops/reduce_ops.h>
 
 #include <algorithm>
+#include <cmath>
 #include <numeric>
 #include <optional>
 #include <limits>
