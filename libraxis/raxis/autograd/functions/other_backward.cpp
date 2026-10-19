@@ -64,8 +64,58 @@ UnbindBackward0::UnbindBackward0(const Tensor& self, int64_t dim, int64_t num_ou
 
 std::string UnbindBackward0::name() const { return "UnbindBackward0"; }
 
+// From: torch/csrc/autograd/FunctionsManual.cpp (unbind_backward)
+// Outputs that were not used have no gradient: they count as zeros, made
+// with a 0-d zero expanded to the right shape (no allocation)
 TensorList UnbindBackward0::apply(const TensorList& grads) {
-    return {stack(grads, dim_)};
+    const Tensor* defined = nullptr;
+    for (const Tensor& g : grads) {
+        if (g.defined()) {
+            defined = &g;
+            break;
+        }
+    }
+    RAXIS_INTERNAL_ASSERT(defined, "UnbindBackward0 called without any gradient");
+
+    TensorList all_grads;
+    all_grads.reserve(grads.size());
+    for (const Tensor& g : grads) {
+        all_grads.push_back(g.defined() ? g : zeros({}, defined->options()).expand(defined->shape()));
+    }
+    return {stack(all_grads, dim_)};
+}
+
+
+SplitWithSizesBackward0::SplitWithSizesBackward0(
+    const Tensor& self, IntArrayRef split_sizes, int64_t dim)
+    : self_shape_(self.shape()), split_sizes_(split_sizes), dim_(dim) {}
+
+std::string SplitWithSizesBackward0::name() const { return "SplitWithSizesBackward0"; }
+
+// From: torch/csrc/autograd/FunctionsManual.cpp (split_with_sizes_backward)
+// The input grad is the output grads glued back together; unused pieces
+// count as zeros
+TensorList SplitWithSizesBackward0::apply(const TensorList& grads) {
+    TensorOptions options;
+    for (const Tensor& g : grads) {
+        if (g.defined()) {
+            options = g.options();
+            break;
+        }
+    }
+
+    TensorList all_grads;
+    all_grads.reserve(grads.size());
+    for (size_t i = 0; i < grads.size(); i++) {
+        if (grads[i].defined()) {
+            all_grads.push_back(grads[i]);
+        } else {
+            DimVector shape(self_shape_);
+            shape[dim_] = split_sizes_[i];
+            all_grads.push_back(zeros(shape, options));
+        }
+    }
+    return {cat(all_grads, dim_)};
 }
 
 // ============================================================
