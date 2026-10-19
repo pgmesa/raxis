@@ -108,6 +108,33 @@ private:
     bool keepdim_;
 };
 
+class RAXIS_API VarBackward0 : public Node {
+public:
+    VarBackward0(const Tensor& self, IntArrayRef dim, double correction, bool keepdim);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    Tensor self_;
+    DimVector dim_;
+    double correction_;
+    bool keepdim_;
+};
+
+class RAXIS_API StdBackward0 : public Node {
+public:
+    StdBackward0(const Tensor& self, const Tensor& result, IntArrayRef dim, double correction, bool keepdim);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    Tensor self_;
+    SavedVariable result_;
+    DimVector dim_;
+    double correction_;
+    bool keepdim_;
+};
+
 // max(dim) / min(dim): the gradient goes to the selected element
 class RAXIS_API MaxBackward0 : public Node {
 public:

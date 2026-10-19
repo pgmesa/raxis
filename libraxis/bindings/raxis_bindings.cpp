@@ -774,6 +774,22 @@ PYBIND11_MODULE(_C, c) {
         .def("index_add_", [](raxis::Tensor& self, int64_t dim, const raxis::Tensor& index, const raxis::Tensor& source) -> raxis::Tensor& {
             return raxis::index_add_(self, dim, index, source);
         }, py::arg("dim"), py::arg("index"), py::arg("source"))
+        .def("var", [](const raxis::Tensor& self, std::optional<raxis::VecOrInt> dim, std::optional<bool> unbiased,
+               bool keepdim, std::optional<double> correction) {
+            // unbiased (bool) is the older spelling of correction 1 / 0
+            RAXIS_CHECK(!(unbiased && correction), "Cannot pass both unbiased and correction");
+            if (unbiased) correction = *unbiased ? 1.0 : 0.0;
+            return raxis::var(self, dim.value_or(raxis::VecOrInt{}), correction, keepdim);
+        }, py::arg("dim") = py::none(), py::arg("unbiased") = py::none(), py::arg("keepdim") = false,
+           py::kw_only(), py::arg("correction") = py::none())
+        .def("std", [](const raxis::Tensor& self, std::optional<raxis::VecOrInt> dim, std::optional<bool> unbiased,
+               bool keepdim, std::optional<double> correction) {
+            // unbiased (bool) is the older spelling of correction 1 / 0
+            RAXIS_CHECK(!(unbiased && correction), "Cannot pass both unbiased and correction");
+            if (unbiased) correction = *unbiased ? 1.0 : 0.0;
+            return raxis::std(self, dim.value_or(raxis::VecOrInt{}), correction, keepdim);
+        }, py::arg("dim") = py::none(), py::arg("unbiased") = py::none(), py::arg("keepdim") = false,
+           py::kw_only(), py::arg("correction") = py::none())
         .def("argmax", [](const raxis::Tensor& self, std::optional<int64_t> dim, bool keepdim) {
             return raxis::argmax(self, dim, keepdim);
         }, py::arg("dim") = py::none(), py::arg("keepdim") = false)
@@ -1322,6 +1338,22 @@ PYBIND11_MODULE(_C, c) {
     c.def("scatter_add", &raxis::scatter_add, py::arg("input"), py::arg("dim"), py::arg("index"), py::arg("src"));
     c.def("index_select", &raxis::index_select, py::arg("input"), py::arg("dim"), py::arg("index"));
     c.def("index_add", &raxis::index_add, py::arg("input"), py::arg("dim"), py::arg("index"), py::arg("source"));
+    c.def("var", [](const raxis::Tensor& input, std::optional<raxis::VecOrInt> dim, std::optional<bool> unbiased,
+               bool keepdim, std::optional<double> correction) {
+            // unbiased (bool) is the older spelling of correction 1 / 0
+            RAXIS_CHECK(!(unbiased && correction), "Cannot pass both unbiased and correction");
+            if (unbiased) correction = *unbiased ? 1.0 : 0.0;
+            return raxis::var(input, dim.value_or(raxis::VecOrInt{}), correction, keepdim);
+    }, py::arg("input"), py::arg("dim") = py::none(), py::arg("unbiased") = py::none(), py::arg("keepdim") = false,
+       py::kw_only(), py::arg("correction") = py::none());
+    c.def("std", [](const raxis::Tensor& input, std::optional<raxis::VecOrInt> dim, std::optional<bool> unbiased,
+               bool keepdim, std::optional<double> correction) {
+            // unbiased (bool) is the older spelling of correction 1 / 0
+            RAXIS_CHECK(!(unbiased && correction), "Cannot pass both unbiased and correction");
+            if (unbiased) correction = *unbiased ? 1.0 : 0.0;
+            return raxis::std(input, dim.value_or(raxis::VecOrInt{}), correction, keepdim);
+    }, py::arg("input"), py::arg("dim") = py::none(), py::arg("unbiased") = py::none(), py::arg("keepdim") = false,
+       py::kw_only(), py::arg("correction") = py::none());
     c.def("argmax", [](const raxis::Tensor& input, std::optional<int64_t> dim, bool keepdim) {
         return raxis::argmax(input, dim, keepdim);
     }, py::arg("input"), py::arg("dim") = py::none(), py::arg("keepdim") = false);

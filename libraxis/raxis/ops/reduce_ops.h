@@ -36,6 +36,9 @@ DECLARE_DISPATCH(reduce_fn, min_values_stub);
 DECLARE_DISPATCH(reduce_fn, argmax_stub);
 DECLARE_DISPATCH(reduce_fn, argmin_stub);
 
+using std_var_fn = void(*)(TensorIterator&, double correction, bool take_sqrt);
+DECLARE_DISPATCH(std_var_fn, std_var_stub);
+
 RAXIS_API Tensor sum(
     const Tensor& self,
     std::optional<Dtype> dtype = std::nullopt
@@ -166,6 +169,21 @@ RAXIS_API Tensor argmin(
     bool keepdim = false
 );
 
+/// Variance and standard deviation over dim (all dims if empty), dividing
+/// by n - correction (1 by default: the unbiased estimator)
+RAXIS_API Tensor var(
+    const Tensor& self,
+    IntArrayRef dim = {},
+    std::optional<double> correction = std::nullopt,
+    bool keepdim = false
+);
+RAXIS_API Tensor std(
+    const Tensor& self,
+    IntArrayRef dim = {},
+    std::optional<double> correction = std::nullopt,
+    bool keepdim = false
+);
+
 
 namespace ops {
 
@@ -256,6 +274,21 @@ RAXIS_API Tensor argmax(
 RAXIS_API Tensor argmin(
     const Tensor& self,
     std::optional<int64_t> dim = std::nullopt,
+    bool keepdim = false
+);
+
+/// Variance and standard deviation over dim (all dims if empty), dividing
+/// by n - correction (1 by default: the unbiased estimator)
+RAXIS_API Tensor var(
+    const Tensor& self,
+    IntArrayRef dim = {},
+    std::optional<double> correction = std::nullopt,
+    bool keepdim = false
+);
+RAXIS_API Tensor std(
+    const Tensor& self,
+    IntArrayRef dim = {},
+    std::optional<double> correction = std::nullopt,
     bool keepdim = false
 );
     

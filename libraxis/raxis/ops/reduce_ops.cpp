@@ -13,6 +13,7 @@
 #include <raxis/core/constants.h>
 
 #include <raxis/util/exception.h>
+#include <raxis/util/parallel.h>
 
 #include <raxis/tensor/tensor.h>
 
@@ -311,6 +312,71 @@ static Tensor argmax_argmin_impl(
     return result;
 }
 
+// From: aten/src/ATen/native/ReduceOps.cpp (std_var_all_cpu)
+// Reducing everything to one value, a plain two-pass algorithm in double is
+// faster than Welford (whose division per element does not vectorize) and
+// accurate enough: mean first, then sum((x - mean)^2) in parallel.
+static double std_var_all_cpu(const Tensor& self, double correction, bool take_sqrt) {
+    double mean = ops::mean(self).item().to<double>();
+    auto iter = TensorIteratorConfig()
+        .add_input(self)
+        .build();
+
+    auto reduction = [&](int64_t begin, int64_t end, double thread_sum) {
+        self.dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+            iter.serial_for_each([&](char** data, const int64_t* strides, int64_t size0, int64_t size1) {
+                const int64_t inner_stride = strides[0];
+                const int64_t outer_stride = strides[1];
+                double local_sum = 0.0;
+                for (int64_t i = 0; i < size1; i++) {
+                    const char* row = data[0] + outer_stride * i;
+                    for (int64_t j = 0; j < size0; j++) {
+                        double dx = static_cast<double>(
+                            *reinterpret_cast<const scalar_t*>(row + inner_stride * j)) - mean;
+                        local_sum += dx * dx;
+                    }
+                }
+                thread_sum += local_sum;
+            }, {begin, end});
+        });
+        return thread_sum;
+    };
+
+    double sum_dx2 = parallel_reduce(
+        int64_t{0}, iter.numel(), detail::GRAIN_SIZE, 0.0, reduction, std::plus<>{});
+    double var = sum_dx2 / std::max(0.0, static_cast<double>(self.numel()) - correction);
+    return take_sqrt ? std::sqrt(var) : var;
+}
+
+// From: aten/src/ATen/native/ReduceOps.cpp (std_var_out)
+static Tensor std_var(
+    const char* name, const Tensor& self, IntArrayRef dim,
+    std::optional<double> correction_opt, bool keepdim, bool take_sqrt
+) {
+    RAXIS_CHECK(self.dtype().is_floating(),
+        "std and var only support floating point and complex dtypes");
+    double correction = correction_opt.value_or(1.0);
+
+    Tensor result;
+    auto iter = make_reduction(name, self, result, dim, keepdim, self.dtype());
+    if (iter.numel() == 0) {
+        result.fill_(std::numeric_limits<double>::quiet_NaN());
+    } else if (result.numel() == 1) {
+        result.fill_(std_var_all_cpu(self, correction, take_sqrt));
+    } else {
+        std_var_stub(iter.device_type(), iter, correction, take_sqrt);
+    }
+    return result;
+}
+
+Tensor var(const Tensor& self, IntArrayRef dim, std::optional<double> correction, bool keepdim) {
+    return std_var("var", self, dim, correction, keepdim, /*take_sqrt=*/false);
+}
+
+Tensor std(const Tensor& self, IntArrayRef dim, std::optional<double> correction, bool keepdim) {
+    return std_var("std", self, dim, correction, keepdim, /*take_sqrt=*/true);
+}
+
 Tensor argmax(const Tensor& self, std::optional<int64_t> dim, bool keepdim) {
     return argmax_argmin_impl("argmax()", self, dim, keepdim, argmax_stub);
 }
@@ -331,5 +397,6 @@ DEFINE_DISPATCH(max_values_stub);
 DEFINE_DISPATCH(min_values_stub);
 DEFINE_DISPATCH(argmax_stub);
 DEFINE_DISPATCH(argmin_stub);
+DEFINE_DISPATCH(std_var_stub);
 
 } // namespace raxis

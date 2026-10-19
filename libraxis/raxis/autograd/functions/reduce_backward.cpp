@@ -6,6 +6,7 @@
 #include <raxis/autograd/variable.h>
 #include <raxis/tensor/factories.h>
 #include <raxis/ops/tensor_advanced_indexing.h>
+#include <raxis/ops/tensor_compare.h>
 
 
 namespace raxis::autograd {
@@ -170,6 +171,53 @@ TensorList AminBackward0::apply(const TensorList& grads) {
     return {grad.broadcast_to(self_.shape()) * mask / num_matches.broadcast_to(self_.shape())};
 }
 
+
+// From: torch/csrc/autograd/FunctionsManual.cpp (var_backward)
+// d var / dx_i = 2 (x_i - mean) / (n - correction)
+static Tensor var_backward(
+    Tensor grad, const Tensor& self, IntArrayRef dim, double correction, bool keepdim
+) {
+    if (self.ndim() == 0 || dim.empty()) {
+        double dof = static_cast<double>(self.numel()) - correction;
+        if (dof <= 0) {
+            // 2 / dof is infinite: inf * (x - mean), NaN where x == mean
+            return grad * ::raxis::where(self.eq(self.mean()),
+                std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity());
+        }
+        return grad * (2.0 / dof) * (self - self.mean());
+    }
+    if (!keepdim && self.ndim() > 1) {
+        grad = unsqueeze_reduced_dims(grad, self.shape(), dim);
+    }
+    int64_t count = 1;
+    for (int64_t d : dim) {
+        count *= self.shape()[d < 0 ? d + self.ndim() : d];
+    }
+    return grad * (2.0 / (static_cast<double>(count) - correction)) * (self - self.mean(dim, /*keepdim=*/true));
+}
+
+VarBackward0::VarBackward0(const Tensor& self, IntArrayRef dim, double correction, bool keepdim)
+    : self_(self), dim_(dim), correction_(correction), keepdim_(keepdim) {}
+
+std::string VarBackward0::name() const { return "VarBackward0"; }
+
+TensorList VarBackward0::apply(const TensorList& grads) {
+    return {var_backward(grads[0], self_, dim_, correction_, keepdim_)};
+}
+
+StdBackward0::StdBackward0(
+    const Tensor& self, const Tensor& result, IntArrayRef dim, double correction, bool keepdim)
+    : self_(self), result_(result, /*is_output=*/true), dim_(dim),
+      correction_(correction), keepdim_(keepdim) {}
+
+std::string StdBackward0::name() const { return "StdBackward0"; }
+
+// std = sqrt(var): d std = d var / (2 std), and 0 where std is 0
+TensorList StdBackward0::apply(const TensorList& grads) {
+    Tensor result = result_.unpack();
+    Tensor grad_var = ops::where(result.eq(0.0), 0, grads[0] / (result * 2.0));
+    return {var_backward(grad_var, self_, dim_, correction_, keepdim_)};
+}
 
 MaxBackward0::MaxBackward0(const Tensor& self, int64_t dim, const Tensor& indices, bool keepdim)
     : self_shape_(self.shape()), dim_(dim), indices_(indices), keepdim_(keepdim) {}

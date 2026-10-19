@@ -78,6 +78,17 @@ void arg_reduce_kernel(TensorIterator& iter, bool find_max) {
     });
 }
 
+// From: aten/src/ATen/native/cpu/ReduceOpsKernel.cpp
+// Welford per output element, accumulating in double
+void std_var_kernel(TensorIterator& iter, double correction, bool take_sqrt) {
+    iter.dtype(0).dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+        binary_kernel_reduce<scalar_t>(
+            iter,
+            WelfordOps<scalar_t, double, int64_t, scalar_t>{correction, take_sqrt},
+            WelfordData<double, int64_t>());
+    });
+}
+
 void argmax_kernel(TensorIterator& iter) {
     arg_reduce_kernel<ArgMaxOps>(iter, /*find_max=*/true);
 }
@@ -92,6 +103,7 @@ REGISTER_DISPATCH(mean_stub, nullptr);
 REGISTER_DISPATCH(prod_stub, &prod_kernel);
 REGISTER_DISPATCH(max_values_stub, &max_values_kernel);
 REGISTER_DISPATCH(min_values_stub, &min_values_kernel);
+REGISTER_DISPATCH(std_var_stub, &std_var_kernel);
 REGISTER_DISPATCH(argmax_stub, &argmax_kernel);
 REGISTER_DISPATCH(argmin_stub, &argmin_kernel);
 

@@ -174,6 +174,30 @@ Tensor min(const Tensor& self) {
 }
 
 
+Tensor var(const Tensor& self, IntArrayRef dim, std::optional<double> correction, bool keepdim) {
+    Tensor result = ops::var(self, dim, correction, keepdim);
+    if (autograd::requires_autograd(self)) {
+        auto grad_fn = std::make_shared<autograd::VarBackward0>(
+            self, dim, correction.value_or(1.0), keepdim);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor std(const Tensor& self, IntArrayRef dim, std::optional<double> correction, bool keepdim) {
+    Tensor result = ops::std(self, dim, correction, keepdim);
+    if (autograd::requires_autograd(self)) {
+        auto grad_fn = std::make_shared<autograd::StdBackward0>(
+            self, result, dim, correction.value_or(1.0), keepdim);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
 Tensor argmax(const Tensor& self, std::optional<int64_t> dim, bool keepdim) {
     return ops::argmax(self, dim, keepdim);
 }
