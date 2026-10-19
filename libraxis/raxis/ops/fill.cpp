@@ -44,7 +44,9 @@ static Tensor& zero_cpu_(Tensor &self, int64_t nelements) {
 
 Tensor& zero_(Tensor& self) {
     int64_t numel = self.numel();
-    if (self.device() == DeviceType::CPU && numel < detail::GRAIN_SIZE) {
+    // memset is only valid when the elements fill one block of memory
+    if (self.device() == DeviceType::CPU && self.is_non_overlapping_and_dense() &&
+        numel < detail::GRAIN_SIZE) {
         return zero_cpu_(self, numel);
     }
 
