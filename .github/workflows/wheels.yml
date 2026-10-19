@@ -22,12 +22,13 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.validate.outputs.version }}
+      prerelease: ${{ steps.validate.outputs.prerelease }}
 
     steps:
       - uses: actions/checkout@v7
 
       - id: validate
-        uses: pgmesa/actions/validate-tag@validate-tag/v1.0.0
+        uses: pgmesa/actions/validate-tag@validate-tag/v1.1.0
         with:
           tag: ${{ github.ref_name }}
           version-file: raxis/__init__.py
@@ -97,10 +98,15 @@ jobs:
         with:
           skip-existing: true
 
+      # A pre-release lists the commits since the previous tag; a stable
+      # release, everything since the previous stable one. The args are split
+      # into words unquoted, hence \d instead of a [0-9] glob
       - id: notes
-        uses: pgmesa/actions/git-cliff@git-cliff/v1.0.0
+        uses: pgmesa/actions/git-cliff@git-cliff/v1.1.0
         with:
-          args: --latest --strip header
+          args: >-
+            --current --strip header
+            ${{ needs.validate.outputs.prerelease == 'false' && '--tag-pattern ^v\d+\.\d+\.\d+$' || '' }}
 
       # The tag was pushed by hand: GITHUB_TOKEN cannot create it
       - name: Create the GitHub release
@@ -109,3 +115,4 @@ jobs:
           --verify-tag
           --title "$GITHUB_REF_NAME"
           --notes-file "${{ steps.notes.outputs.file }}"
+          ${{ needs.validate.outputs.prerelease == 'true' && '--prerelease' || '' }}
