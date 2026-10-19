@@ -947,6 +947,79 @@ OUTPUT_SAVING_OPS = [
 ]
 
 
+class TestEngine:
+
+    DEPTH = 100_000
+
+    @pytest.mark.parametrize("op", [lambda y: y + 1.0, lambda y: y * 1.0, lambda y: y.exp() * 0.0 + y],
+                             ids=["add", "mul", "exp"])
+    def test_deep_chain_backward(self, op):
+        # A recursive engine (or recursive node destructors) overflows the stack here
+        x = raxis.tensor([1.0], requires_grad=True)
+        y = x
+        for _ in range(self.DEPTH // 3):
+            y = op(y)
+        y.sum().backward()
+        check_match(x.grad, torch.ones(1))
+
+    def test_deep_chain_freed_without_backward(self):
+        x = raxis.tensor([1.0], requires_grad=True)
+        y = x
+        for _ in range(self.DEPTH):
+            y = y + 1.0
+        del y
+
+    def test_diamond(self):
+        def f(x):
+            a = x * 2.0
+            return (a.exp() * a.sin() + a).sum()
+        r, t = make_grad_pair(randf(5, 4))
+        f(r).backward()
+        f(t).backward()
+        check_match(r.grad, t.grad, atol=1e-4)
+
+    def test_user_gradient_not_modified(self):
+        # AddBackward0 passes the same gradient to both edges, so the buffer of
+        # a's node gets the user's tensor twice: it must not be summed in place
+        r, t = make_grad_pair(randf(3, 4))
+        g = raxis.ones((3, 4))
+        a = r * 2.0
+        (a + a).backward(g)
+        check_match(g, torch.ones(3, 4))
+        a = t * 2.0
+        (a + a).backward(torch.ones(3, 4))
+        check_match(r.grad, t.grad)
+
+    def test_broadcast_gradient(self):
+        # SumBackward0 returns an expanded (stride 0) gradient: not writable
+        r, t = make_grad_pair(randf(3, 4))
+        a = r * 2.0
+        (a.sum() + (a * 3.0).sum() + a.sum()).backward()
+        a = t * 2.0
+        (a.sum() + (a * 3.0).sum() + a.sum()).backward()
+        check_match(r.grad, t.grad)
+
+    def test_retained_grad_not_modified(self):
+        # b.grad is the same tensor that b's node passes on to a's buffer,
+        # where c's gradient arrives later
+        def f(x):
+            a = x * 2.0
+            c = a * 5.0
+            b = a + 1.0
+            b.retain_grad()
+            ((b * 3.0).sum() + c.sum()).backward()
+            return b
+        r, t = make_grad_pair(randf(3, 4))
+        check_match(f(r).grad, f(t).grad)
+        check_match(r.grad, t.grad)
+
+    def test_unused_output_of_multi_output_op(self):
+        r, t = make_grad_pair(randf(4, 3))
+        r.unbind(0)[1].sum().backward()
+        t.unbind(0)[1].sum().backward()
+        check_match(r.grad, t.grad)
+
+
 class TestGraphLifetime:
 
     @pytest.mark.parametrize("name, op", OUTPUT_SAVING_OPS,

@@ -1,6 +1,8 @@
 
 #include <raxis/autograd/variable.h>
 
+#include <cstdint>
+
 #include <raxis/util/exception.h>
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/factories.h>
@@ -13,7 +15,11 @@
 
 namespace raxis::autograd {
 
-AccumulateGrad::AccumulateGrad(const Tensor& variable) : variable_(variable) {
+// From: torch/csrc/autograd/functions/accumulate_grad.cpp
+// The highest sequence_nr: once ready, a leaf runs before any other node, so
+// its gradient leaves the engine's buffers as early as possible.
+AccumulateGrad::AccumulateGrad(const Tensor& variable)
+    : Node(/*sequence_nr=*/UINT64_MAX), variable_(variable) {
     RAXIS_INTERNAL_ASSERT(variable.requires_grad(),
         "AccumulateGrad: variable does not require grad");
     set_num_inputs(1);
