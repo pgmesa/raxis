@@ -24,8 +24,8 @@ Tensor& copy(const Tensor& a, Tensor& out) {
 
 namespace ops {
 
-Tensor clone(const Tensor& self) {
-    Tensor out = empty_like(self);
+Tensor clone(const Tensor& self, MemoryFormat memory_format) {
+    Tensor out = empty_like(self, {}, memory_format);
     copy(self, out);
     return out;
 }

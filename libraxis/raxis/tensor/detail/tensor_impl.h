@@ -58,6 +58,9 @@ public:
     int64_t numel() const;
     int64_t storage_offset() const;
 
+    bool is_contiguous() const;
+    bool is_non_overlapping_and_dense() const;
+
     const std::shared_ptr<StorageImpl>& storage() const;
 
     // -- Autograd --
@@ -65,6 +68,10 @@ public:
     void set_autograd_meta(std::unique_ptr<autograd::AutogradMeta> meta);
 
 private:
+    // Shape and strides never change after construction, so the layout
+    // properties are computed once instead of on every check
+    void compute_layout();
+
     std::shared_ptr<StorageImpl> storage_;
     int64_t storage_offset_ = 0;
 
@@ -74,6 +81,8 @@ private:
 
     int64_t numel_;
     bool is_wrapped_number_ = false;
+    bool is_contiguous_ = true;
+    bool is_non_overlapping_and_dense_ = true;
 
     // Autograd metadata
     std::unique_ptr<autograd::AutogradMeta> autograd_meta_;

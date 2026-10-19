@@ -125,22 +125,17 @@ Scalar Tensor::item() const {
 
 bool Tensor::is_contiguous() const {
     ensure_defined("is_contiguous");
-    IntArrayRef sh = shape();
-    IntArrayRef st = strides();
-    if (sh.empty()) return true;
-    
-    int64_t expected_stride = 1;
-    for (int i = static_cast<int>(sh.size()) - 1; i >= 0; --i) {
-        if (sh[i] == 1) continue;
-        if (st[i] != expected_stride) return false;
-        expected_stride *= sh[i];
-    }
-    return true;
+    return impl_->is_contiguous();
+}
+
+bool Tensor::is_non_overlapping_and_dense() const {
+    ensure_defined("is_non_overlapping_and_dense");
+    return impl_->is_non_overlapping_and_dense();
 }
 
 Tensor Tensor::contiguous() const {
     if (is_contiguous()) return *this;
-    return clone();
+    return clone(MemoryFormat::Contiguous);
 }
 
 bool Tensor::is_cpu() const {
@@ -355,8 +350,8 @@ Tensor& Tensor::copy_(const Tensor& other) const {
     return ::raxis::copy(other, const_cast<Tensor&>(*this));
 }
 
-Tensor Tensor::clone() const {
-    return ::raxis::clone(*this);
+Tensor Tensor::clone(MemoryFormat memory_format) const {
+    return ::raxis::clone(*this, memory_format);
 }
 
 Tensor Tensor::to(Dtype new_dtype) const {

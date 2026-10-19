@@ -83,6 +83,14 @@ Tensor from_blob(
     );
 }
 
+static void set_requires_grad(Tensor& t, const TensorOptions& options) {
+    if (options.requires_grad()) {
+        RAXIS_CHECK(t.dtype().is_floating(),
+            "Only floating point tensors can require gradients");
+        t.requires_grad_(true);
+    }
+}
+
 Tensor empty(IntArrayRef shape, TensorOptions options) {
     Dtype dtype = options.dtype();
     size_t nbytes = static_cast<size_t>(compute_numel(shape)) * dtype.itemsize();
@@ -90,11 +98,7 @@ Tensor empty(IntArrayRef shape, TensorOptions options) {
     Tensor t(std::make_shared<detail::TensorImpl>(
         std::move(data_ptr), nbytes, shape, std::nullopt, dtype)
     );
-    if (options.requires_grad()) {
-        RAXIS_CHECK(dtype.is_floating(),
-            "Only floating point tensors can require gradients");
-        t.requires_grad_(true);
-    }
+    set_requires_grad(t, options);
     return t;
 }
 
@@ -104,13 +108,29 @@ Tensor empty_strided(IntArrayRef shape, IntArrayRef strides, TensorOptions optio
     Dtype dtype = options.dtype();
     size_t nbytes = compute_numel_from_strides(shape, strides) * dtype.itemsize();
     auto data_ptr = get_allocator(options.device().type())->allocate(nbytes);
-    return Tensor(std::make_shared<detail::TensorImpl>(
+    Tensor t(std::make_shared<detail::TensorImpl>(
         std::move(data_ptr), nbytes, shape, strides, dtype)
     );
+    set_requires_grad(t, options);
+    return t;
 }
 
-Tensor empty_like(const Tensor& other, TensorOptions options) {
-    return empty(other.shape(), other.options().merge_in(options));
+// From: aten/src/ATen/native/TensorFactories.cpp
+// Preserve keeps the layout of `other`: an elementwise op between the result
+// and `other` then walks both in the same memory order, and a transposed
+// gradient can be stored without a copy. A dense `other` (contiguous,
+// transposed, permuted) gives its exact strides; one with gaps or repeats (a
+// slice, a broadcast view) gives dense strides in its dimension order, since
+// copying its strides would allocate the gaps or alias the repeats.
+Tensor empty_like(const Tensor& other, TensorOptions options, MemoryFormat memory_format) {
+    TensorOptions merged = other.options().merge_in(options);
+    if (memory_format == MemoryFormat::Contiguous || other.is_contiguous()) {
+        return empty(other.shape(), merged);
+    }
+    if (other.is_non_overlapping_and_dense()) {
+        return empty_strided(other.shape(), other.strides(), merged);
+    }
+    return empty_strided(other.shape(), infer_dense_strides(other.shape(), other.strides()), merged);
 }
 
 Tensor full(IntArrayRef shape, Scalar value, TensorOptions options) {
@@ -124,8 +144,12 @@ Tensor full(IntArrayRef shape, Scalar value, TensorOptions options) {
     return out;
 }
 
-Tensor full_like(const Tensor& other, Scalar value, TensorOptions options) {  
-    return full(other.shape(), value, other.options().merge_in(options));
+Tensor full_like(const Tensor& other, Scalar value, TensorOptions options) {
+    Tensor out = empty_like(other, options);
+    if (out.numel() > 0) {
+        out.fill_(value);
+    }
+    return out;
 }
 
 Tensor zeros(IntArrayRef shape, TensorOptions options) {
@@ -137,7 +161,11 @@ Tensor zeros(IntArrayRef shape, TensorOptions options) {
 }
 
 Tensor zeros_like(const Tensor& other, TensorOptions options) {
-    return zeros(other.shape(), other.options().merge_in(options));
+    Tensor out = empty_like(other, options);
+    if (out.numel() > 0) {
+        out.zero_();
+    }
+    return out;
 }
 
 Tensor ones(IntArrayRef shape, TensorOptions options) {
@@ -148,7 +176,7 @@ Tensor ones(IntArrayRef shape, TensorOptions options) {
 }
 
 Tensor ones_like(const Tensor& other, TensorOptions options) {
-    return ones(other.shape(), other.options().merge_in(options));
+    return full_like(other, 1, options);
 }
 
 Tensor rand(IntArrayRef shape, TensorOptions options) {
@@ -163,8 +191,12 @@ Tensor rand(IntArrayRef shape, TensorOptions options) {
 }
 
 Tensor rand_like(const Tensor& other, TensorOptions options) {
-    auto merged = other.options().merge_in(options);
-    return rand(other.shape(), merged);
+    Tensor out = empty_like(other, options);
+    RAXIS_CHECK(
+        out.dtype().is_floating(),
+        "rand_like requires a floating-point dtype, got ", out.dtype()
+    );
+    return out.uniform_(0.0, 1.0);
 }
 
 Tensor randn(IntArrayRef shape, TensorOptions options) {
@@ -179,8 +211,12 @@ Tensor randn(IntArrayRef shape, TensorOptions options) {
 }
 
 Tensor randn_like(const Tensor& other, TensorOptions options) {
-    auto merged = other.options().merge_in(options);
-    return randn(other.shape(), merged);
+    Tensor out = empty_like(other, options);
+    RAXIS_CHECK(
+        out.dtype().is_floating(),
+        "randn_like requires a floating-point dtype, got ", out.dtype()
+    );
+    return out.normal_(0.0, 1.0);
 }
 
 Tensor randint(int64_t low, int64_t high, IntArrayRef shape, TensorOptions options) {
@@ -195,8 +231,12 @@ Tensor randint(int64_t low, int64_t high, IntArrayRef shape, TensorOptions optio
 }
 
 Tensor randint_like(const Tensor& other, int64_t low, int64_t high, TensorOptions options) {
-    auto merged = other.options().merge_in(options);
-    return randint(low, high, other.shape(), merged);
+    Tensor out = empty_like(other, options);
+    RAXIS_CHECK(
+        out.dtype().is_integral(true),
+        "randint_like requires an integral or bool dtype, got ", out.dtype()
+    );
+    return out.randint_(low, high);
 }
 
 Tensor scalar_tensor(Scalar s, TensorOptions options) {

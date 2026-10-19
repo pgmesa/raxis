@@ -31,7 +31,9 @@ TensorImpl::TensorImpl(
     shape_(shape),
     strides_(strides.value_or(compute_strides(shape))),
     dtype_(dtype),
-    numel_(compute_numel(shape)) {}
+    numel_(compute_numel(shape)) {
+    compute_layout();
+}
 
 TensorImpl::TensorImpl(
     std::shared_ptr<StorageImpl> storage,
@@ -44,7 +46,9 @@ TensorImpl::TensorImpl(
     shape_(shape),
     strides_(strides),
     dtype_(dtype),
-    numel_(compute_numel(shape)) {}
+    numel_(compute_numel(shape)) {
+    compute_layout();
+}
 
 const void* TensorImpl::data() const {
     const auto* base = static_cast<const char*>(storage_->data());
@@ -91,6 +95,20 @@ int TensorImpl::ndim() const {
 
 int64_t TensorImpl::storage_offset() const {
     return storage_offset_;
+}
+
+bool TensorImpl::is_contiguous() const {
+    return is_contiguous_;
+}
+
+bool TensorImpl::is_non_overlapping_and_dense() const {
+    return is_non_overlapping_and_dense_;
+}
+
+void TensorImpl::compute_layout() {
+    is_contiguous_ = compute_contiguous(shape_, strides_);
+    is_non_overlapping_and_dense_ =
+        is_contiguous_ || compute_non_overlapping_and_dense(shape_, strides_);
 }
 
 const std::shared_ptr<StorageImpl>& TensorImpl::storage() const {

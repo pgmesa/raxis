@@ -13,6 +13,9 @@ namespace raxis {
 RAXIS_API int64_t compute_numel(IntArrayRef shape) noexcept;
 RAXIS_API int64_t compute_numel_from_strides(IntArrayRef shape, IntArrayRef strides);
 RAXIS_API DimVector compute_strides(IntArrayRef shape);
+RAXIS_API bool compute_contiguous(IntArrayRef shape, IntArrayRef strides) noexcept;
+RAXIS_API bool compute_non_overlapping_and_dense(IntArrayRef shape, IntArrayRef strides);
+RAXIS_API DimVector infer_dense_strides(IntArrayRef shape, IntArrayRef strides);
 RAXIS_API DimVector broadcast_shapes(IntArrayRef shape1, IntArrayRef shape2);
 RAXIS_API DimVector broadcast_shapes(ArrayRef<IntArrayRef> shapes);
 

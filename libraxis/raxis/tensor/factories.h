@@ -9,6 +9,7 @@
 #include <raxis/core/dtype.h>
 #include <raxis/core/device.h>
 #include <raxis/core/scalar.h>
+#include <raxis/core/memory_format.h>
 
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/shape_utils.h>
@@ -45,7 +46,11 @@ RAXIS_API Tensor from_blob(
 );
 
 RAXIS_API Tensor empty(IntArrayRef shape, TensorOptions options = {});
-RAXIS_API Tensor empty_like(const Tensor& other, TensorOptions options = {});
+RAXIS_API Tensor empty_like(
+    const Tensor& other,
+    TensorOptions options = {},
+    MemoryFormat memory_format = MemoryFormat::Preserve
+);
 RAXIS_API Tensor empty_strided(
     IntArrayRef shape, IntArrayRef strides, TensorOptions options = {});
 

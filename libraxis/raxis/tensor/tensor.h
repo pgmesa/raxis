@@ -11,6 +11,7 @@
 #include <raxis/core/device.h>
 #include <raxis/core/types.h>
 #include <raxis/core/scalar.h>
+#include <raxis/core/memory_format.h>
 
 #include <raxis/util/exception.h>
 
@@ -99,6 +100,7 @@ public:
     Device device() const;
     TensorOptions options() const;
     bool is_contiguous() const;
+    bool is_non_overlapping_and_dense() const;
     
     bool is_cpu() const;
     bool is_cuda() const;
@@ -160,7 +162,7 @@ public:
     void index_put_(ArrayRef<indexing::TensorIndex> indices, Scalar value);
 
     // ======================== Copy & Fill =======================
-    Tensor clone() const;
+    Tensor clone(MemoryFormat memory_format = MemoryFormat::Preserve) const;
     Tensor contiguous() const;
     Tensor& copy_(const Tensor& other) const;
     Tensor to(Dtype dtype) const;

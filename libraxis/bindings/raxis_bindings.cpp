@@ -335,8 +335,7 @@ PYBIND11_MODULE(_C, c) {
             py::arg("other"))
         
         // Functions to access operations
-        .def("clone",
-            py::overload_cast<>(&raxis::Tensor::clone, py::const_))
+        .def("clone", [](const raxis::Tensor& self) { return self.clone(); })
         .def("copy_",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::copy_, py::const_),
             py::arg("other"))

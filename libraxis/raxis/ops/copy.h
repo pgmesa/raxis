@@ -13,12 +13,12 @@ DECLARE_DISPATCH(copy_fn, copy_stub);
 
 RAXIS_API Tensor& copy(const Tensor& a, Tensor& out);
 
-RAXIS_API Tensor clone(const Tensor& self);
+RAXIS_API Tensor clone(const Tensor& self, MemoryFormat memory_format = MemoryFormat::Preserve);
 RAXIS_API Tensor to_copy(const Tensor& self, Dtype dtype);
 
 namespace ops {
 
-RAXIS_API Tensor clone(const Tensor& self);
+RAXIS_API Tensor clone(const Tensor& self, MemoryFormat memory_format = MemoryFormat::Preserve);
 RAXIS_API Tensor to_copy(const Tensor& self, Dtype dtype);
 
 } // namespace ops

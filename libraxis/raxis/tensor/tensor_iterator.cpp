@@ -419,7 +419,7 @@ void TensorIterator::compute_types(const TensorIteratorConfig& config) {
             if (config.cast_common_dtype_to_outputs_ && op.is_output && op.current_dtype != common_dtype_) {
                 RAXIS_INTERNAL_ASSERT(op.tensor().defined());
                 op.exchange_tensor(MaybeOwned<Tensor>::owned(
-                    empty_like(op.tensor(), common_dtype_)
+                    empty_like(op.tensor(), common_dtype_, MemoryFormat::Contiguous)
                 ));
                 op.current_dtype = common_dtype_;
                 op.target_dtype = common_dtype_;

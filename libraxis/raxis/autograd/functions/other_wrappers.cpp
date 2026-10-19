@@ -162,8 +162,8 @@ Tensor broadcast_to(const Tensor& self, IntArrayRef shape) {
 // Copies
 // ============================================================
 
-Tensor clone(const Tensor& self) {
-    Tensor result = ops::clone(self);
+Tensor clone(const Tensor& self, MemoryFormat memory_format) {
+    Tensor result = ops::clone(self, memory_format);
     if (autograd::requires_autograd(self)) {
         auto grad_fn = std::make_shared<autograd::CloneBackward0>();
         grad_fn->set_num_inputs(1);

@@ -5,6 +5,7 @@
 #include <string>
 #include <stdexcept>
 #include <numeric>
+#include <algorithm>
 #include <optional>
 
 #include <raxis/core/types.h>
@@ -47,6 +48,108 @@ DimVector compute_strides(IntArrayRef shape) {
         s *= shape[i];
     }
     return strides;
+}
+
+// From: c10/core/Contiguity.h (_compute_contiguous)
+bool compute_contiguous(IntArrayRef shape, IntArrayRef strides) noexcept {
+    // A tensor without elements is contiguous whatever its strides
+    for (int64_t size : shape) {
+        if (size == 0) return true;
+    }
+
+    int64_t expected_stride = 1;
+    for (int i = static_cast<int>(shape.size()) - 1; i >= 0; --i) {
+        // Size 1 dims never advance, so their stride is irrelevant
+        if (shape[i] == 1) continue;
+        if (strides[i] != expected_stride) return false;
+        expected_stride *= shape[i];
+    }
+    return true;
+}
+
+// From: c10/core/Contiguity.h (_compute_non_overlapping_and_dense)
+// True when the elements fill a block of memory without gaps or repeats, in
+// any dimension order: contiguous after some permutation of the dims (e.g. a
+// transposed or permuted contiguous tensor). Sorting the dims by stride must
+// give the strides of a contiguous tensor.
+bool compute_non_overlapping_and_dense(IntArrayRef shape, IntArrayRef strides) {
+    size_t ndim = shape.size();
+    if (ndim == 1) {
+        return shape[0] < 2 || strides[0] == 1;
+    }
+
+    DimVector perm(ndim);
+    std::iota(perm.begin(), perm.end(), 0);
+    // Sort by stride, leaving the size 0 and 1 dims at the end
+    std::sort(perm.begin(), perm.end(), [&](int64_t a, int64_t b) {
+        if (shape[a] < 2) return false;
+        if (shape[b] < 2) return true;
+        return strides[a] < strides[b];
+    });
+
+    int64_t required_stride = 1;
+    for (int64_t dim : perm) {
+        if (shape[dim] < 2) return true;
+        if (strides[dim] != required_stride) return false;
+        required_stride *= shape[dim];
+    }
+    return true;
+}
+
+// From: aten/src/ATen/ExpandUtils.cpp
+// Dense strides that keep the dimension order of the given strides: a tensor
+// with gaps or repeats (a slice, a broadcast view) gets a dense layout that
+// is still "transposed" if the input was. Dims are sorted exactly like
+// TensorIterator::reorder_dimensions does, so that both propagate the same
+// layout.
+DimVector infer_dense_strides(IntArrayRef shape, IntArrayRef strides) {
+    RAXIS_CHECK(shape.size() == strides.size(),
+        "Input shape and strides should have the same size but got ",
+        shape.size(), " and ", strides.size());
+
+    size_t ndim = shape.size();
+    if (ndim == 0) return {};
+    if (ndim == 1) return {1};
+
+    // initialize perm with n-1, n-2, ..., 1, 0
+    DimVector perm(ndim);
+    std::iota(perm.rbegin(), perm.rend(), 0);
+
+    // Returns 1 if dim0 should come after dim1, -1 if before, and 0 if the
+    // comparison is ambiguous (broadcast dims never move)
+    auto should_swap = [&](int64_t dim0, int64_t dim1) {
+        int64_t stride0 = strides[dim0];
+        int64_t stride1 = strides[dim1];
+        if (stride0 == 0 || stride1 == 0) return 0;
+        if (stride0 < stride1) return -1;
+        if (stride0 > stride1) return 1;
+        // For equal strides, the dim with the smaller size goes first
+        return shape[dim0] > shape[dim1] ? 1 : 0;
+    };
+
+    // Insertion sort with support for ambiguous comparisons
+    for (size_t i = 1; i < ndim; i++) {
+        size_t dim1 = i;
+        for (size_t dim0 = i; dim0-- > 0;) {
+            int comparison = should_swap(perm[dim0], perm[dim1]);
+            if (comparison > 0) {
+                std::swap(perm[dim0], perm[dim1]);
+                dim1 = dim0;
+            } else if (comparison < 0) {
+                break;
+            }
+        }
+    }
+
+    // perm[0] is the innermost dim
+    DimVector out_strides(ndim);
+    int64_t stride = 1;
+    for (int64_t dim : perm) {
+        out_strides[dim] = stride;
+        // A size 0 dim is treated as 1: the tensor has no elements anyway
+        if (shape[dim] > 1) stride *= shape[dim];
+    }
+    return out_strides;
 }
 
 DimVector broadcast_shapes(IntArrayRef shape1, IntArrayRef shape2) {
