@@ -17,13 +17,28 @@ namespace raxis::autograd {
 
 namespace {
 
-// Sums the gradients that reach the same input of a node. Out of place:
-// the slot may be a broadcast view (stride 0, e.g. from SumBackward0) or
-// share memory with another slot or a retained .grad.
+// From: torch/csrc/autograd/input_buffer.cpp (can_accumulate_inplace)
+// The buffer slot can be overwritten only if nothing else sees it: no other
+// Tensor holds the impl (another slot, a retained .grad, the gradient the
+// user passed to backward) and no view shares its storage. It must also be
+// dense: a broadcast view (stride 0, e.g. from SumBackward0) has several
+// elements on the same address.
+bool can_accumulate_inplace(const Tensor& t) {
+    return t.use_count() == 1
+        && t.unsafe_get_tensor_impl()->storage().use_count() == 1
+        && t.is_non_overlapping_and_dense();
+}
+
+// From: torch/csrc/autograd/input_buffer.cpp (accumulate)
+// Sums the gradients that reach the same input of a node. In place when
+// possible: a parameter used by k ops gets k - 1 additions without
+// allocating k - 1 temporaries.
 void accumulate(TensorList& buffer, size_t pos, Tensor&& grad) {
     Tensor& old = buffer[pos];
     if (!old.defined()) {
         old = std::move(grad);
+    } else if (can_accumulate_inplace(old)) {
+        old.add_(grad);
     } else {
         old = old + grad;
     }
