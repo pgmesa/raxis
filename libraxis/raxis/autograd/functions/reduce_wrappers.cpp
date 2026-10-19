@@ -1,7 +1,9 @@
 
 #include <raxis/ops/reduce_ops.h>
+#include <raxis/ops/tensor_compare.h>
 
 #include <raxis/tensor/tensor.h>
+#include <raxis/tensor/shape_utils.h>
 
 #include <raxis/autograd/variable.h>
 #include <raxis/autograd/functions/reduce_backward.h>
@@ -128,7 +130,7 @@ Tensor nanmean(const Tensor& self, IntArrayRef dim, bool keepdim, std::optional<
 Tensor max(const Tensor& self) {
     Tensor result = ops::max(self);
     if (autograd::requires_autograd(self)) {
-        auto grad_fn = std::make_shared<autograd::MaxBackward0>(self, result);
+        auto grad_fn = std::make_shared<autograd::MaxBackward1>(self, result);
         grad_fn->set_num_inputs(1);
         autograd::set_next_edges(grad_fn, self);
         autograd::set_autograd_meta(result, grad_fn);
@@ -136,10 +138,34 @@ Tensor max(const Tensor& self) {
     return result;
 }
 
+template <typename Node>
+static std::tuple<Tensor, Tensor> minmax_dim(
+    const Tensor& self, int64_t dim, bool keepdim,
+    std::tuple<Tensor, Tensor> (*op)(const Tensor&, int64_t, bool)
+) {
+    auto [values, indices] = op(self, dim, keepdim);
+    if (autograd::requires_autograd(self)) {
+        int64_t wrapped = wrap_dim(dim, std::max<int64_t>(self.ndim(), 1));
+        auto grad_fn = std::make_shared<Node>(self, wrapped, indices, keepdim);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self);
+        autograd::set_autograd_meta(values, grad_fn);
+    }
+    return {values, indices};
+}
+
+std::tuple<Tensor, Tensor> max(const Tensor& self, int64_t dim, bool keepdim) {
+    return minmax_dim<autograd::MaxBackward0>(self, dim, keepdim, &ops::max);
+}
+
+std::tuple<Tensor, Tensor> min(const Tensor& self, int64_t dim, bool keepdim) {
+    return minmax_dim<autograd::MinBackward0>(self, dim, keepdim, &ops::min);
+}
+
 Tensor min(const Tensor& self) {
     Tensor result = ops::min(self);
     if (autograd::requires_autograd(self)) {
-        auto grad_fn = std::make_shared<autograd::MinBackward0>(self, result);
+        auto grad_fn = std::make_shared<autograd::MinBackward1>(self, result);
         grad_fn->set_num_inputs(1);
         autograd::set_next_edges(grad_fn, self);
         autograd::set_autograd_meta(result, grad_fn);

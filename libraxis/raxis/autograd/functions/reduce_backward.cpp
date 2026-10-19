@@ -2,6 +2,8 @@
 #include <raxis/autograd/functions/reduce_backward.h>
 
 #include <raxis/autograd/variable.h>
+#include <raxis/tensor/factories.h>
+#include <raxis/ops/tensor_advanced_indexing.h>
 
 
 namespace raxis::autograd {
@@ -158,24 +160,43 @@ TensorList AminBackward0::apply(const TensorList& grads) {
 }
 
 
-MaxBackward0::MaxBackward0(const Tensor& self, const Tensor& result)
-    : self_(self), result_(result, /*is_output=*/true) {}
+MaxBackward0::MaxBackward0(const Tensor& self, int64_t dim, const Tensor& indices, bool keepdim)
+    : self_shape_(self.shape()), dim_(dim), indices_(indices), keepdim_(keepdim) {}
 
 std::string MaxBackward0::name() const { return "MaxBackward0"; }
+std::string MinBackward0::name() const { return "MinBackward0"; }
 
+// From: aten/src/ATen/native/ReduceOps.cpp (value_selecting_reduction_backward)
+// zeros with the incoming gradient scattered to the selected positions
 TensorList MaxBackward0::apply(const TensorList& grads) {
+    Tensor grad = grads[0];
+    Tensor indices = indices_;
+    if (!keepdim_ && !self_shape_.empty()) {
+        grad = grad.unsqueeze(dim_);
+        indices = indices.unsqueeze(dim_);
+    }
+    Tensor grad_self = zeros(self_shape_, grad.options());
+    return {ops::scatter_(grad_self, dim_, indices, grad)};
+}
+
+MaxBackward1::MaxBackward1(const Tensor& self, const Tensor& result)
+    : self_(self), result_(result, /*is_output=*/true) {}
+
+std::string MaxBackward1::name() const { return "MaxBackward1"; }
+
+TensorList MaxBackward1::apply(const TensorList& grads) {
     Tensor mask = (self_ == result_.unpack().broadcast_to(self_.shape())).to(grads[0].dtype());
     Tensor num_matches = mask.sum();
     return {grads[0].broadcast_to(self_.shape()) * mask / num_matches.broadcast_to(self_.shape())};
 }
 
 
-MinBackward0::MinBackward0(const Tensor& self, const Tensor& result)
+MinBackward1::MinBackward1(const Tensor& self, const Tensor& result)
     : self_(self), result_(result, /*is_output=*/true) {}
 
-std::string MinBackward0::name() const { return "MinBackward0"; }
+std::string MinBackward1::name() const { return "MinBackward1"; }
 
-TensorList MinBackward0::apply(const TensorList& grads) {
+TensorList MinBackward1::apply(const TensorList& grads) {
     Tensor mask = (self_ == result_.unpack().broadcast_to(self_.shape())).to(grads[0].dtype());
     Tensor num_matches = mask.sum();
     return {grads[0].broadcast_to(self_.shape()) * mask / num_matches.broadcast_to(self_.shape())};

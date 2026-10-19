@@ -6,6 +6,8 @@
 #include <raxis/util/exception.h>
 
 #include <raxis/tensor/tensor.h>
+#include <raxis/tensor/factories.h>
+#include <raxis/tensor/shape_utils.h>
 #include <raxis/tensor/tensor_iterator.h>
 #include <raxis/tensor/type_promotion.h>
 
@@ -107,8 +109,52 @@ Tensor& clamp_(Tensor& self, std::optional<Scalar> min, std::optional<Scalar> ma
     return self;
 }
 
+// From: aten/src/ATen/native/TensorCompare.cpp (minmax_out_impl)
+// The kernel writes through keepdim views of the results (size 1 at dim),
+// which have as many dims as self, as its iterator needs
+template <typename Stub>
+static std::tuple<Tensor, Tensor> minmax_dim_impl(
+    const char* name, const Tensor& self, int64_t dim, bool keepdim, Stub& stub
+) {
+    int64_t wrapped = wrap_dim(dim, std::max<int64_t>(self.ndim(), 1));
+    if (self.ndim() > 0) {
+        RAXIS_CHECK(self.shape()[wrapped] != 0,
+            name, ": Expected reduction dim ", wrapped, " to have non-zero size.");
+    }
+
+    DimVector shape(self.shape());
+    if (self.ndim() > 0) {
+        shape[wrapped] = 1;
+    }
+    Tensor values = empty(shape, self.options());
+    Tensor indices = empty(shape, self.options().dtype(dtypes::Int64));
+
+    if (self.ndim() == 0) {
+        values.copy_(self);
+        indices.zero_();
+    } else if (self.numel() > 0) {
+        stub(self.device().type(), values, indices, self, wrapped);
+    }
+
+    if (!keepdim && self.ndim() > 0) {
+        values = values.squeeze(wrapped);
+        indices = indices.squeeze(wrapped);
+    }
+    return {values, indices};
+}
+
+std::tuple<Tensor, Tensor> max(const Tensor& self, int64_t dim, bool keepdim) {
+    return minmax_dim_impl("max()", self, dim, keepdim, max_dim_stub);
+}
+
+std::tuple<Tensor, Tensor> min(const Tensor& self, int64_t dim, bool keepdim) {
+    return minmax_dim_impl("min()", self, dim, keepdim, min_dim_stub);
+}
+
 } // namespace ops
 
+DEFINE_DISPATCH(max_dim_stub);
+DEFINE_DISPATCH(min_dim_stub);
 DEFINE_DISPATCH(where_stub);
 DEFINE_DISPATCH(clamp_scalar_stub);
 DEFINE_DISPATCH(clamp_min_scalar_stub);

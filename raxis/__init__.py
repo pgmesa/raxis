@@ -55,6 +55,7 @@ from raxis._C import *
 from raxis._tensor_str import _str
 
 import builtins as _builtins
+import collections as _collections
 import functools as _functools
 
 Tensor.__repr__ = _str
@@ -111,6 +112,26 @@ def _method_sizes_as_varargs(method):
         return method(self, *args, **kwargs)
     return wrapper
 
+
+class return_types:
+    """Named results, as torch.return_types: values, indices = x.max(0)"""
+    max = _collections.namedtuple("max", ["values", "indices"])
+    min = _collections.namedtuple("min", ["values", "indices"])
+
+
+def _named_result(fn, result_type):
+    @_functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        result = fn(*args, **kwargs)
+        return result_type(*result) if isinstance(result, tuple) else result
+    return wrapper
+
+
+for _name in ("max", "min"):
+    _result_type = getattr(return_types, _name)
+    globals()[_name] = _named_result(globals()[_name], _result_type)
+    setattr(Tensor, _name, _named_result(getattr(Tensor, _name), _result_type))
+del _result_type
 
 for _name in ("empty", "zeros", "ones", "rand", "randn"):
     globals()[_name] = _sizes_as_varargs(globals()[_name])

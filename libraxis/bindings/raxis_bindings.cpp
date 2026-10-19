@@ -745,6 +745,12 @@ PYBIND11_MODULE(_C, c) {
 
         .def("max", &raxis::Tensor::max)
         .def("min", &raxis::Tensor::min)
+        .def("max", [](const raxis::Tensor& self, int64_t dim, bool keepdim) {
+            return raxis::max(self, dim, keepdim);
+        }, py::arg("dim"), py::arg("keepdim") = false)
+        .def("min", [](const raxis::Tensor& self, int64_t dim, bool keepdim) {
+            return raxis::min(self, dim, keepdim);
+        }, py::arg("dim"), py::arg("keepdim") = false)
 
         .def("gather", &raxis::gather, py::arg("dim"), py::arg("index"))
         .def("scatter",
@@ -1295,6 +1301,12 @@ PYBIND11_MODULE(_C, c) {
         py::arg("dtype") = py::none()
     );
 
+    c.def("max", [](const raxis::Tensor& input, int64_t dim, bool keepdim) {
+        return raxis::max(input, dim, keepdim);
+    }, py::arg("input"), py::arg("dim"), py::arg("keepdim") = false);
+    c.def("min", [](const raxis::Tensor& input, int64_t dim, bool keepdim) {
+        return raxis::min(input, dim, keepdim);
+    }, py::arg("input"), py::arg("dim"), py::arg("keepdim") = false);
     c.def("max", py::overload_cast<const raxis::Tensor&>(&raxis::max),
     py::arg("input"));
     c.def("min", py::overload_cast<const raxis::Tensor&>(&raxis::min),
