@@ -151,6 +151,87 @@ class TestHooks:
 
 
 # ===========================================================================
+# SUMMARY
+# ===========================================================================
+
+class Block(nn.Module):
+    def __init__(self, features):
+        super().__init__()
+        self.fc = nn.Linear(features, features)
+        self.act = nn.ReLU()
+
+    def forward(self, x):
+        return self.act(self.fc(x))
+
+
+class TestSummary:
+
+    def test_shapes_and_params_match_torch(self):
+        r_model = mlp(raxis, final=lambda lib: lib.nn.LogSoftmax(dim=1))
+        t_model = mlp(torch, final=lambda lib: lib.nn.LogSoftmax(dim=1))
+        t_shapes = []
+        for _, m in t_model.named_modules():
+            m.register_forward_hook(lambda m, args, out: t_shapes.append(tuple(out.shape)))
+        t_model(torch.ones(5, 6))
+
+        result = nn.summary(r_model, raxis.ones((5, 6)))
+        # Rows are in call order, outputs in return order: compare per module
+        assert sorted(layer.output_shape for layer in result.layers) == sorted(t_shapes)
+        assert [(l.name, l.type_name, l.depth) for l in result.layers] == [
+            ("", "Sequential", 0), ("0", "Linear", 1), ("1", "ReLU", 1),
+            ("2", "Linear", 1), ("3", "LogSoftmax", 1)]
+        assert [l.num_params for l in result.layers] == [0, 6 * 8 + 8, 0, 8 * 3 + 3, 0]
+        assert result.total_params == sum(p.numel() for p in t_model.parameters())
+        assert result.trainable_params == result.total_params
+
+    def test_shared_module_counted_once(self):
+        block = Block(4)
+        model = nn.Sequential(block, block, nn.Linear(4, 2))
+        result = nn.summary(model, raxis.ones((3, 4)))
+        assert [(l.name, l.depth) for l in result.layers] == [
+            ("", 0), ("0", 1), ("0.fc", 2), ("0.act", 2),
+            ("0", 1), ("0.fc", 2), ("0.act", 2), ("2", 1)]
+        assert [l.num_params for l in result.layers] == [0, 0, 20, 0, 0, None, 0, 10]
+        assert result.total_params == 30
+        text = str(result)
+        assert "(recursive)" in text
+        assert "Total params: 30" in text
+
+    def test_frozen_params(self):
+        model = nn.Sequential(nn.Linear(4, 4), nn.Linear(4, 2))
+        model[0].requires_grad_(False)
+        result = nn.summary(model, raxis.ones((1, 4)))
+        assert (result.total_params, result.trainable_params) == (30, 10)
+        assert "Non-trainable params: 20" in str(result)
+
+    def test_several_inputs_and_outputs(self):
+        class TwoHeads(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.a = nn.Linear(4, 2)
+                self.b = nn.Linear(3, 5)
+
+            def forward(self, x, y):
+                return self.a(x), self.b(y)
+
+        result = nn.summary(TwoHeads(), (raxis.ones((7, 4)), raxis.ones((7, 3))))
+        assert result.layers[0].output_shape == [(7, 2), (7, 5)]
+        assert "[(7, 2), (7, 5)]" in str(result)
+
+    def test_no_graph_and_hooks_removed(self):
+        model = mlp(raxis)
+        nn.summary(model, raxis.ones((2, 6)))
+        assert all(not m._forward_hooks and not m._forward_pre_hooks for m in model.modules())
+        assert all(p.grad is None for p in model.parameters())
+
+    def test_hooks_removed_on_error(self):
+        model = mlp(raxis)
+        with pytest.raises(RuntimeError):
+            nn.summary(model, raxis.ones((2, 5)))  # wrong in_features
+        assert all(not m._forward_hooks and not m._forward_pre_hooks for m in model.modules())
+
+
+# ===========================================================================
 # INIT
 # ===========================================================================
 
