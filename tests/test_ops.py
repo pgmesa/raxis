@@ -1484,6 +1484,46 @@ class TestCatStackUnbind:
         check_match(raxis.cat([a_r, b_r], dim=1), torch.cat([a_t, b_t], dim=1),
                      context="cat 3d dim=1")
 
+    # Above GRAIN_SIZE (32768 elements) the copies run in parallel, through
+    # one reused iterator when every input has the same sizes and strides
+    @pytest.mark.parametrize("dim", [0, 1, 2])
+    @pytest.mark.parametrize("case", ["same", "different", "non_contiguous", "promotion", "int"])
+    def test_cat_large(self, case, dim):
+        shapes = [(40, 30, 50)] * 3
+        if case == "different":
+            shapes = [tuple(s + 7 * i if d == dim else s for d, s in enumerate(shapes[0])) for i in range(3)]
+        dtypes = [np.float32] * 3
+        if case == "promotion":
+            dtypes = [np.float32, np.float64, np.int32]
+        if case == "int":
+            dtypes = [np.int64] * 3
+        pairs = [make_pair((randf(*s, seed=i) * 100).astype(dt)) for i, (s, dt) in enumerate(zip(shapes, dtypes))]
+        rs, ts = [p[0] for p in pairs], [p[1] for p in pairs]
+        if case == "non_contiguous":
+            # Same sizes, other strides: the per-input copy path
+            rs[1] = rs[1].permute(2, 1, 0).contiguous().permute(2, 1, 0)
+            ts[1] = ts[1].permute(2, 1, 0).contiguous().permute(2, 1, 0)
+        check_match(raxis.cat(rs, dim), torch.cat(ts, dim))
+
+    def test_cat_large_skips_empty(self):
+        r, t = make_pair(randf(200, 300))
+        r_e, t_e = make_pair(np.zeros(0, dtype=np.float32))
+        check_match(raxis.cat([r_e, r, r_e, r], 0), torch.cat([t_e, t, t_e, t], 0))
+
+    @pytest.mark.parametrize("dim", [0, 1, 2, -1])
+    @pytest.mark.parametrize("case", ["same", "non_contiguous", "promotion"])
+    def test_stack_large(self, case, dim):
+        pairs = [make_pair(randf(60, 70, 30, seed=i)) for i in range(4)]
+        rs, ts = [p[0] for p in pairs], [p[1] for p in pairs]
+        if case == "non_contiguous":
+            rs[2], ts[2] = rs[2].permute(2, 1, 0).contiguous().permute(2, 1, 0), \
+                ts[2].permute(2, 1, 0).contiguous().permute(2, 1, 0)
+        if case == "promotion":
+            rs[0], ts[0] = rs[0].to(raxis.float64), ts[0].to(torch.float64)
+        r_out, t_out = raxis.stack(rs, dim), torch.stack(ts, dim)
+        check_match(r_out, t_out)
+        assert str(r_out.dtype) == str(t_out.dtype).replace("torch.", "")
+
     def test_stack_basic(self):
         a_r, a_t = make_pair(np.array([1, 2, 3], dtype=np.float32))
         b_r, b_t = make_pair(np.array([4, 5, 6], dtype=np.float32))
