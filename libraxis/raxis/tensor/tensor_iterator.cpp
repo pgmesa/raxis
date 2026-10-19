@@ -364,8 +364,9 @@ void TensorIterator::compute_types(const TensorIteratorConfig& config) {
         }
     }
 
-    // Short-circuits if no additional work required
-    if (!has_undefined_outputs &&
+    // Short-circuits if no additional work required. Not when devices are
+    // checked: the loop below also gives undefined outputs their device
+    if (!has_undefined_outputs && !config.check_all_same_device_ &&
         !config.promote_inputs_to_common_dtype_ && !config.cast_common_dtype_to_outputs_ &&
         !config.enforce_safe_casting_to_output_) {
         // Invalidates common_dtype_ if it could not be inferred
