@@ -1,6 +1,8 @@
 
 #include <raxis/autograd/functions/reduce_backward.h>
 
+#include <bitset>
+
 #include <raxis/autograd/variable.h>
 #include <raxis/tensor/factories.h>
 #include <raxis/ops/tensor_advanced_indexing.h>
@@ -10,12 +12,21 @@ namespace raxis::autograd {
 
 namespace {
 
-// Helper: restore reduced dimensions by unsqueezing
+// From: torch/csrc/autograd/FunctionsManual.cpp (unsqueeze_multiple)
+// Restores the reduced dims (keepdim=false) as size 1 dims. They must be
+// inserted in increasing order: each unsqueeze shifts the dims after it, so
+// sum(dim=(2, 0)) of a 3-d tensor unsqueezes 0, then 2.
 Tensor unsqueeze_reduced_dims(const Tensor& grad, IntArrayRef self_shape, IntArrayRef dim) {
-    Tensor result = grad;
+    int64_t ndim = static_cast<int64_t>(self_shape.size());
+    std::bitset<64> reduced;
     for (int64_t d : dim) {
-        int64_t nd = d < 0 ? d + static_cast<int64_t>(self_shape.size()) : d;
-        result = result.unsqueeze(nd);
+        reduced.set(d < 0 ? d + ndim : d);
+    }
+    Tensor result = grad;
+    for (int64_t d = 0; d < ndim; d++) {
+        if (reduced.test(d)) {
+            result = result.unsqueeze(d);
+        }
     }
     return result;
 }

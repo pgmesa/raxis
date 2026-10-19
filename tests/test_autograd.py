@@ -978,3 +978,16 @@ class TestGraphLifetime:
         t_out.backward()
 
         check_match(r.grad, t.grad, context="retain_grad on freed tensor")
+
+
+@pytest.mark.parametrize("op", ["sum", "mean"])
+@pytest.mark.parametrize("dims", [(2, 0), (0, 2), (-1, 0), (1,)])
+def test_reduce_backward_with_unsorted_dims(op, dims):
+    # The reduced dims are restored in increasing order whatever their order
+    data = np.random.default_rng(0).standard_normal((2, 3, 4)).astype(np.float32)
+    r, t = make_grad_pair(data)
+    kept = [s for i, s in enumerate(data.shape) if i not in {d % 3 for d in dims}]
+    w = np.random.default_rng(1).standard_normal(kept).astype(np.float32)
+    (getattr(r, op)(dims) * raxis.from_numpy(w)).sum().backward()
+    (getattr(t, op)(dims) * torch.from_numpy(w)).sum().backward()
+    check_match(r.grad, t.grad)
