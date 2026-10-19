@@ -259,6 +259,65 @@ Tensor amin(const Tensor& self, IntArrayRef dim, bool keepdim) {
     min_values_stub(iter.device_type(), iter);
     return result;
 }
+
+// From: aten/src/ATen/native/ReduceOps.cpp (check_argmax_argmin)
+static void check_argmax_argmin(const char* name, const Tensor& self, std::optional<int64_t> dim) {
+    RAXIS_CHECK(!self.dtype().is_bool(), name, ": does not support bool input");
+    if (dim.has_value()) {
+        if (self.numel() == 0) {
+            zero_numel_check_dims(self, wrap_dim(*dim, self.ndim()), name);
+        }
+    } else {
+        RAXIS_CHECK(self.numel() != 0,
+            name, ": Expected reduction dim to be specified for input.numel() == 0.");
+    }
+}
+
+// From: aten/src/ATen/native/ReduceOps.cpp (argmax_argmin_impl)
+// A reduction over `dim` whose output is the int64 index of the winner.
+// Without dim, the flattened tensor is reduced to a single index.
+template <typename Stub>
+static Tensor argmax_argmin_impl(
+    const char* name,
+    const Tensor& self,
+    std::optional<int64_t> dim,
+    bool keepdim,
+    Stub& stub
+) {
+    check_argmax_argmin(name, self, dim);
+
+    DimVector dims;
+    if (dim.has_value() && self.ndim() > 0) {
+        dims.push_back(wrap_dim(*dim, self.ndim()));
+    }
+    Tensor result = create_reduction_result(self, dims, keepdim, dtypes::Int64);
+
+    // A 0-d input, or a dim of size 1, has a single candidate
+    if (self.ndim() == 0 || (dim.has_value() && self.shape()[dims[0]] == 1)) {
+        return result.zero_();
+    }
+
+    Tensor in = self;
+    Tensor out = result;
+    if (!dim.has_value()) {
+        in = self.reshape({-1});
+        out = result.reshape({});
+        keepdim = false;
+    }
+    auto iter = make_reduction(in, out, dims, keepdim, self.dtype());
+    if (iter.numel() != 0) {
+        stub(iter.device_type(), iter);
+    }
+    return result;
+}
+
+Tensor argmax(const Tensor& self, std::optional<int64_t> dim, bool keepdim) {
+    return argmax_argmin_impl("argmax()", self, dim, keepdim, argmax_stub);
+}
+
+Tensor argmin(const Tensor& self, std::optional<int64_t> dim, bool keepdim) {
+    return argmax_argmin_impl("argmin()", self, dim, keepdim, argmin_stub);
+}
     
 } // namespace ops
 
@@ -270,7 +329,7 @@ DEFINE_DISPATCH(max_all_stub);
 DEFINE_DISPATCH(min_all_stub);
 DEFINE_DISPATCH(max_values_stub);
 DEFINE_DISPATCH(min_values_stub);
-// DEFINE_DISPATCH(argmax_stub);
-// DEFINE_DISPATCH(argmin_stub);
+DEFINE_DISPATCH(argmax_stub);
+DEFINE_DISPATCH(argmin_stub);
 
 } // namespace raxis

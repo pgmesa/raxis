@@ -149,6 +149,24 @@ TensorIterator make_reduction(
     );
 }
 
+// From: aten/src/ATen/native/ReduceOpsUtils.h
+// For a result already allocated with a dtype other than the one the
+// reduction computes in (argmax: int64 indices of float values): the input
+// keeps in_dtype and only the output is int64.
+inline TensorIterator make_reduction(
+    const Tensor& self,
+    const Tensor& result,
+    IntArrayRef dims,
+    bool keepdim,
+    Dtype in_dtype
+) {
+    int64_t ndim = self.ndim();
+    DimMask mask = make_dim_mask(dims, ndim);
+    Tensor viewed_result = review_reduce_result(result, ndim, mask, keepdim);
+    return TensorIterator::reduce_op(
+        viewed_result, self.dtype() == in_dtype ? self : self.to(in_dtype));
+}
+
 inline void zero_numel_check_dims(const Tensor& self, int64_t dim, const char* fn_name){
     if (self.ndim() == 0) {
         RAXIS_CHECK(dim == 0 || dim == -1, fn_name,

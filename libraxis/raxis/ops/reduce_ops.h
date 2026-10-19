@@ -33,8 +33,8 @@ DECLARE_DISPATCH(reduce_all_fn, max_all_stub);
 DECLARE_DISPATCH(reduce_all_fn, min_all_stub);
 DECLARE_DISPATCH(reduce_fn, max_values_stub);
 DECLARE_DISPATCH(reduce_fn, min_values_stub);
-// DECLARE_DISPATCH(reduce_fn, argmax_stub);
-// DECLARE_DISPATCH(reduce_fn, argmin_stub);
+DECLARE_DISPATCH(reduce_fn, argmax_stub);
+DECLARE_DISPATCH(reduce_fn, argmin_stub);
 
 RAXIS_API Tensor sum(
     const Tensor& self,
@@ -155,6 +155,17 @@ RAXIS_API Tensor amin(
     bool keepdim = false
 );
 
+RAXIS_API Tensor argmax(
+    const Tensor& self,
+    std::optional<int64_t> dim = std::nullopt,
+    bool keepdim = false
+);
+RAXIS_API Tensor argmin(
+    const Tensor& self,
+    std::optional<int64_t> dim = std::nullopt,
+    bool keepdim = false
+);
+
 
 namespace ops {
 
@@ -234,6 +245,17 @@ RAXIS_API Tensor amax(
 RAXIS_API Tensor amin(
     const Tensor& self, 
     IntArrayRef dim = {},
+    bool keepdim = false
+);
+
+RAXIS_API Tensor argmax(
+    const Tensor& self,
+    std::optional<int64_t> dim = std::nullopt,
+    bool keepdim = false
+);
+RAXIS_API Tensor argmin(
+    const Tensor& self,
+    std::optional<int64_t> dim = std::nullopt,
     bool keepdim = false
 );
     

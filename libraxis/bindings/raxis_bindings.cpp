@@ -746,6 +746,12 @@ PYBIND11_MODULE(_C, c) {
         .def("max", &raxis::Tensor::max)
         .def("min", &raxis::Tensor::min)
 
+        .def("argmax", [](const raxis::Tensor& self, std::optional<int64_t> dim, bool keepdim) {
+            return raxis::argmax(self, dim, keepdim);
+        }, py::arg("dim") = py::none(), py::arg("keepdim") = false)
+        .def("argmin", [](const raxis::Tensor& self, std::optional<int64_t> dim, bool keepdim) {
+            return raxis::argmin(self, dim, keepdim);
+        }, py::arg("dim") = py::none(), py::arg("keepdim") = false)
         .def("amax", [](
                 const raxis::Tensor& self, 
                 raxis::VecOrInt dim,
@@ -1272,6 +1278,12 @@ PYBIND11_MODULE(_C, c) {
     c.def("min", py::overload_cast<const raxis::Tensor&>(&raxis::min),
         py::arg("input"));
 
+    c.def("argmax", [](const raxis::Tensor& input, std::optional<int64_t> dim, bool keepdim) {
+        return raxis::argmax(input, dim, keepdim);
+    }, py::arg("input"), py::arg("dim") = py::none(), py::arg("keepdim") = false);
+    c.def("argmin", [](const raxis::Tensor& input, std::optional<int64_t> dim, bool keepdim) {
+        return raxis::argmin(input, dim, keepdim);
+    }, py::arg("input"), py::arg("dim") = py::none(), py::arg("keepdim") = false);
     c.def("amax", [](
             const raxis::Tensor& tensor, 
             raxis::VecOrInt dim,

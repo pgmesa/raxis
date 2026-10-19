@@ -2,6 +2,7 @@
 #include <raxis/ops/reduce_ops.h>
 #include <raxis/ops/dispatch_stub.h>
 #include <raxis/ops/numeric_utils.h>
+#include <raxis/ops/shared_reduce_ops.h>
 #include <raxis/ops/cpu/loops.h>
 #include <raxis/ops/cpu/reduce.h>
 #include <raxis/ops/cpu/vec/vec.h>
@@ -53,13 +54,45 @@ void min_values_kernel(TensorIterator& iter) {
     });
 }
 
+// From: aten/src/ATen/native/cpu/ReduceOpsKernel.cpp
+// When the reduced dim is the contiguous innermost one, each output element
+// is a plain loop over one row. Otherwise binary_kernel_reduce walks the
+// strided elements through a sub-iterator per output element.
+template <template <typename> class Ops>
+void arg_reduce_kernel(TensorIterator& iter, bool find_max) {
+    iter.dtype(1).dispatch_all_types_except_bool([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+        using arg_t = std::pair<scalar_t, int64_t>;
+        const arg_t init(find_max ? lower_bound<scalar_t>() : upper_bound<scalar_t>(), 0);
+        if (is_reduce_lastdim(iter)) {
+            binary_kernel_reduce_lastdim(iter, [&](char* out, char* in, int64_t size) {
+                const auto* data = reinterpret_cast<const scalar_t*>(in);
+                arg_t acc = init;
+                for (int64_t i = 0; i < size; i++) {
+                    acc = Ops<scalar_t>::reduce(acc, data[i], i);
+                }
+                *reinterpret_cast<int64_t*>(out) = acc.second;
+            });
+            return;
+        }
+        binary_kernel_reduce<scalar_t>(iter, Ops<scalar_t>{}, init);
+    });
+}
+
+void argmax_kernel(TensorIterator& iter) {
+    arg_reduce_kernel<ArgMaxOps>(iter, /*find_max=*/true);
+}
+
+void argmin_kernel(TensorIterator& iter) {
+    arg_reduce_kernel<ArgMinOps>(iter, /*find_max=*/false);
+}
+
 } // namespace
 
 REGISTER_DISPATCH(mean_stub, nullptr);
 REGISTER_DISPATCH(prod_stub, &prod_kernel);
 REGISTER_DISPATCH(max_values_stub, &max_values_kernel);
 REGISTER_DISPATCH(min_values_stub, &min_values_kernel);
-// REGISTER_DISPATCH(argmax_stub, &argmax_kernel);
-// REGISTER_DISPATCH(argmin_stub, &argmin_kernel);
+REGISTER_DISPATCH(argmax_stub, &argmax_kernel);
+REGISTER_DISPATCH(argmin_stub, &argmin_kernel);
 
 } // namespace raxis

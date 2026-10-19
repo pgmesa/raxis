@@ -148,6 +148,14 @@ Tensor min(const Tensor& self) {
 }
 
 
+Tensor argmax(const Tensor& self, std::optional<int64_t> dim, bool keepdim) {
+    return ops::argmax(self, dim, keepdim);
+}
+
+Tensor argmin(const Tensor& self, std::optional<int64_t> dim, bool keepdim) {
+    return ops::argmin(self, dim, keepdim);
+}
+
 Tensor amax(const Tensor& self, IntArrayRef dim, bool keepdim) {
     Tensor result = ops::amax(self, dim, keepdim);
     if (autograd::requires_autograd(self)) {
