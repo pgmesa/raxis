@@ -1062,6 +1062,17 @@ class TestEngine:
         f(t).backward()
         check_match(r.grad, t.grad, atol=1e-4)
 
+    def test_grad_is_not_a_view_of_the_user_gradient(self):
+        # reshape backward returns a view of g; stealing it as .grad would make
+        # the second backward add into g (PyTorch 2.14 does: g ends up as 2)
+        x = raxis.zeros((2, 2), requires_grad=True)
+        g = raxis.ones(4)
+        y = x.reshape(4)
+        y.backward(g, retain_graph=True)
+        y.backward(g)
+        check_match(g, torch.ones(4))
+        check_match(x.grad, torch.full((2, 2), 2.0))
+
     def test_unused_output_of_multi_output_op(self):
         r, t = make_grad_pair(randf(4, 3))
         r.unbind(0)[1].sum().backward()

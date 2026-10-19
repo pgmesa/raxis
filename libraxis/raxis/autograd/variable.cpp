@@ -77,8 +77,12 @@ TensorList AccumulateGrad::apply(const TensorList& grads) {
     } else {
         // .grad must own its memory: optimizers update it in place, and the
         // incoming grad can be a broadcast view or be shared with other nodes
-        // or with the gradient passed by the user to backward().
-        bool can_steal = grad.use_count() == 1 && obeys_layout_contract(grad, variable_);
+        // or with the gradient passed by the user to backward(). PyTorch only
+        // checks the impl: a view of the user's gradient (from reshape) is
+        // stolen there and the next backward adds into the user's tensor.
+        bool can_steal = grad.use_count() == 1
+            && grad.unsafe_get_tensor_impl()->storage().use_count() == 1
+            && obeys_layout_contract(grad, variable_);
         variable_.set_grad(can_steal ? grad : clone_obey_contract(grad, variable_));
     }
 
