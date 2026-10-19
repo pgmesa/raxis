@@ -8,6 +8,8 @@
 #include <raxis/tensor/factories.h>
 #include <raxis/autograd/graph.h>
 #include <raxis/autograd/engine.h>
+#include <raxis/autograd/autograd_meta.h>
+#include <raxis/tensor/detail/tensor_impl.h>
 
 #include <raxis/ops/binary_ops.h>
 #include <raxis/ops/reduce_ops.h>
@@ -63,12 +65,15 @@ static Tensor clone_obey_contract(const Tensor& grad, const Tensor& variable) {
     return out;
 }
 
+// From: torch/csrc/autograd/functions/accumulate_grad.h (accumulateGrad)
 TensorList AccumulateGrad::apply(const TensorList& grads) {
     const Tensor& grad = grads[0];
     RAXIS_CHECK(grad.defined(), "AccumulateGrad received undefined gradient");
 
-    if (variable_.grad().defined()) {
-        variable_.set_grad(variable_.grad() + grad);
+    if (Tensor variable_grad = variable_.grad(); variable_grad.defined()) {
+        // In place, as PyTorch: .grad keeps its memory (and its layout)
+        // across backward passes, and references to it see the sum
+        variable_grad.add_(grad);
     } else {
         // .grad must own its memory: optimizers update it in place, and the
         // incoming grad can be a broadcast view or be shared with other nodes
@@ -78,6 +83,24 @@ TensorList AccumulateGrad::apply(const TensorList& grads) {
     }
 
     return {};
+}
+
+
+// From: torch/csrc/autograd/variable.cpp (impl::grad_accumulator)
+// A leaf used by k ops gets a single AccumulateGrad: the engine sums the k
+// gradients in its input buffer and .grad is updated once, instead of k
+// times by k nodes (one allocation each). The node lives as long as some
+// graph uses it; the leaf only keeps a weak reference.
+NodePtr grad_accumulator(const Tensor& leaf) {
+    AutogradMeta* meta = leaf.unsafe_get_tensor_impl()->autograd_meta();
+    RAXIS_INTERNAL_ASSERT(meta && meta->requires_grad && !meta->grad_fn,
+        "grad_accumulator() should be only called on leaves that require grad");
+    if (NodePtr acc = meta->grad_accumulator.lock()) {
+        return acc;
+    }
+    auto acc = std::make_shared<AccumulateGrad>(leaf);
+    meta->grad_accumulator = acc;
+    return acc;
 }
 
 
@@ -95,9 +118,7 @@ static Edge make_edge_for(const Tensor& input) {
     if (input.grad_fn()) {
         return Edge{input.grad_fn(), input.output_nr()};
     }
-    // Leaf tensor: create or reuse AccumulateGrad
-    auto acc = std::make_shared<AccumulateGrad>(input);
-    return Edge{std::move(acc), 0};
+    return Edge{grad_accumulator(input), 0};
 }
 
 

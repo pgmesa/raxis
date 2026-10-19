@@ -39,6 +39,10 @@ private:
 };
 
 
+// The AccumulateGrad node of a leaf that requires grad, created on first use
+RAXIS_API NodePtr grad_accumulator(const Tensor& leaf);
+
+
 // Wire the autograd graph for an output tensor.
 // Creates edges from grad_fn back to each input's grad_fn (or AccumulateGrad for leaves).
 RAXIS_API void set_autograd_meta(

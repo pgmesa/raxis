@@ -128,7 +128,10 @@ void run_backward(const Tensor& tensor, const Tensor& grad, bool retain_graph) {
 
     // Backward on a leaf: the graph is just its AccumulateGrad
     if (!tensor.grad_fn()) {
-        AccumulateGrad(tensor).apply({grad_output});
+        // Moved in, so that an implicit ones_like can be stolen as .grad
+        TensorList inputs(1);
+        inputs[0] = std::move(grad_output);
+        grad_accumulator(tensor)->apply(inputs);
         return;
     }
 

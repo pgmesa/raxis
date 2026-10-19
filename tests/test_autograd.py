@@ -1043,6 +1043,25 @@ class TestEngine:
         check_match(f(r).grad, f(t).grad)
         check_match(r.grad, t.grad)
 
+    def test_grad_accumulated_in_place(self):
+        # As in PyTorch, a later backward adds into the existing .grad tensor
+        def run(x):
+            (x * 2.0).sum().backward()
+            g = x.grad
+            (x * 3.0).sum().backward()
+            return g
+        r, t = make_grad_pair(randf(3, 4))
+        check_match(run(r), run(t))
+        check_match(r.grad, t.grad)
+
+    def test_leaf_used_many_times(self):
+        def f(x):
+            return (x * 2.0 + x.exp() - x.sin() * x).sum()
+        r, t = make_grad_pair(randf(3, 4))
+        f(r).backward()
+        f(t).backward()
+        check_match(r.grad, t.grad, atol=1e-4)
+
     def test_unused_output_of_multi_output_op(self):
         r, t = make_grad_pair(randf(4, 3))
         r.unbind(0)[1].sum().backward()
