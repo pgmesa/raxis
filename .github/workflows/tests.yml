@@ -1,8 +1,8 @@
 name: Tests
 
+# Not on every push while the repository is private (Actions minutes): changes
+# are tested locally on Windows and WSL, and releases test every wheel
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
