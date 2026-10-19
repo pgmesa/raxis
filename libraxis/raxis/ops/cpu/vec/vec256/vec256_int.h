@@ -281,6 +281,27 @@ inline Vectorized<int32_t> minimum(const Vectorized<int32_t>& a, const Vectorize
     return _mm256_min_epi32(a, b);
 }
 
+// --- clamp ---
+
+template <>
+inline Vectorized<int32_t> clamp(
+    const Vectorized<int32_t>& a,
+    const Vectorized<int32_t>& min_val,
+    const Vectorized<int32_t>& max_val
+) {
+    return _mm256_min_epi32(max_val, _mm256_max_epi32(a, min_val));
+}
+
+template <>
+inline Vectorized<int32_t> clamp_min(const Vectorized<int32_t>& a, const Vectorized<int32_t>& min_val) {
+    return _mm256_max_epi32(min_val, a);
+}
+
+template <>
+inline Vectorized<int32_t> clamp_max(const Vectorized<int32_t>& a, const Vectorized<int32_t>& max_val) {
+    return _mm256_min_epi32(max_val, a);
+}
+
 
 template <>
 struct Vectorized<int64_t> {
@@ -541,6 +562,27 @@ inline Vectorized<int64_t> minimum(const Vectorized<int64_t>& a, const Vectorize
     return _mm256_blendv_epi8(a, b, cmp);
 }
 
+// --- clamp (AVX2 has no 64-bit min/max: compare + blend) ---
+
+template <>
+inline Vectorized<int64_t> clamp(
+    const Vectorized<int64_t>& a,
+    const Vectorized<int64_t>& min_val,
+    const Vectorized<int64_t>& max_val
+) {
+    return minimum(maximum(a, min_val), max_val);
+}
+
+template <>
+inline Vectorized<int64_t> clamp_min(const Vectorized<int64_t>& a, const Vectorized<int64_t>& min_val) {
+    return maximum(min_val, a);
+}
+
+template <>
+inline Vectorized<int64_t> clamp_max(const Vectorized<int64_t>& a, const Vectorized<int64_t>& max_val) {
+    return minimum(max_val, a);
+}
+
 
 template <>
 struct Vectorized<uint8_t> {
@@ -784,6 +826,27 @@ inline Vectorized<uint8_t> maximum(const Vectorized<uint8_t>& a, const Vectorize
 template <>
 inline Vectorized<uint8_t> minimum(const Vectorized<uint8_t>& a, const Vectorized<uint8_t>& b) {
     return _mm256_min_epu8(a, b);
+}
+
+// --- clamp (unsigned) ---
+
+template <>
+inline Vectorized<uint8_t> clamp(
+    const Vectorized<uint8_t>& a,
+    const Vectorized<uint8_t>& min_val,
+    const Vectorized<uint8_t>& max_val
+) {
+    return _mm256_min_epu8(max_val, _mm256_max_epu8(a, min_val));
+}
+
+template <>
+inline Vectorized<uint8_t> clamp_min(const Vectorized<uint8_t>& a, const Vectorized<uint8_t>& min_val) {
+    return _mm256_max_epu8(min_val, a);
+}
+
+template <>
+inline Vectorized<uint8_t> clamp_max(const Vectorized<uint8_t>& a, const Vectorized<uint8_t>& max_val) {
+    return _mm256_min_epu8(max_val, a);
 }
 
 } // namespacer CPU_CAPABILITY
