@@ -122,6 +122,15 @@ public:
     TensorIteratorConfig& add_borrowed_output(Tensor&& output) = delete;
     TensorIteratorConfig& add_borrowed_input(Tensor&& input) = delete;
 
+    // Sets the check_mem_overlap_ flag, which is true by default.
+    // If true, outputs must not have internal overlap (several elements on
+    //   one address) nor partially overlap an input. Idempotent ops such as
+    //   fill_ can disable it.
+    TensorIteratorConfig& check_mem_overlap(const bool _check) {
+        check_mem_overlap_ = _check;
+        return *this;
+    }
+
     TensorIteratorConfig& is_reduction(bool is_reduction) {
         is_reduction_ = is_reduction;
         return *this;
@@ -210,6 +219,7 @@ private:
     std::optional<Device> static_device_ = std::nullopt;
     bool allow_cpu_scalars_ = false;
     bool is_reduction_ = false;
+    bool check_mem_overlap_ = true;
     bool check_all_same_dtype_ = true;
     bool check_all_same_device_ = true;
     bool enforce_safe_casting_to_output_ = false;
@@ -410,6 +420,7 @@ private:
     bool has_coalesced_dimensions_ = false;
 
     void populate_operands(TensorIteratorConfig&);
+    void compute_mem_overlaps(const TensorIteratorConfig&);
     void compute_shape(const TensorIteratorConfig&);
     void check_output_shapes();
     void compute_types(const TensorIteratorConfig&);

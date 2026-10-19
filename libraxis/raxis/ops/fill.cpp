@@ -22,6 +22,7 @@ Tensor& fill_(Tensor& self, Scalar value) {
     }
 
     auto iter = TensorIteratorConfig()
+        .check_mem_overlap(false)  // Fill is idempotent, so overlap is okay
         .check_all_same_dtype(false)
         .add_output(self)
         .build();

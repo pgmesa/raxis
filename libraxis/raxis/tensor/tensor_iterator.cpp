@@ -22,6 +22,7 @@
 #include <raxis/tensor/factories.h>
 #include <raxis/tensor/shape_utils.h>
 #include <raxis/tensor/type_promotion.h>
+#include <raxis/tensor/memory_overlap.h>
 #include <raxis/tensor/detail/dim_counter.h>
 
 
@@ -140,6 +141,8 @@ void TensorIterator::build(TensorIteratorConfig& config) {
 
     // Fill in operands_ based on configuration
     populate_operands(config);
+    // Check that the outputs can be written without overlapping writes or reads
+    compute_mem_overlaps(config);
     // Compute the broadcasted shape
     compute_shape(config);
     // Compute the result dtype and device
@@ -191,6 +194,22 @@ void TensorIterator::populate_operands(TensorIteratorConfig& config) {
             if (output.is_same(input)) {
                 operands_[idx].is_read_write = true;
                 break;
+            }
+        }
+    }
+}
+
+void TensorIterator::compute_mem_overlaps(const TensorIteratorConfig& config) {
+    if (!config.check_mem_overlap_) return;
+
+    for (int out_idx = 0; out_idx < num_outputs_; out_idx++) {
+        const Tensor& output = operands_[out_idx].tensor();
+        if (!output.defined()) continue;
+        assert_no_internal_overlap(output);
+        for (int inp_idx = num_outputs_; inp_idx < num_operands(); inp_idx++) {
+            const Tensor& input = operands_[inp_idx].tensor();
+            if (!input.is_same(output)) {
+                assert_no_partial_overlap(output, input);
             }
         }
     }
