@@ -1,11 +1,18 @@
 name: Wheels
 
-# Manual runs build and test the wheels and keep them as artifacts. Publishing
-# a GitHub release also uploads them to the release and to PyPI.
+# Manual runs build and test the wheels and keep them as artifacts. With a
+# tag, they are also uploaded to PyPI and to a GitHub release with that tag.
+# With a run id, nothing is built: the wheels of that run (already tested)
+# are the ones published.
 on:
-  release:
-    types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (e.g. v0.1.0), empty to only build"
+        default: ""
+      run_id:
+        description: "Publish the wheels of this run instead of building them"
+        default: ""
 
 permissions:
   contents: read
@@ -13,6 +20,7 @@ permissions:
 jobs:
   build:
     name: ${{ matrix.os }}
+    if: inputs.run_id == ''
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -35,12 +43,19 @@ jobs:
   publish:
     name: Publish to PyPI
     needs: build
-    if: github.event_name == 'release'
+    if: >-
+      !cancelled() && inputs.tag != '' &&
+      (needs.build.result == 'success' || (inputs.run_id != '' && needs.build.result == 'skipped'))
     runs-on: ubuntu-24.04
     environment: pypi
     permissions:
-      contents: write  # attach the wheels to the release
+      actions: read    # download the artifacts of another run
+      contents: write  # create the release
       id-token: write  # PyPI trusted publishing
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.tag }}
+      RUN_ID: ${{ inputs.run_id || github.run_id }}
 
     steps:
       - uses: actions/download-artifact@v8
@@ -48,10 +63,29 @@ jobs:
           pattern: wheels-*
           path: dist
           merge-multiple: true
+          run-id: ${{ env.RUN_ID }}
+          github-token: ${{ github.token }}
 
-      - name: Attach wheels to the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" dist/*.whl --repo "${{ github.repository }}"
+      # The release must point to the commit the wheels were built from, and
+      # the tag must match the version inside them
+      - name: Check the wheels
+        id: check
+        run: |
+          ls -l dist
+          version="${TAG#v}"
+          if ls dist/*.whl | grep -v "/raxis-${version}-"; then
+            echo "Wheels whose version is not ${version}" >&2
+            exit 1
+          fi
+          sha=$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}" --jq .head_sha)
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
 
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Create the GitHub release
+        run: >-
+          gh release create "$TAG" dist/*.whl
+          --repo "${{ github.repository }}"
+          --target "${{ steps.check.outputs.sha }}"
+          --title "$TAG"
+          --generate-notes
