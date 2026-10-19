@@ -62,10 +62,14 @@ examples = [
     "ipywidgets>=8.0.0",
     "ipykernel>=6.0.0",
 ]
+viz = [
+    "graphviz>=0.20",
+]
 dev = [
     "raxis[build]",
     "raxis[test]",
     "raxis[examples]",
+    "raxis[viz]",
 ]
 # PyTorch is the reference for tests and examples: pick one build with
 # `--extra cpu` or `--extra cu130`

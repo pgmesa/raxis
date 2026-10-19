@@ -39,6 +39,17 @@ optimizer.step()
 The API follows PyTorch's, so most code only needs `torch` replaced by
 `raxis`.
 
+`raxis.autograd.graph` exports the autograd graph of a tensor as Graphviz DOT
+or Mermaid text, as autograd nodes (`view="backward"`) or as forward ops
+(`view="forward"`):
+
+```python
+from raxis.autograd import graph
+
+print(graph.to_mermaid(loss, dict(model.named_parameters()), view="forward"))
+graph.render(loss, "loss.svg")  # needs pip install 'raxis[viz]' and Graphviz
+```
+
 ## Inside
 
 | Path | What it holds |
@@ -47,7 +58,7 @@ The API follows PyTorch's, so most code only needs `torch` replaced by
 | `libraxis/raxis/ops` | Operators and their CPU kernels, compiled once per ISA (AVX2, NEON, ...) and picked at runtime |
 | `libraxis/raxis/autograd` | Graph, engine and backward functions |
 | `libraxis/bindings` | pybind11 module `raxis._C` |
-| `raxis/` | Python package: `nn`, `optim`, tensor printing |
+| `raxis/` | Python package: `nn`, `optim`, `autograd.graph`, tensor printing |
 
 Code taken from PyTorch keeps a `// From: aten/src/ATen/...` comment pointing
 to the original.

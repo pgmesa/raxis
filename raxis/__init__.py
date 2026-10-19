@@ -162,4 +162,4 @@ class enable_grad:
         _C.set_grad_enabled(self._prev)
 
 
-from raxis import nn, optim
+from raxis import autograd, nn, optim
