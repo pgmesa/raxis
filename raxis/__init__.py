@@ -54,6 +54,9 @@ spec.loader.exec_module(_C)
 from raxis._C import *
 from raxis._tensor_str import _str
 
+import builtins as _builtins
+import functools as _functools
+
 Tensor.__repr__ = _str
 
 # Dtype aliases, as in torch
@@ -81,6 +84,39 @@ for _name in dir(Tensor):
     if _is_inplace_method or _is_inplace_operator:
         setattr(Tensor, _name, _return_self(getattr(Tensor, _name)))
 del _name, _is_inplace_method, _is_inplace_operator
+
+
+def _is_int_sequence(args):
+    # `int` is the raxis.int dtype here, as in torch
+    return len(args) > 1 and all(isinstance(a, _builtins.int) for a in args)
+
+
+def _sizes_as_varargs(fn):
+    """Lets `fn(3, 4)` mean `fn((3, 4))`, as torch's argument parser does for
+    shapes (torch.ones(2, 3))."""
+    @_functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        if _is_int_sequence(args):
+            args = (args,)
+        return fn(*args, **kwargs)
+    return wrapper
+
+
+def _method_sizes_as_varargs(method):
+    """Same as _sizes_as_varargs for methods: x.reshape(2, 3), x.permute(1, 0)."""
+    @_functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        if _is_int_sequence(args):
+            args = (args,)
+        return method(self, *args, **kwargs)
+    return wrapper
+
+
+for _name in ("empty", "zeros", "ones", "rand", "randn"):
+    globals()[_name] = _sizes_as_varargs(globals()[_name])
+for _name in ("reshape", "view", "permute", "expand"):
+    setattr(Tensor, _name, _method_sizes_as_varargs(getattr(Tensor, _name)))
+del _name
 
 
 class no_grad:
