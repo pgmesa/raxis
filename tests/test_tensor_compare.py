@@ -199,3 +199,105 @@ def test_clamp_backward(lo, hi):
     (r.clamp(lo, hi) * 2.0).sum().backward()
     (t.clamp(lo, hi) * 2.0).sum().backward()
     check_match(r.grad, t.grad)
+
+
+# ===========================================================================
+# max / min over a dim, argmax / argmin
+# ===========================================================================
+
+ARG_SHAPES = [(7,), (5, 4), (3, 4, 5), (300, 500)]
+
+
+def with_ties_and_nans(shape, dtype, seed=0):
+    rng = np.random.default_rng(seed)
+    data = rng.integers(-3, 4, shape).astype(dtype)  # small range: many ties
+    if np.issubdtype(dtype, np.floating) and data.size > 4:
+        data.flat[::7] = np.nan
+    return data
+
+
+def check_indices(r, t):
+    np.testing.assert_array_equal(np.array(r.tolist()), t.numpy())
+
+
+@pytest.mark.parametrize("shape", ARG_SHAPES)
+@pytest.mark.parametrize("dtype", [np.float32, np.float64, np.int32, np.int64, np.uint8],
+                         ids=lambda d: np.dtype(d).name)
+@pytest.mark.parametrize("name", ["argmax", "argmin"])
+def test_arg_reductions(name, dtype, shape):
+    if dtype == np.uint8:
+        data = np.random.default_rng(0).integers(0, 5, shape).astype(dtype)
+    else:
+        data = with_ties_and_nans(shape, dtype)
+    r, t = make_pair(data)
+    check_indices(getattr(raxis, name)(r), getattr(torch, name)(t))
+    for dim in range(-len(shape), len(shape)):
+        for keepdim in (False, True):
+            check_indices(getattr(r, name)(dim, keepdim), getattr(t, name)(dim, keepdim))
+
+
+@pytest.mark.parametrize("name", ["argmax", "argmin"])
+def test_arg_reductions_special_cases(name):
+    r, t = make_pair(np.ones((2, 1, 3), dtype=np.float32))
+    check_indices(getattr(r, name)(1), getattr(t, name)(1))
+    assert tuple(getattr(r, name)(keepdim=True).shape) == tuple(getattr(t, name)(keepdim=True).shape)
+    check_indices(getattr(raxis.tensor(3.0), name)(0), getattr(torch.tensor(3.0), name)(0))
+    r, t = make_pair(np.zeros((0, 3), dtype=np.float32))
+    assert tuple(getattr(r, name)(1).shape) == tuple(getattr(t, name)(1).shape)
+    with pytest.raises(RuntimeError):
+        getattr(r, name)()
+    with pytest.raises(RuntimeError):
+        getattr(raxis.tensor([True, False]), name)()
+
+
+def test_argmax_large_parallel():
+    data = np.random.default_rng(1).standard_normal(200_000)
+    data[123_456] = 50.0
+    r, t = make_pair(data)
+    assert r.argmax().item() == t.argmax().item()
+    assert r.argmin().item() == t.argmin().item()
+
+
+def test_argmax_non_contiguous():
+    r, t = make_pair(randf(40, 60))
+    check_indices(r.transpose(0, 1).argmax(1), t.t().argmax(1))
+    check_indices(r[:, ::3].argmin(0), t[:, ::3].argmin(0))
+
+
+@pytest.mark.parametrize("shape", ARG_SHAPES)
+@pytest.mark.parametrize("dtype", [np.float32, np.float64, np.int64], ids=lambda d: np.dtype(d).name)
+@pytest.mark.parametrize("name", ["max", "min"])
+def test_minmax_dim(name, dtype, shape):
+    r, t = make_pair(with_ties_and_nans(shape, dtype))
+    for dim in range(-len(shape), len(shape)):
+        for keepdim in (False, True):
+            r_out = getattr(r, name)(dim, keepdim)
+            t_out = getattr(t, name)(dim, keepdim)
+            check_match(r_out.values, t_out.values)
+            check_indices(r_out.indices, t_out.indices)
+            r_values, r_indices = getattr(raxis, name)(r, dim, keepdim=keepdim)
+            check_match(r_values, t_out.values)
+
+
+def test_minmax_dim_bool_and_0d():
+    r, t = make_pair(np.array([[True, False], [False, False]]))
+    check_match(r.max(1).values, t.max(1).values)
+    check_indices(r.min(0).indices, t.min(0).indices)
+    out = raxis.tensor(3.0).max(0)
+    assert out.values.item() == 3.0 and out.indices.item() == 0
+
+
+def test_minmax_dim_empty_dim_raises():
+    with pytest.raises(RuntimeError):
+        raxis.zeros((0, 3)).max(0)
+
+
+@pytest.mark.parametrize("name", ["max", "min"])
+@pytest.mark.parametrize("keepdim", [False, True])
+def test_minmax_dim_backward(name, keepdim):
+    data = np.array([[1.0, 3.0, 3.0], [4.0, 0.0, 2.0]], dtype=np.float32)
+    r, t = make_grad_pair(data)
+    (getattr(r, name)(1, keepdim).values.exp() * 2.0).sum().backward()
+    (getattr(t, name)(1, keepdim).values.exp() * 2.0).sum().backward()
+    check_match(r.grad, t.grad)
+    assert getattr(r, name)(0).values.grad_fn.name() == getattr(t, name)(0).values.grad_fn.name()
