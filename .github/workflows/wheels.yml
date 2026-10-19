@@ -1,30 +1,44 @@
 name: Wheels
 
-# Manual runs build and test the wheels and keep them as artifacts. With a
-# tag (pushed beforehand), they are also uploaded to PyPI and to a GitHub
-# release of that tag.
-# With a run id, nothing is built: the wheels of that run (already tested)
-# are the ones published.
+# Pushing a version tag releases it: the wheels are built and tested, then
+# uploaded to PyPI and to a GitHub release whose notes are the tag's message
+# followed by the commits since the previous tag:
+#
+#   git tag -a v0.2.0 -F notes.md && git push origin v0.2.0
+#
+# Manual runs only build and test the wheels.
 on:
+  push:
+    tags: ["v*"]
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Release tag to publish (e.g. v0.1.0), empty to only build"
-        default: ""
-      run_id:
-        description: "Publish the wheels of this run instead of building them"
-        default: ""
 
 permissions:
   contents: read
 
 jobs:
+  validate:
+    name: Validate tag
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.validate.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: validate
+        uses: pgmesa/actions/validate-tag@validate-tag/v1.0.0
+        with:
+          tag: ${{ github.ref_name }}
+          version-file: raxis/__init__.py
+
   build:
     name: ${{ matrix.os }}
-    if: inputs.run_id == ''
+    needs: validate
+    # validate is skipped on manual runs
+    if: ${{ !failure() && !cancelled() }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
       matrix:
         os: [windows-2022, ubuntu-24.04]
 
@@ -33,7 +47,8 @@ jobs:
         with:
           submodules: recursive
 
-      # Configured in [tool.cibuildwheel] in pyproject.toml
+      # Configured in [tool.cibuildwheel] in pyproject.toml. Each wheel is
+      # tested right after it is built, and the first failure stops the run
       - uses: pypa/cibuildwheel@v4.2.1
 
       - uses: actions/upload-artifact@v7
@@ -42,54 +57,55 @@ jobs:
           path: wheelhouse/*.whl
 
   publish:
-    name: Publish to PyPI
-    needs: build
-    if: >-
-      !cancelled() && inputs.tag != '' &&
-      (needs.build.result == 'success' || (inputs.run_id != '' && needs.build.result == 'skipped'))
+    name: Publish
+    needs: [validate, build]
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-24.04
     environment: pypi
     permissions:
-      actions: read    # download the artifacts of another run
       contents: write  # create the release
       id-token: write  # PyPI trusted publishing
     env:
       GH_TOKEN: ${{ github.token }}
-      TAG: ${{ inputs.tag }}
-      RUN_ID: ${{ inputs.run_id || github.run_id }}
+      VERSION: ${{ needs.validate.outputs.version }}
 
     steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # git-cliff needs the history and the tags
+
+      # The checkout of a tag can leave it as a lightweight tag, without the
+      # message that becomes the intro of the release notes
+      - run: git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+
       - uses: actions/download-artifact@v8
         with:
           pattern: wheels-*
           path: dist
           merge-multiple: true
-          run-id: ${{ env.RUN_ID }}
-          github-token: ${{ github.token }}
 
-      # The tag is pushed beforehand (GITHUB_TOKEN cannot create it): it must
-      # point to the commit the wheels were built from and match their version
-      - name: Check the tag and the wheels
+      - name: Check the wheels
         run: |
           ls -l dist
-          version="${TAG#v}"
-          if ls dist/*.whl | grep -v "/raxis-${version}-"; then
-            echo "Wheels whose version is not ${version}" >&2
-            exit 1
-          fi
-          tag_sha=$(gh api "repos/${{ github.repository }}/commits/${TAG}" --jq .sha)
-          run_sha=$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}" --jq .head_sha)
-          if [ "$tag_sha" != "$run_sha" ]; then
-            echo "${TAG} points to ${tag_sha}, the wheels were built from ${run_sha}" >&2
+          if ls dist/*.whl | grep -v "/raxis-${VERSION}-"; then
+            echo "::error::Wheels whose version is not ${VERSION}"
             exit 1
           fi
 
+      # skip-existing lets a re-run finish a release whose upload succeeded
       - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
 
+      - id: notes
+        uses: pgmesa/actions/git-cliff@git-cliff/v1.0.0
+        with:
+          args: --latest --strip header
+
+      # The tag was pushed by hand: GITHUB_TOKEN cannot create it
       - name: Create the GitHub release
         run: >-
-          gh release create "$TAG" dist/*.whl
-          --repo "${{ github.repository }}"
+          gh release create "$GITHUB_REF_NAME" dist/*.whl
           --verify-tag
-          --title "$TAG"
-          --generate-notes
+          --title "$GITHUB_REF_NAME"
+          --notes-file "${{ steps.notes.outputs.file }}"
