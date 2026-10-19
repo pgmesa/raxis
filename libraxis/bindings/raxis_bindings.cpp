@@ -78,6 +78,12 @@ PYBIND11_MODULE(_C, c) {
     
     c.def("set_default_dtype", &raxis::set_default_dtype, py::arg("dtype"));
 
+    // Memory formats, as torch.preserve_format and torch.contiguous_format
+    py::enum_<raxis::MemoryFormat>(c, "memory_format", py::module_local())
+        .value("preserve_format", raxis::MemoryFormat::Preserve)
+        .value("contiguous_format", raxis::MemoryFormat::Contiguous)
+        .export_values();
+
     // Device binding
     py::class_<raxis::Device>(c, "device", py::module_local())
         .def(py::init<const std::string&>())
@@ -335,7 +341,8 @@ PYBIND11_MODULE(_C, c) {
             py::arg("other"))
         
         // Functions to access operations
-        .def("clone", [](const raxis::Tensor& self) { return self.clone(); })
+        .def("clone", &raxis::Tensor::clone,
+            py::arg_v("memory_format", raxis::MemoryFormat::Preserve, "preserve_format"))
         .def("copy_",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::copy_, py::const_),
             py::arg("other"))
@@ -770,70 +777,77 @@ PYBIND11_MODULE(_C, c) {
         return raxis::empty(shape, options);
     }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false);
 
-    c.def("empty_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
+    c.def("empty_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, raxis::MemoryFormat memory_format) {
         auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
-        return raxis::empty_like(other, options);
-    }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false);
+        return raxis::empty_like(other, options, memory_format);
+    }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false,
+       py::arg_v("memory_format", raxis::MemoryFormat::Preserve, "preserve_format"));
 
     c.def("zeros", [](raxis::VecOrInt shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
         auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
         return raxis::zeros(shape, options);
     }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false);
 
-    c.def("zeros_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
+    c.def("zeros_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, raxis::MemoryFormat memory_format) {
         auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
-        return raxis::zeros_like(other, options);
-    }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false);
+        return raxis::zeros_like(other, options, memory_format);
+    }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false,
+       py::arg_v("memory_format", raxis::MemoryFormat::Preserve, "preserve_format"));
 
     c.def("ones", [](raxis::VecOrInt shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
         auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
         return raxis::ones(shape, options);
     }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false);
 
-    c.def("ones_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
+    c.def("ones_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, raxis::MemoryFormat memory_format) {
         auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
-        return raxis::ones_like(other, options);
-    }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false);
+        return raxis::ones_like(other, options, memory_format);
+    }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false,
+       py::arg_v("memory_format", raxis::MemoryFormat::Preserve, "preserve_format"));
 
     c.def("full", [](raxis::VecOrInt shape, raxis::Scalar fill_value, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
         auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
         return raxis::full(shape, fill_value, options);
     }, py::arg("shape"), py::arg("fill_value"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false);
 
-    c.def("full_like", [](const raxis::Tensor& other, raxis::Scalar fill_value, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
+    c.def("full_like", [](const raxis::Tensor& other, raxis::Scalar fill_value, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, raxis::MemoryFormat memory_format) {
         auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
-        return raxis::full_like(other, fill_value, options);
-    }, py::arg("other"), py::arg("fill_value"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false);
+        return raxis::full_like(other, fill_value, options, memory_format);
+    }, py::arg("other"), py::arg("fill_value"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false,
+       py::arg_v("memory_format", raxis::MemoryFormat::Preserve, "preserve_format"));
 
     c.def("rand", [](raxis::VecOrInt shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
         auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
         return raxis::rand(shape, options);
     }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false);
 
-    c.def("rand_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
+    c.def("rand_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, raxis::MemoryFormat memory_format) {
         auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
-        return raxis::rand_like(other, options);
-    }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false);
+        return raxis::rand_like(other, options, memory_format);
+    }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false,
+       py::arg_v("memory_format", raxis::MemoryFormat::Preserve, "preserve_format"));
 
     c.def("randn", [](raxis::VecOrInt shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
         auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
         return raxis::randn(shape, options);
     }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false);
 
-    c.def("randn_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
+    c.def("randn_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, raxis::MemoryFormat memory_format) {
         auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
-        return raxis::randn_like(other, options);
-    }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false);
+        return raxis::randn_like(other, options, memory_format);
+    }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false,
+       py::arg_v("memory_format", raxis::MemoryFormat::Preserve, "preserve_format"));
 
     c.def("randint", [](int64_t low, int64_t high, raxis::VecOrInt shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
         auto options = raxis::TensorOptions().dtype(dtype).device(device);
         return raxis::randint(low, high, shape, options);
     }, py::arg("low"), py::arg("high"), py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
 
-    c.def("randint_like", [](const raxis::Tensor& other, int64_t low, int64_t high, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
+    c.def("randint_like", [](const raxis::Tensor& other, int64_t low, int64_t high, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, raxis::MemoryFormat memory_format) {
         auto options = raxis::TensorOptions().dtype(dtype).device(device);
-        return raxis::randint_like(other, low, high, options);
-    }, py::arg("other"), py::arg("low"), py::arg("high"), py::arg("dtype") = py::none(), py::arg("device") = py::none());
+        return raxis::randint_like(other, low, high, options, memory_format);
+    }, py::arg("other"), py::arg("low"), py::arg("high"), py::arg("dtype") = py::none(), py::arg("device") = py::none(),
+       py::arg_v("memory_format", raxis::MemoryFormat::Preserve, "preserve_format"));
 
     c.def("manual_seed", &raxis::manual_seed, py::arg("seed"));
 

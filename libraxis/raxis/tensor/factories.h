@@ -55,25 +55,37 @@ RAXIS_API Tensor empty_strided(
     IntArrayRef shape, IntArrayRef strides, TensorOptions options = {});
 
 RAXIS_API Tensor full(IntArrayRef shape, Scalar value, TensorOptions options = {});
-RAXIS_API Tensor full_like(const Tensor& other, Scalar value, TensorOptions options = {});
+RAXIS_API Tensor full_like(
+    const Tensor& other, Scalar value, TensorOptions options = {},
+    MemoryFormat memory_format = MemoryFormat::Preserve);
 
 RAXIS_API Tensor zeros(IntArrayRef shape, TensorOptions options = {});
-RAXIS_API Tensor zeros_like(const Tensor& other, TensorOptions options = {});
+RAXIS_API Tensor zeros_like(
+    const Tensor& other, TensorOptions options = {},
+    MemoryFormat memory_format = MemoryFormat::Preserve);
 
 RAXIS_API Tensor ones(IntArrayRef shape, TensorOptions options = {});
-RAXIS_API Tensor ones_like(const Tensor& other, TensorOptions options = {});
+RAXIS_API Tensor ones_like(
+    const Tensor& other, TensorOptions options = {},
+    MemoryFormat memory_format = MemoryFormat::Preserve);
 
 /// Returns a tensor filled with U[0, 1)
 RAXIS_API Tensor rand(IntArrayRef shape, TensorOptions options = {});
-RAXIS_API Tensor rand_like(const Tensor& other, TensorOptions options = {});
+RAXIS_API Tensor rand_like(
+    const Tensor& other, TensorOptions options = {},
+    MemoryFormat memory_format = MemoryFormat::Preserve);
 
 /// Returns a tensor filled with N(0, 1)
 RAXIS_API Tensor randn(IntArrayRef shape, TensorOptions options = {});
-RAXIS_API Tensor randn_like(const Tensor& other, TensorOptions options = {});
+RAXIS_API Tensor randn_like(
+    const Tensor& other, TensorOptions options = {},
+    MemoryFormat memory_format = MemoryFormat::Preserve);
 
 /// Returns an integer tensor filled with U[low, high)
 RAXIS_API Tensor randint(int64_t low, int64_t high, IntArrayRef shape, TensorOptions options = {});
-RAXIS_API Tensor randint_like(const Tensor& other, int64_t low, int64_t high, TensorOptions options = {});
+RAXIS_API Tensor randint_like(
+    const Tensor& other, int64_t low, int64_t high, TensorOptions options = {},
+    MemoryFormat memory_format = MemoryFormat::Preserve);
 
 RAXIS_API Tensor scalar_tensor(Scalar s, TensorOptions options = {});
 

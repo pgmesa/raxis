@@ -144,8 +144,10 @@ Tensor full(IntArrayRef shape, Scalar value, TensorOptions options) {
     return out;
 }
 
-Tensor full_like(const Tensor& other, Scalar value, TensorOptions options) {
-    Tensor out = empty_like(other, options);
+Tensor full_like(
+    const Tensor& other, Scalar value, TensorOptions options, MemoryFormat memory_format
+) {
+    Tensor out = empty_like(other, options, memory_format);
     if (out.numel() > 0) {
         out.fill_(value);
     }
@@ -160,8 +162,10 @@ Tensor zeros(IntArrayRef shape, TensorOptions options) {
     return out;
 }
 
-Tensor zeros_like(const Tensor& other, TensorOptions options) {
-    Tensor out = empty_like(other, options);
+Tensor zeros_like(
+    const Tensor& other, TensorOptions options, MemoryFormat memory_format
+) {
+    Tensor out = empty_like(other, options, memory_format);
     if (out.numel() > 0) {
         out.zero_();
     }
@@ -175,8 +179,10 @@ Tensor ones(IntArrayRef shape, TensorOptions options) {
     return full(shape, 1, options);
 }
 
-Tensor ones_like(const Tensor& other, TensorOptions options) {
-    return full_like(other, 1, options);
+Tensor ones_like(
+    const Tensor& other, TensorOptions options, MemoryFormat memory_format
+) {
+    return full_like(other, 1, options, memory_format);
 }
 
 Tensor rand(IntArrayRef shape, TensorOptions options) {
@@ -190,8 +196,10 @@ Tensor rand(IntArrayRef shape, TensorOptions options) {
     return empty(shape, options).uniform_(0.0, 1.0);
 }
 
-Tensor rand_like(const Tensor& other, TensorOptions options) {
-    Tensor out = empty_like(other, options);
+Tensor rand_like(
+    const Tensor& other, TensorOptions options, MemoryFormat memory_format
+) {
+    Tensor out = empty_like(other, options, memory_format);
     RAXIS_CHECK(
         out.dtype().is_floating(),
         "rand_like requires a floating-point dtype, got ", out.dtype()
@@ -210,8 +218,10 @@ Tensor randn(IntArrayRef shape, TensorOptions options) {
     return empty(shape, options).normal_(0.0, 1.0);
 }
 
-Tensor randn_like(const Tensor& other, TensorOptions options) {
-    Tensor out = empty_like(other, options);
+Tensor randn_like(
+    const Tensor& other, TensorOptions options, MemoryFormat memory_format
+) {
+    Tensor out = empty_like(other, options, memory_format);
     RAXIS_CHECK(
         out.dtype().is_floating(),
         "randn_like requires a floating-point dtype, got ", out.dtype()
@@ -230,8 +240,10 @@ Tensor randint(int64_t low, int64_t high, IntArrayRef shape, TensorOptions optio
     return empty(shape, options).randint_(low, high);
 }
 
-Tensor randint_like(const Tensor& other, int64_t low, int64_t high, TensorOptions options) {
-    Tensor out = empty_like(other, options);
+Tensor randint_like(
+    const Tensor& other, int64_t low, int64_t high, TensorOptions options, MemoryFormat memory_format
+) {
+    Tensor out = empty_like(other, options, memory_format);
     RAXIS_CHECK(
         out.dtype().is_integral(true),
         "randint_like requires an integral or bool dtype, got ", out.dtype()
