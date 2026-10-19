@@ -1,7 +1,8 @@
 name: Wheels
 
 # Manual runs build and test the wheels and keep them as artifacts. With a
-# tag, they are also uploaded to PyPI and to a GitHub release with that tag.
+# tag (pushed beforehand), they are also uploaded to PyPI and to a GitHub
+# release of that tag.
 # With a run id, nothing is built: the wheels of that run (already tested)
 # are the ones published.
 on:
@@ -66,10 +67,9 @@ jobs:
           run-id: ${{ env.RUN_ID }}
           github-token: ${{ github.token }}
 
-      # The release must point to the commit the wheels were built from, and
-      # the tag must match the version inside them
-      - name: Check the wheels
-        id: check
+      # The tag is pushed beforehand (GITHUB_TOKEN cannot create it): it must
+      # point to the commit the wheels were built from and match their version
+      - name: Check the tag and the wheels
         run: |
           ls -l dist
           version="${TAG#v}"
@@ -77,8 +77,12 @@ jobs:
             echo "Wheels whose version is not ${version}" >&2
             exit 1
           fi
-          sha=$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}" --jq .head_sha)
-          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          tag_sha=$(gh api "repos/${{ github.repository }}/commits/${TAG}" --jq .sha)
+          run_sha=$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}" --jq .head_sha)
+          if [ "$tag_sha" != "$run_sha" ]; then
+            echo "${TAG} points to ${tag_sha}, the wheels were built from ${run_sha}" >&2
+            exit 1
+          fi
 
       - uses: pypa/gh-action-pypi-publish@release/v1
 
@@ -86,6 +90,6 @@ jobs:
         run: >-
           gh release create "$TAG" dist/*.whl
           --repo "${{ github.repository }}"
-          --target "${{ steps.check.outputs.sha }}"
+          --verify-tag
           --title "$TAG"
           --generate-notes
