@@ -88,6 +88,18 @@ class TestSoftmax:
         assert np.isfinite(np.array(r_out)).all()
         check_match(r_out, getattr(torch, op)(t, 1), context=f"{op} large")
 
+    # A non-uniform incoming gradient (after sum() the softmax gradient is ~0).
+    # (2, 64, 3000) on dim 1 splits inner into chunks, the last one partial.
+    @pytest.mark.parametrize("op", ["softmax", "log_softmax"])
+    @pytest.mark.parametrize("shape, dim", [((64, 10), 1), ((300, 1000), 1), ((4, 7, 3, 9), 2),
+                                            ((2, 64, 3000), 1), ((5, 37), 0)])
+    def test_backward_random_grad(self, op, shape, dim, device):
+        r, t = make_grad_pair(randf_centered(*shape), device)
+        w = randf_centered(*shape, seed=7)
+        (getattr(raxis, op)(r, dim) * raxis.from_numpy(w)).sum().backward()
+        (getattr(torch, op)(t, dim) * torch.from_numpy(w)).sum().backward()
+        check_match(r.grad, t.grad, atol=1e-5, context=f"{op} grad")
+
     def test_float64(self, device):
         r, t = make_pair(randf_centered(4, 6).astype(np.float64), device)
         check_match(r.log_softmax(1), t.log_softmax(1), context="log_softmax f64")
