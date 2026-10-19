@@ -249,6 +249,21 @@ PYBIND11_MODULE(_C, c) {
         .def("broadcast_to", [](const raxis::Tensor& self, raxis::Vec shape) {
             return self.broadcast_to(shape);
         }, py::arg("shape"))
+        .def("expand", [](const raxis::Tensor& self, raxis::Vec shape) {
+            return self.expand(shape);
+        }, py::arg("size"))
+        .def("unbind", [](const raxis::Tensor& self, int64_t dim) {
+            return raxis::unbind(self, dim);
+        }, py::arg("dim") = 0)
+        .def("split", [](const raxis::Tensor& self, int64_t split_size, int64_t dim) {
+            return raxis::split(self, split_size, dim);
+        }, py::arg("split_size"), py::arg("dim") = 0)
+        .def("split", [](const raxis::Tensor& self, raxis::Vec split_sizes, int64_t dim) {
+            return raxis::split_with_sizes(self, split_sizes, dim);
+        }, py::arg("split_size"), py::arg("dim") = 0)
+        .def("chunk", [](const raxis::Tensor& self, int64_t chunks, int64_t dim) {
+            return raxis::chunk(self, chunks, dim);
+        }, py::arg("chunks"), py::arg("dim") = 0)
 
         .def("contiguous", &raxis::Tensor::contiguous)
         .def("is_contiguous", &raxis::Tensor::is_contiguous)
@@ -896,6 +911,13 @@ PYBIND11_MODULE(_C, c) {
         return raxis::stack(tensors, dim);
     }, py::arg("tensors"), py::arg("dim") = 0);
     c.def("unbind", &raxis::unbind, py::arg("input"), py::arg("dim") = 0);
+    c.def("split", [](const raxis::Tensor& input, int64_t split_size, int64_t dim) {
+        return raxis::split(input, split_size, dim);
+    }, py::arg("tensor"), py::arg("split_size_or_sections"), py::arg("dim") = 0);
+    c.def("split", [](const raxis::Tensor& input, raxis::Vec split_sizes, int64_t dim) {
+        return raxis::split_with_sizes(input, split_sizes, dim);
+    }, py::arg("tensor"), py::arg("split_size_or_sections"), py::arg("dim") = 0);
+    c.def("chunk", &raxis::chunk, py::arg("input"), py::arg("chunks"), py::arg("dim") = 0);
 
     // Linear algebra
     c.def("dot", &raxis::dot, py::arg("input"), py::arg("other"));

@@ -44,6 +44,18 @@ private:
     int64_t dim_;
 };
 
+class RAXIS_API SplitWithSizesBackward0 : public Node {
+public:
+    SplitWithSizesBackward0(const Tensor& self, IntArrayRef split_sizes, int64_t dim);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    DimVector self_shape_;
+    DimVector split_sizes_;
+    int64_t dim_;
+};
+
 // ============================================================
 // Shape ops
 // ============================================================
@@ -99,9 +111,9 @@ private:
     DimVector self_shape_;
 };
 
-class RAXIS_API BroadcastToBackward0 : public Node {
+class RAXIS_API ExpandBackward0 : public Node {
 public:
-    explicit BroadcastToBackward0(const Tensor& self);
+    explicit ExpandBackward0(const Tensor& self);
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 

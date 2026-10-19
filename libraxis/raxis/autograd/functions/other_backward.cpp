@@ -126,12 +126,12 @@ TensorList SqueezeBackward0::apply(const TensorList& grads) {
 }
 
 
-BroadcastToBackward0::BroadcastToBackward0(const Tensor& self)
+ExpandBackward0::ExpandBackward0(const Tensor& self)
     : self_shape_(self.shape()) {}
 
-std::string BroadcastToBackward0::name() const { return "BroadcastToBackward0"; }
+std::string ExpandBackward0::name() const { return "ExpandBackward0"; }
 
-TensorList BroadcastToBackward0::apply(const TensorList& grads) {
+TensorList ExpandBackward0::apply(const TensorList& grads) {
     return {unbroadcast(grads[0], self_shape_)};
 }
 

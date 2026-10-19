@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <numeric>
+#include <algorithm>
 
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/shape_utils.h>
@@ -204,42 +205,117 @@ Tensor reshape(const Tensor& self, IntArrayRef new_shape) {
     return self.contiguous().view(resolved);
 }
 
-Tensor broadcast_to(const Tensor& self, IntArrayRef target_shape) {
-    int64_t ndim_old = static_cast<int64_t>(self.shape().size());
-    int64_t ndim_new = static_cast<int64_t>(target_shape.size());
+// From: aten/src/ATen/ExpandUtils.cpp (inferExpandGeometry)
+// A view where every size 1 dim (or new leading dim) grows to the requested
+// size by giving it stride 0, so all its indices read the same element. -1
+// keeps the current size.
+Tensor expand(const Tensor& self, IntArrayRef shape) {
+    int64_t ndim = static_cast<int64_t>(shape.size());
+    int64_t self_ndim = self.ndim();
+    RAXIS_CHECK(ndim >= self_ndim,
+        "expand(): the number of sizes provided (", ndim,
+        ") must be greater or equal to the number of dimensions in the tensor (",
+        self_ndim, ")");
 
-    RAXIS_CHECK(ndim_new >= ndim_old,
-        "broadcast_to(): the number of sizes provided (", ndim_new,
-        ") must be >= the number of dimensions in the tensor (", ndim_old, ")");
+    IntArrayRef self_shape = self.shape();
+    IntArrayRef self_strides = self.strides();
+    DimVector new_shape(ndim);
+    DimVector new_strides(ndim);
 
-    const auto& old_shape   = self.shape();
-    const auto& old_strides = self.strides();
-
-    DimVector new_shape(ndim_new);
-    DimVector new_strides(ndim_new);
-
-    for (int64_t i = ndim_new - 1; i >= 0; --i) {
-        int64_t old_idx = i - (ndim_new - ndim_old);
-
-        if (old_idx < 0) {
-            // Prepended dimension, broadcast from implicit size 1
-            new_shape[i]   = target_shape[i];
-            new_strides[i] = 0;
-        } else if (old_shape[old_idx] == target_shape[i]) {
-            new_shape[i]   = old_shape[old_idx];
-            new_strides[i] = old_strides[old_idx];
-        } else if (old_shape[old_idx] == 1) {
-            new_shape[i]   = target_shape[i];
-            new_strides[i] = 0;
-        } else {
-            RAXIS_CHECK(false,
-                "broadcast_to(): the expanded size of the tensor (",
-                target_shape[i], ") must match the existing size (",
-                old_shape[old_idx], ") at non-singleton dimension ", i);
+    for (int64_t i = ndim - 1; i >= 0; --i) {
+        int64_t dim = i - (ndim - self_ndim);
+        int64_t size = dim >= 0 ? self_shape[dim] : 1;
+        // A new leading dim of size 1 gets the stride a contiguous tensor
+        // would have, so expanding to a size 1 dim keeps the tensor contiguous
+        int64_t stride = dim >= 0 ? self_strides[dim] : new_shape[i + 1] * new_strides[i + 1];
+        int64_t target_size = shape[i];
+        if (target_size == -1) {
+            RAXIS_CHECK(dim >= 0,
+                "The expanded size of the tensor (-1) isn't allowed in a leading, "
+                "non-existing dimension ", i);
+            target_size = size;
         }
+        if (size != target_size) {
+            RAXIS_CHECK(size == 1,
+                "The expanded size of the tensor (", target_size,
+                ") must match the existing size (", size,
+                ") at non-singleton dimension ", i, ".  Target sizes: ", shape,
+                ".  Tensor sizes: ", self_shape);
+            size = target_size;
+            stride = 0;
+        }
+        new_shape[i] = size;
+        new_strides[i] = stride;
     }
 
     return make_view(self, self.storage_offset(), new_shape, new_strides);
+}
+
+Tensor broadcast_to(const Tensor& self, IntArrayRef shape) {
+    return ops::expand(self, shape);
+}
+
+// From: aten/src/ATen/native/TensorShape.cpp
+// The pieces are views (narrow) of self, so splitting copies nothing
+std::vector<Tensor> split_with_sizes(const Tensor& self, IntArrayRef split_sizes, int64_t dim) {
+    RAXIS_CHECK(self.ndim() != 0, "split expects at least a 1-dimensional tensor");
+    dim = wrap_dim(dim, self.ndim());
+    int64_t dim_size = self.shape()[dim];
+
+    std::vector<Tensor> splits;
+    splits.reserve(split_sizes.size());
+    int64_t start = 0;
+    for (int64_t length : split_sizes) {
+        RAXIS_CHECK(length >= 0,
+            "split_with_sizes expects split_sizes have only non-negative entries, "
+            "but got split_sizes=", split_sizes);
+        RAXIS_CHECK(start + length <= dim_size,
+            "split_with_sizes expects split_sizes to sum exactly to ", dim_size,
+            " (input tensor's size at dimension ", dim, "), but got split_sizes=", split_sizes);
+        splits.push_back(ops::slice(self, dim, start, start + length));
+        start += length;
+    }
+    RAXIS_CHECK(start == dim_size,
+        "split_with_sizes expects split_sizes to sum exactly to ", dim_size,
+        " (input tensor's size at dimension ", dim, "), but got split_sizes=", split_sizes);
+    return splits;
+}
+
+// From: aten/src/ATen/native/TensorShape.cpp
+DimVector split_sizes_for(int64_t dim_size, int64_t split_size) {
+    RAXIS_CHECK(split_size >= 0,
+        "split expects split_size be non-negative, but got split_size=", split_size);
+    RAXIS_CHECK(split_size > 0 || dim_size == 0,
+        "split_size can only be 0 if dimension size is 0, but got dimension size of ", dim_size);
+    // At least one split: a split_size larger than the dim gives the whole dim
+    int64_t num_splits = split_size == 0
+        ? 1 : std::max<int64_t>((dim_size + split_size - 1) / split_size, 1);
+    DimVector sizes(num_splits, split_size);
+    sizes.back() = split_size - (split_size * num_splits - dim_size);
+    return sizes;
+}
+
+std::vector<Tensor> split(const Tensor& self, int64_t split_size, int64_t dim) {
+    RAXIS_CHECK(self.ndim() != 0, "split expects at least a 1-dimensional tensor");
+    dim = wrap_dim(dim, self.ndim());
+    return ops::split_with_sizes(self, split_sizes_for(self.shape()[dim], split_size), dim);
+}
+
+// From: aten/src/ATen/native/TensorShape.cpp
+// Pieces of ceil(size / chunks), so there can be fewer than `chunks`
+// (5 elements in 4 chunks give 2, 2, 1)
+std::vector<Tensor> chunk(const Tensor& self, int64_t chunks, int64_t dim) {
+    RAXIS_CHECK(self.ndim() > 0, "chunk expects at least a 1-dimensional tensor");
+    RAXIS_CHECK(chunks > 0, "chunk expects `chunks` to be greater than 0, got: ", chunks);
+    dim = wrap_dim(dim, self.ndim());
+    int64_t dim_size = self.shape()[dim];
+    int64_t split_size = (dim_size + chunks - 1) / chunks;
+    // An empty dim still gives `chunks` empty pieces
+    if (split_size == 0 && dim_size == 0) {
+        DimVector sizes(chunks, 0);
+        return ops::split_with_sizes(self, sizes, dim);
+    }
+    return ops::split(self, split_size, dim);
 }
     
 } // namespace ops

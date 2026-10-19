@@ -28,8 +28,13 @@ RAXIS_API Tensor view(const Tensor& self, IntArrayRef shape);
 RAXIS_API Tensor reshape(const Tensor& self, IntArrayRef shape);
 RAXIS_API Tensor flatten(const Tensor& self, int64_t start_dim = 0, int64_t end_dim = -1);
 
+RAXIS_API Tensor expand(const Tensor& self, IntArrayRef shape);
 RAXIS_API Tensor broadcast_to(const Tensor& self, IntArrayRef shape);
 RAXIS_API std::vector<Tensor> broadcast_tensors(ArrayRef<Tensor> tensors);
+
+RAXIS_API std::vector<Tensor> split(const Tensor& self, int64_t split_size, int64_t dim = 0);
+RAXIS_API std::vector<Tensor> split_with_sizes(const Tensor& self, IntArrayRef split_sizes, int64_t dim = 0);
+RAXIS_API std::vector<Tensor> chunk(const Tensor& self, int64_t chunks, int64_t dim = 0);
 
 namespace ops {
 
@@ -43,7 +48,13 @@ RAXIS_API Tensor permute(const Tensor& self, IntArrayRef dims);
 RAXIS_API Tensor view(const Tensor& self, IntArrayRef shape);
 RAXIS_API Tensor reshape(const Tensor& self, IntArrayRef shape);
 
+RAXIS_API Tensor expand(const Tensor& self, IntArrayRef shape);
 RAXIS_API Tensor broadcast_to(const Tensor& self, IntArrayRef shape);
+
+RAXIS_API std::vector<Tensor> split(const Tensor& self, int64_t split_size, int64_t dim = 0);
+RAXIS_API std::vector<Tensor> split_with_sizes(const Tensor& self, IntArrayRef split_sizes, int64_t dim = 0);
+RAXIS_API std::vector<Tensor> chunk(const Tensor& self, int64_t chunks, int64_t dim = 0);
+RAXIS_API DimVector split_sizes_for(int64_t dim_size, int64_t split_size);
     
 } // namespace ops
 

@@ -328,6 +328,10 @@ Tensor Tensor::flatten(int64_t start_dim, int64_t end_dim) const {
     return ::raxis::flatten(*this, start_dim, end_dim);
 }
 
+Tensor Tensor::expand(IntArrayRef shape) const {
+    return ::raxis::expand(*this, shape);
+}
+
 Tensor Tensor::broadcast_to(IntArrayRef target_shape) const {
     return ::raxis::broadcast_to(*this, target_shape);
 }

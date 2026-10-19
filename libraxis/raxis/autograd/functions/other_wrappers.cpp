@@ -4,6 +4,7 @@
 
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/tensor_shape.h>
+#include <raxis/tensor/shape_utils.h>
 
 #include <raxis/autograd/grad_mode.h>
 #include <raxis/autograd/variable.h>
@@ -52,6 +53,40 @@ std::vector<Tensor> unbind(const Tensor& self, int64_t dim) {
         }
     }
     return results;
+}
+
+// One multi-output node for split, split_with_sizes and chunk
+std::vector<Tensor> split_with_sizes(const Tensor& self, IntArrayRef split_sizes, int64_t dim) {
+    std::vector<Tensor> results = ops::split_with_sizes(self, split_sizes, dim);
+    if (autograd::requires_autograd(self)) {
+        auto grad_fn = std::make_shared<autograd::SplitWithSizesBackward0>(
+            self, split_sizes, wrap_dim(dim, self.ndim()));
+        grad_fn->set_num_inputs(static_cast<int64_t>(results.size()));
+        autograd::set_next_edges(grad_fn, self);
+
+        for (uint32_t i = 0; i < results.size(); ++i) {
+            autograd::set_autograd_meta(results[i], grad_fn, /*output_nr=*/i);
+        }
+    }
+    return results;
+}
+
+std::vector<Tensor> split(const Tensor& self, int64_t split_size, int64_t dim) {
+    RAXIS_CHECK(self.ndim() != 0, "split expects at least a 1-dimensional tensor");
+    int64_t dim_size = self.shape()[wrap_dim(dim, self.ndim())];
+    return split_with_sizes(self, ops::split_sizes_for(dim_size, split_size), dim);
+}
+
+std::vector<Tensor> chunk(const Tensor& self, int64_t chunks, int64_t dim) {
+    RAXIS_CHECK(self.ndim() > 0, "chunk expects at least a 1-dimensional tensor");
+    RAXIS_CHECK(chunks > 0, "chunk expects `chunks` to be greater than 0, got: ", chunks);
+    int64_t dim_size = self.shape()[wrap_dim(dim, self.ndim())];
+    int64_t split_size = (dim_size + chunks - 1) / chunks;
+    if (split_size == 0 && dim_size == 0) {
+        DimVector sizes(chunks, 0);
+        return split_with_sizes(self, sizes, dim);
+    }
+    return split(self, split_size, dim);
 }
 
 // ============================================================
@@ -146,15 +181,19 @@ Tensor slice(const Tensor& self, int64_t dim, int64_t start, int64_t stop, int64
     return result;
 }
 
-Tensor broadcast_to(const Tensor& self, IntArrayRef shape) {
-    Tensor result = ops::broadcast_to(self, shape);
+Tensor expand(const Tensor& self, IntArrayRef shape) {
+    Tensor result = ops::expand(self, shape);
     if (autograd::requires_autograd(self)) {
-        auto grad_fn = std::make_shared<autograd::BroadcastToBackward0>(self);
+        auto grad_fn = std::make_shared<autograd::ExpandBackward0>(self);
         grad_fn->set_num_inputs(1);
         autograd::set_next_edges(grad_fn, self);
         autograd::set_autograd_meta(result, grad_fn);
     }
     return result;
+}
+
+Tensor broadcast_to(const Tensor& self, IntArrayRef shape) {
+    return expand(self, shape);
 }
 
 
