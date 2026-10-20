@@ -1,3 +1,4 @@
+#include <type_traits>
 
 #include <raxis/ops/tensor_advanced_indexing.h>
 #include <raxis/ops/dispatch_stub.h>
@@ -45,7 +46,12 @@ struct TensorAssign {
 struct ReduceAdd {
     template <typename scalar_t>
     void operator()(scalar_t* self_data, const scalar_t* src_data) const {
-        *self_data += *src_data;
+        // A sum of bools is their OR (PyTorch writes += and lets it convert)
+        if constexpr (std::is_same_v<scalar_t, bool>) {
+            *self_data = *self_data || *src_data;
+        } else {
+            *self_data += *src_data;
+        }
     }
 };
 

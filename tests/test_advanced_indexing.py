@@ -202,3 +202,13 @@ def test_index_add_backward():
     (t.index_add(0, ti, ts) * torch.from_numpy(w)).sum().backward()
     check_match(r.grad, t.grad)
     check_match(rs.grad, ts.grad)
+
+
+def test_add_on_bool_is_or():
+    for lib in (raxis, torch):
+        idx = lib.tensor([0, 0, 2])
+        src = lib.tensor([True, True, False])
+        assert lib.zeros(3, dtype=lib.bool).scatter_add(0, idx, src).tolist() == [True, False, False]
+        assert lib.zeros(3, dtype=lib.bool).index_add(0, idx, src).tolist() == [True, False, False]
+        out = lib.zeros((3, 2), dtype=lib.bool).index_add(0, idx, lib.ones((3, 2), dtype=lib.bool))
+        assert out.tolist() == [[True, True], [False, False], [True, True]]

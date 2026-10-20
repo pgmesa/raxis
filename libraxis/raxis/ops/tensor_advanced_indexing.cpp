@@ -1,6 +1,7 @@
 #include <raxis/ops/tensor_advanced_indexing.h>
 
 #include <cstring>
+#include <type_traits>
 
 #include <raxis/util/exception.h>
 #include <raxis/util/parallel.h>
@@ -277,7 +278,13 @@ Tensor& index_add_(Tensor& self, int64_t dim, const Tensor& index, const Tensor&
             const scalar_t* source_ptr = source.data_ptr<scalar_t>();
             for (int64_t i = 0; i < numel; i++) {
                 check(index_data[i]);
-                self_ptr[index_data[i] * self_stride] += source_ptr[i * source_stride];
+                scalar_t& out = self_ptr[index_data[i] * self_stride];
+                // A sum of bools is their OR (PyTorch writes += and lets it convert)
+                if constexpr (std::is_same_v<scalar_t, bool>) {
+                    out = out || source_ptr[i * source_stride];
+                } else {
+                    out += source_ptr[i * source_stride];
+                }
             }
         });
         return self;
