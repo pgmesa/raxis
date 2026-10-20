@@ -391,6 +391,102 @@ class TestParamGroups:
 
 
 # ===========================================================================
+# STATE DICT
+# ===========================================================================
+
+def with_buffers(lib):
+    base = nn.Module if lib is raxis else torch.nn.Module
+
+    class Net(base):
+        def __init__(self):
+            super().__init__()
+            self.fc = lib.nn.Linear(3, 2)
+            self.register_buffer("running_mean", lib.zeros(2))
+            self.register_buffer("cache", lib.ones(2), persistent=False)
+            self.inner = lib.nn.Sequential(lib.nn.Linear(2, 2))
+
+        def forward(self, x):
+            return self.inner(self.fc(x) - self.running_mean)
+
+    return Net()
+
+
+def to_raxis(state_dict):
+    return {k: raxis.tensor(v.detach().numpy()) for k, v in state_dict.items()}
+
+
+class TestModuleStateDict:
+
+    def test_keys_match_torch(self):
+        assert list(mlp(raxis).state_dict()) == list(mlp(torch).state_dict())
+        assert list(with_buffers(raxis).state_dict()) == list(with_buffers(torch).state_dict())
+
+    def test_values_are_detached_aliases(self):
+        model = mlp(raxis)
+        sd = model.state_dict()
+        assert not sd["0.weight"].requires_grad
+        with raxis.no_grad():
+            model[0].weight.fill_(2.0)
+        assert sd["0.weight"].tolist()[0][0] == 2.0
+        assert model.state_dict(keep_vars=True)["0.weight"] is model[0].weight
+
+    def test_buffers(self):
+        model = with_buffers(raxis)
+        assert [n for n, _ in model.named_buffers()] == ["running_mean", "cache"]
+        model.running_mean = raxis.ones(2)
+        assert model.state_dict()["running_mean"].tolist() == [1.0, 1.0]
+        assert "cache" not in model.state_dict()
+
+    def test_load_from_torch(self):
+        r_model, t_model = with_buffers(raxis), with_buffers(torch)
+        with torch.no_grad():
+            t_model.running_mean.fill_(0.5)
+        result = r_model.load_state_dict(to_raxis(t_model.state_dict()))
+        assert repr(result) == "<All keys matched successfully>"
+        x = randf_centered(4, 3)
+        check_match(r_model(raxis.tensor(x)), t_model(torch.from_numpy(x)))
+
+    def test_load_round_trip(self):
+        a, b = mlp(raxis), mlp(raxis)
+        with raxis.no_grad():
+            for p in b.parameters():
+                p.fill_(0.0)
+        b.load_state_dict(a.state_dict())
+        x = raxis.tensor(randf_centered(4, 6))
+        assert (a(x) - b(x)).abs().max().item() == 0.0
+        assert all(p.requires_grad for p in b.parameters())
+
+    def test_strict_errors_match_torch(self):
+        r_sd = mlp(raxis).state_dict()
+        t_sd = mlp(torch).state_dict()
+        for sd in (r_sd, t_sd):
+            sd["extra"] = sd.pop("2.bias")
+        r_msg = t_msg = None
+        try:
+            mlp(raxis).load_state_dict(r_sd)
+        except RuntimeError as e:
+            r_msg = str(e)
+        try:
+            mlp(torch).load_state_dict(t_sd)
+        except RuntimeError as e:
+            t_msg = str(e)
+        assert r_msg == t_msg
+
+    def test_not_strict_returns_keys(self):
+        r_sd, t_sd = mlp(raxis).state_dict(), mlp(torch).state_dict()
+        for sd in (r_sd, t_sd):
+            sd["extra"] = sd.pop("2.bias")
+        r_keys = mlp(raxis).load_state_dict(r_sd, strict=False)
+        t_keys = mlp(torch).load_state_dict(t_sd, strict=False)
+        assert (r_keys.missing_keys, r_keys.unexpected_keys) == (t_keys.missing_keys, t_keys.unexpected_keys)
+
+    def test_size_mismatch_raises_even_if_not_strict(self):
+        sd = mlp(raxis, hidden=5).state_dict()
+        with pytest.raises(RuntimeError, match=r"size mismatch for 0.weight: copying a param with shape \(5, 6\)"):
+            mlp(raxis).load_state_dict(sd, strict=False)
+
+
+# ===========================================================================
 # ACTIVATION MODULES
 # ===========================================================================
 

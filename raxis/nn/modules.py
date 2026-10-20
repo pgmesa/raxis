@@ -1,5 +1,5 @@
-from collections import OrderedDict
-from typing import Any, Callable, Iterator
+from collections import OrderedDict, namedtuple
+from typing import Any, Callable, Iterator, Mapping
 
 import raxis
 from raxis import Tensor
@@ -18,6 +18,18 @@ class Parameter(Tensor):
         return f"Parameter containing:\n{super().__repr__()}"
 
 
+# From: torch/nn/modules/module.py
+class _IncompatibleKeys(namedtuple("IncompatibleKeys", ["missing_keys", "unexpected_keys"])):
+    """Returned by Module.load_state_dict."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        if not self.missing_keys and not self.unexpected_keys:
+            return "<All keys matched successfully>"
+        return super().__repr__()
+
+
 class Module:
     """Base class for all neural network modules.
 
@@ -28,6 +40,8 @@ class Module:
     def __init__(self) -> None:
         object.__setattr__(self, "_modules", OrderedDict())
         object.__setattr__(self, "_parameters", OrderedDict())
+        object.__setattr__(self, "_buffers", OrderedDict())
+        object.__setattr__(self, "_non_persistent_buffers_set", set())
         object.__setattr__(self, "training", True)
         object.__setattr__(self, "_forward_pre_hooks", OrderedDict())
         object.__setattr__(self, "_forward_hooks", OrderedDict())
@@ -76,6 +90,11 @@ class Module:
             self.register_parameter(name, value)
         elif isinstance(value, Module):
             self.register_module(name, value)
+        elif name in self._buffers:
+            if value is not None and not isinstance(value, Tensor):
+                raise TypeError(f"cannot assign '{type(value).__name__}' as buffer '{name}'")
+            self._buffers[name] = value
+            object.__setattr__(self, name, value)
         else:
             # Reassigning a registered name to something else unregisters it
             self._parameters.pop(name, None)
@@ -87,6 +106,19 @@ class Module:
             raise TypeError(f"cannot assign '{type(param).__name__}' as parameter '{name}'")
         self._parameters[name] = param
         object.__setattr__(self, name, param)
+
+    def register_buffer(self, name: str, tensor: Tensor | None, persistent: bool = True) -> None:
+        """A tensor that is part of the module's state but is not trained,
+        such as the running mean of BatchNorm. Persistent buffers are saved
+        in the state_dict."""
+        if tensor is not None and not isinstance(tensor, Tensor):
+            raise TypeError(f"cannot assign '{type(tensor).__name__}' as buffer '{name}'")
+        self._buffers[name] = tensor
+        if persistent:
+            self._non_persistent_buffers_set.discard(name)
+        else:
+            self._non_persistent_buffers_set.add(name)
+        object.__setattr__(self, name, tensor)
 
     def register_module(self, name: str, module: "Module | None") -> None:
         if module is not None and not isinstance(module, Module):
@@ -121,6 +153,16 @@ class Module:
         for _, param in self.named_parameters():
             yield param
 
+    def named_buffers(self, prefix: str = "") -> Iterator[tuple[str, Tensor]]:
+        for module_name, module in self.named_modules(prefix):
+            for name, buf in module._buffers.items():
+                if buf is not None:
+                    yield (f"{module_name}.{name}" if module_name else name), buf
+
+    def buffers(self) -> Iterator[Tensor]:
+        for _, buf in self.named_buffers():
+            yield buf
+
     def apply(self, fn: Callable[["Module"], None]) -> "Module":
         """Applies fn to every submodule (children first) and then to self,
         typically to initialize parameters."""
@@ -128,6 +170,92 @@ class Module:
             module.apply(fn)
         fn(self)
         return self
+
+    # -- State dict --
+
+    def _local_state(self) -> dict[str, Tensor]:
+        state = {name: p for name, p in self._parameters.items() if p is not None}
+        for name, buf in self._buffers.items():
+            if buf is not None and name not in self._non_persistent_buffers_set:
+                state[name] = buf
+        return state
+
+    # From: torch/nn/modules/module.py (Module.state_dict)
+    def state_dict(self, destination: dict | None = None, prefix: str = "",
+                   keep_vars: bool = False) -> "OrderedDict[str, Tensor]":
+        """Parameters and persistent buffers by their dotted names
+        ("0.weight", "body.fc.bias", ...).
+
+        The values are detached tensors that share memory with the module, so
+        the dict follows later updates; clone it to keep a snapshot.
+        keep_vars=True returns the parameters themselves.
+        """
+        if destination is None:
+            destination = OrderedDict()
+        for name, value in self._local_state().items():
+            destination[prefix + name] = value if keep_vars else value.detach()
+        for name, module in self._modules.items():
+            if module is not None:
+                module.state_dict(destination, prefix + name + ".", keep_vars)
+        return destination
+
+    # From: torch/nn/modules/module.py (Module.load_state_dict, _load_from_state_dict)
+    def load_state_dict(self, state_dict: Mapping[str, Tensor], strict: bool = True) -> _IncompatibleKeys:
+        """Copies the tensors of state_dict into the parameters and buffers
+        with the same names.
+
+        With strict=True, a missing or unexpected key raises; otherwise they
+        are returned. A shape mismatch always raises.
+        """
+        missing_keys: list[str] = []
+        unexpected_keys: list[str] = []
+        error_msgs: list[str] = []
+
+        def load(module, prefix):
+            local_state = module._local_state()
+            for name, param in local_state.items():
+                key = prefix + name
+                if key not in state_dict:
+                    missing_keys.append(key)
+                    continue
+                input_param = state_dict[key]
+                if not isinstance(input_param, Tensor):
+                    error_msgs.append(
+                        f'While copying the parameter named "{key}", expected Tensor '
+                        f"from checkpoint but received {type(input_param)}")
+                    continue
+                if tuple(input_param.shape) != tuple(param.shape):
+                    error_msgs.append(
+                        f"size mismatch for {key}: copying a param with shape "
+                        f"{tuple(input_param.shape)} from checkpoint, the shape in current "
+                        f"model is {tuple(param.shape)}.")
+                    continue
+                with raxis.no_grad():
+                    param.copy_(input_param)
+
+            for key in state_dict:
+                if key.startswith(prefix):
+                    input_name = key[len(prefix):].split(".", 1)[0]
+                    if input_name not in module._modules and input_name not in local_state:
+                        unexpected_keys.append(key)
+
+            for name, child in module._modules.items():
+                if child is not None:
+                    load(child, prefix + name + ".")
+
+        load(self, "")
+
+        if strict:
+            if unexpected_keys:
+                error_msgs.insert(0, "Unexpected key(s) in state_dict: {}. ".format(
+                    ", ".join(f'"{k}"' for k in unexpected_keys)))
+            if missing_keys:
+                error_msgs.insert(0, "Missing key(s) in state_dict: {}. ".format(
+                    ", ".join(f'"{k}"' for k in missing_keys)))
+        if error_msgs:
+            raise RuntimeError("Error(s) in loading state_dict for {}:\n\t{}".format(
+                type(self).__name__, "\n\t".join(error_msgs)))
+        return _IncompatibleKeys(missing_keys, unexpected_keys)
 
     # -- Modes and gradients --
 
