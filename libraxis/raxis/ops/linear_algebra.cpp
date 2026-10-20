@@ -7,9 +7,11 @@
 #include <raxis/ops/cpu_blas.h>
 
 #include <raxis/util/exception.h>
+#include <raxis/util/parallel.h>
 
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/factories.h>
+#include <raxis/tensor/tensor_iterator.h>
 
 
 namespace raxis {
@@ -172,8 +174,100 @@ static void addmm_impl_cpu_(
     }
 }
 
-// Batched GEMM: loops over the batch dimension calling addmm_impl_cpu_
-// per slice
+// From: aten/src/ATen/native/LinearAlgebra.cpp (baddbmm_cpu_kernel)
+// Tiny matrices: a BLAS call costs more than the product itself, so a plain
+// triple loop, parallel over the batch
+template <typename scalar_t, bool is_bmm>
+static void baddbmm_cpu_kernel(
+    const Tensor& result, const Tensor& self, const Tensor& mat2,
+    const Scalar& beta_, const Scalar& alpha_
+) {
+    const int64_t bs = result.shape()[0];
+    const int64_t is = result.shape()[1];
+    const int64_t js = result.shape()[2];
+    const int64_t ks = self.shape()[2];
+    const scalar_t alpha = alpha_.to<scalar_t>();
+    const scalar_t beta = beta_.to<scalar_t>();
+
+    scalar_t* r = result.mutable_data_ptr<scalar_t>();
+    const scalar_t* s = self.data_ptr<scalar_t>();
+    const scalar_t* m = mat2.data_ptr<scalar_t>();
+    IntArrayRef rst = result.strides();
+    IntArrayRef sst = self.strides();
+    IntArrayRef mst = mat2.strides();
+
+    int64_t grain_size = std::max<int64_t>(detail::GRAIN_SIZE / (is * js * ks), 1);
+    parallel_for(0, bs, grain_size, [&](int64_t b_begin, int64_t b_end) {
+        for (int64_t b = b_begin; b < b_end; ++b) {
+            for (int64_t i = 0; i < is; ++i) {
+                scalar_t* r2 = r + b * rst[0] + i * rst[1];
+                const scalar_t* s2 = s + b * sst[0] + i * sst[1];
+                for (int64_t j = 0; j < js; ++j) {
+                    const scalar_t* m2 = m + b * mst[0] + j * mst[2];
+                    scalar_t acc = 0;
+                    for (int64_t k = 0; k < ks; ++k) {
+                        acc += s2[k * sst[2]] * m2[k * mst[1]];
+                    }
+                    scalar_t& out = r2[j * rst[2]];
+                    if constexpr (is_bmm) {
+                        out = acc;
+                    } else {
+                        // beta == 0 ignores the old value, also a NaN
+                        out = beta == scalar_t(0) ? alpha * acc : out * beta + alpha * acc;
+                    }
+                }
+            }
+        }
+    });
+}
+
+// From: aten/src/ATen/native/LinearAlgebra.cpp (baddbmm_with_gemm_)
+// One batched gemm for the whole batch. As in addmm_impl_cpu_, the
+// row-major result is computed as its column-major transpose:
+// C^T = mat2^T * mat1^T, so mat2 is BLAS's A and mat1 its B.
+static void baddbmm_with_gemm_(
+    const Tensor& result, const Tensor& mat1, const Tensor& mat2,
+    const Scalar& beta_, const Scalar& alpha_
+) {
+    RAXIS_INTERNAL_ASSERT(result.is_contiguous());
+    IntArrayRef result_sizes = result.shape();
+    IntArrayRef result_strides = result.strides();
+    IntArrayRef mat1_strides = mat1.strides();
+    IntArrayRef mat2_strides = mat2.strides();
+    IntArrayRef mat1_sizes = mat1.shape();
+    IntArrayRef mat2_sizes = mat2.shape();
+
+    auto is_transposed = [](IntArrayRef strides, IntArrayRef sizes) {
+        return strides[1] == 1 && strides[2] >= sizes[1];
+    };
+    const bool transpose_a = is_transposed(mat2_strides, mat2_sizes);
+    const bool transpose_b = is_transposed(mat1_strides, mat1_sizes);
+
+    const int64_t batch_size = mat1_sizes[0];
+    const int64_t m = result_sizes[2];
+    const int64_t n = result_sizes[1];
+    const int64_t k = mat2_sizes[1];
+
+    const int64_t lda = mat2_strides[transpose_a ? 2 : 1];
+    const int64_t ldb = mat1_strides[transpose_b ? 2 : 1];
+    const int64_t ldc = result_strides[1];
+
+    result.dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+        cpublas::gemm_batched_with_stride(
+            transpose_a ? TransposeType::Transpose : TransposeType::NoTranspose,
+            transpose_b ? TransposeType::Transpose : TransposeType::NoTranspose,
+            batch_size, m, n, k, alpha_.to<scalar_t>(),
+            mat2.data_ptr<scalar_t>(), lda, mat2_strides[0],
+            mat1.data_ptr<scalar_t>(), ldb, mat1_strides[0],
+            beta_.to<scalar_t>(),
+            result.mutable_data_ptr<scalar_t>(), ldc, result_strides[0]);
+    });
+}
+
+// From: aten/src/ATen/native/LinearAlgebra.cpp (bmm_out_or_baddbmm_)
+// Three strategies by size and layout: a naive kernel for tiny matrices, one
+// batched gemm when every batch item is a plain or transposed matrix, and
+// otherwise one addmm per batch item
 static void bmm_impl_(
     Tensor& self_or_result,
     const Tensor& batch1, 
@@ -184,6 +278,8 @@ static void bmm_impl_(
 ) {
     const int64_t bs = batch1.shape()[0];
     const int64_t contraction_size = batch1.shape()[2];
+    const int64_t res_rows = batch1.shape()[1];
+    const int64_t res_cols = batch2.shape()[2];
 
     if (self_or_result.numel() == 0) return;
 
@@ -193,6 +289,33 @@ static void bmm_impl_(
         } else {
             self_or_result.mul_(beta);
         }
+        return;
+    }
+
+    // Strides do not matter on a size 1 dim
+    auto batch_items_contiguous_or_transposed = [](const Tensor& t) {
+        IntArrayRef sizes = t.shape();
+        IntArrayRef strides = t.strides();
+        return (strides[2] == 1 && (sizes[1] == 1 || strides[1] >= sizes[2]))
+            || (strides[1] == 1 && (sizes[2] == 1 || strides[2] >= sizes[1]));
+    };
+
+    if (contraction_size * res_rows * res_cols < 400) {
+        self_or_result.dtype().dispatch_all_types_except_bool([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+            if (is_bmm_out) {
+                baddbmm_cpu_kernel<scalar_t, true>(self_or_result, batch1, batch2, beta, alpha);
+            } else {
+                baddbmm_cpu_kernel<scalar_t, false>(self_or_result, batch1, batch2, beta, alpha);
+            }
+        });
+        return;
+    }
+
+    if (self_or_result.dtype().is_floating()
+            && batch_items_contiguous_or_transposed(batch1)
+            && batch_items_contiguous_or_transposed(batch2)
+            && self_or_result.is_contiguous()) {
+        baddbmm_with_gemm_(self_or_result, batch1, batch2, is_bmm_out ? 0 : beta, alpha);
         return;
     }
 

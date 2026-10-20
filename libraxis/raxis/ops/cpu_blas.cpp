@@ -1,5 +1,8 @@
 #include <raxis/ops/cpu_blas.h>
 
+#include <algorithm>
+#include <climits>
+
 #include <raxis/core/dtype.h>
 
 #if RAXIS_BUILD_WITH_BLAS
@@ -14,6 +17,78 @@
 namespace raxis::cpublas {
 
 DEFINE_DISPATCH(gemm_stub);
+
+namespace {
+
+// From: aten/src/ATen/native/CPUBlas.cpp (normalize_last_dims)
+// BLAS rejects a leading dimension smaller than the rows of the matrix even
+// when there is a single column and the value is never used: fix it up for
+// size 1 dims, where any stride is valid for the tensor
+void normalize_last_dims(
+    TransposeType transa, TransposeType transb,
+    int64_t m, int64_t n, int64_t k,
+    int64_t* lda, int64_t* ldb, int64_t* ldc
+) {
+    if (n == 1) {
+        *ldc = m;
+    }
+    if (transa != TransposeType::NoTranspose) {
+        if (m == 1) {
+            *lda = k;
+        }
+    } else if (k == 1) {
+        *lda = m;
+    }
+    if (transb != TransposeType::NoTranspose) {
+        if (k == 1) {
+            *ldb = n;
+        }
+    } else if (n == 1) {
+        *ldb = k;
+    }
+}
+
+// From: aten/src/ATen/native/CPUBlas.cpp (use_blas_gemm)
+// The sizes fit the int arguments of cblas and the leading dimensions are valid
+[[maybe_unused]] bool use_blas_gemm(
+    TransposeType transa, TransposeType transb,
+    int64_t m, int64_t n, int64_t k,
+    int64_t lda, int64_t ldb, int64_t ldc
+) {
+    const bool transa_ = transa != TransposeType::NoTranspose;
+    const bool transb_ = transb != TransposeType::NoTranspose;
+    return m <= INT_MAX && n <= INT_MAX && k <= INT_MAX
+        && lda <= INT_MAX && ldb <= INT_MAX && ldc <= INT_MAX
+        && lda >= std::max(int64_t{1}, transa_ ? k : m)
+        && ldb >= std::max(int64_t{1}, transb_ ? n : k)
+        && ldc >= std::max(int64_t{1}, m);
+}
+
+template <typename scalar_t>
+void gemm_batched_with_stride_generic(
+    TransposeType transa, TransposeType transb,
+    int64_t batch_size, int64_t m, int64_t n, int64_t k,
+    scalar_t alpha,
+    const scalar_t* a, int64_t lda, int64_t batch_stride_a,
+    const scalar_t* b, int64_t ldb, int64_t batch_stride_b,
+    scalar_t beta,
+    scalar_t* c, int64_t ldc, int64_t batch_stride_c
+) {
+    for (int64_t batch = 0; batch < batch_size; ++batch) {
+        gemm(transa, transb, m, n, k, alpha,
+             a + batch_stride_a * batch, lda,
+             b + batch_stride_b * batch, ldb,
+             beta, c + batch_stride_c * batch, ldc);
+    }
+}
+
+#if RAXIS_BUILD_WITH_MKL
+CBLAS_TRANSPOSE to_cblas(TransposeType t) {
+    return t == TransposeType::Transpose ? CblasTrans : CblasNoTrans;
+}
+#endif
+
+} // namespace
 
 void gemm(
     TransposeType transa, TransposeType transb,
@@ -131,6 +206,63 @@ void gemv(
 #else
     detail::gemv_naive(trans, m, n, alpha, a, lda, x, incx, beta, y, incy);
 #endif
+}
+
+// From: aten/src/ATen/native/CPUBlas.cpp (gemm_batched_with_stride)
+// PyTorch builds arrays of pointers for cblas_?gemm_batch; the strided
+// variant (MKL 2020+) takes the batch strides directly.
+void gemm_batched_with_stride(
+    TransposeType transa, TransposeType transb,
+    int64_t batch_size, int64_t m, int64_t n, int64_t k,
+    float alpha,
+    const float* a, int64_t lda, int64_t batch_stride_a,
+    const float* b, int64_t ldb, int64_t batch_stride_b,
+    float beta,
+    float* c, int64_t ldc, int64_t batch_stride_c)
+{
+    if (batch_size == 1) {
+        return gemm(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
+    }
+    normalize_last_dims(transa, transb, m, n, k, &lda, &ldb, &ldc);
+#if RAXIS_BUILD_WITH_MKL
+    if (use_blas_gemm(transa, transb, m, n, k, lda, ldb, ldc)) {
+        cblas_sgemm_batch_strided(
+            CblasColMajor, to_cblas(transa), to_cblas(transb),
+            m, n, k, alpha, a, lda, batch_stride_a, b, ldb, batch_stride_b,
+            beta, c, ldc, batch_stride_c, batch_size);
+        return;
+    }
+#endif
+    gemm_batched_with_stride_generic(
+        transa, transb, batch_size, m, n, k, alpha, a, lda, batch_stride_a,
+        b, ldb, batch_stride_b, beta, c, ldc, batch_stride_c);
+}
+
+void gemm_batched_with_stride(
+    TransposeType transa, TransposeType transb,
+    int64_t batch_size, int64_t m, int64_t n, int64_t k,
+    double alpha,
+    const double* a, int64_t lda, int64_t batch_stride_a,
+    const double* b, int64_t ldb, int64_t batch_stride_b,
+    double beta,
+    double* c, int64_t ldc, int64_t batch_stride_c)
+{
+    if (batch_size == 1) {
+        return gemm(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
+    }
+    normalize_last_dims(transa, transb, m, n, k, &lda, &ldb, &ldc);
+#if RAXIS_BUILD_WITH_MKL
+    if (use_blas_gemm(transa, transb, m, n, k, lda, ldb, ldc)) {
+        cblas_dgemm_batch_strided(
+            CblasColMajor, to_cblas(transa), to_cblas(transb),
+            m, n, k, alpha, a, lda, batch_stride_a, b, ldb, batch_stride_b,
+            beta, c, ldc, batch_stride_c, batch_size);
+        return;
+    }
+#endif
+    gemm_batched_with_stride_generic(
+        transa, transb, batch_size, m, n, k, alpha, a, lda, batch_stride_a,
+        b, ldb, batch_stride_b, beta, c, ldc, batch_stride_c);
 }
 
 } // namespace raxis::cpublas

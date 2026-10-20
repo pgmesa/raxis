@@ -1350,6 +1350,39 @@ class TestBMM:
         check_match(raxis.bmm(r_a, r_b), torch.bmm(t_a, t_b),
                     atol=atol, context=f"bmm {shapes} {np.dtype(dtype).name}")
 
+    # m * n * k < 400 goes through a naive kernel (also for integers); larger
+    # floating batches through one batched gemm when every item is a plain
+    # or transposed matrix, and the rest through one gemm per item
+    @pytest.mark.parametrize("layout", ["contiguous", "transposed", "sliced", "broadcast_batch"])
+    @pytest.mark.parametrize("sizes", [(5, 3, 4, 6), (6, 33, 20, 17), (1, 40, 30, 20), (3, 1, 50, 1)],
+                             ids=lambda s: "x".join(map(str, s)))
+    @pytest.mark.parametrize("dtype", [np.float32, np.float64, np.int64], ids=lambda d: np.dtype(d).name)
+    def test_bmm_paths(self, dtype, sizes, layout):
+        bs, n, k, m = sizes
+        a_data = (randf(bs, n, k, seed=1, lo=-2.0, hi=2.0) * 4).astype(dtype)
+        b_data = (randf(bs, k, m, seed=2, lo=-2.0, hi=2.0) * 4).astype(dtype)
+        if layout == "transposed":
+            a_data = np.ascontiguousarray(a_data.transpose(0, 2, 1))
+            b_data = np.ascontiguousarray(b_data.transpose(0, 2, 1))
+        if layout == "sliced":
+            a_data = np.concatenate([a_data, a_data], axis=2)
+        r_a, t_a = make_pair(a_data)
+        r_b, t_b = make_pair(b_data)
+        if layout == "transposed":
+            r_a, t_a = r_a.transpose(1, 2), t_a.transpose(1, 2)
+            r_b, t_b = r_b.transpose(1, 2), t_b.transpose(1, 2)
+        if layout == "sliced":
+            r_a, t_a = r_a[:, :, ::2], t_a[:, :, ::2]
+        if layout == "broadcast_batch":
+            r_b, t_b = r_b[:1].expand(bs, k, m), t_b[:1].expand(bs, k, m)
+        atol = 1e-4 if dtype == np.float32 else 1e-10
+        check_match(raxis.bmm(r_a, r_b), torch.bmm(t_a, t_b), atol=atol)
+
+    def test_bmm_empty_contraction(self):
+        r_a, t_a = make_pair(np.zeros((3, 4, 0), dtype=np.float32))
+        r_b, t_b = make_pair(np.zeros((3, 0, 5), dtype=np.float32))
+        check_match(raxis.bmm(r_a, r_b), torch.bmm(t_a, t_b))
+
     def test_bmm_method(self, device):
         a_data = randf(4, 8, 16, seed=42, lo=-2.0, hi=2.0)
         b_data = randf(4, 16, 6, seed=99, lo=-2.0, hi=2.0)

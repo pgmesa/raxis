@@ -35,6 +35,31 @@ void gemm(
     double* c, int64_t ldc);
 
 
+// From: aten/src/ATen/native/CPUBlas.h (gemm_batched_with_stride)
+// batch_size independent gemms with the same m, n, k and leading dimensions,
+// whose matrices are batch_stride_* elements apart. One MKL call
+// (cblas_?gemm_batch_strided) instead of one gemm per batch: MKL splits the
+// whole batch among its threads, which matters when each gemm is too small
+// to use them all.
+void gemm_batched_with_stride(
+    TransposeType transa, TransposeType transb,
+    int64_t batch_size, int64_t m, int64_t n, int64_t k,
+    float alpha,
+    const float* a, int64_t lda, int64_t batch_stride_a,
+    const float* b, int64_t ldb, int64_t batch_stride_b,
+    float beta,
+    float* c, int64_t ldc, int64_t batch_stride_c);
+
+void gemm_batched_with_stride(
+    TransposeType transa, TransposeType transb,
+    int64_t batch_size, int64_t m, int64_t n, int64_t k,
+    double alpha,
+    const double* a, int64_t lda, int64_t batch_stride_a,
+    const double* b, int64_t ldb, int64_t batch_stride_b,
+    double beta,
+    double* c, int64_t ldc, int64_t batch_stride_c);
+
+
 // Used as the fallback path when no external BLAS is available.
 using gemm_fn = void(*)(
     Dtype type,
