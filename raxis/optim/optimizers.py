@@ -1,4 +1,6 @@
 from collections import defaultdict
+from copy import deepcopy
+from itertools import chain
 from typing import Any, Iterable
 
 import raxis
@@ -55,6 +57,68 @@ class Optimizer:
 
     def step(self) -> None:
         raise NotImplementedError
+
+    # From: torch/optim/optimizer.py (Optimizer.state_dict)
+    def state_dict(self) -> dict[str, Any]:
+        """``{"state": {index: {...}}, "param_groups": [{..., "params": [index, ...]}]}``.
+
+        Parameters are replaced by their position across the groups, so the
+        dict can be loaded into a new optimizer over the same model. The
+        state tensors are references, not copies.
+        """
+        param_mappings: dict[int, int] = {}
+        start_index = 0
+
+        def pack_group(group):
+            nonlocal start_index
+            packed = {k: v for k, v in group.items() if k != "params"}
+            for i, p in enumerate(group["params"], start_index):
+                param_mappings.setdefault(id(p), i)
+            packed["params"] = [param_mappings[id(p)] for p in group["params"]]
+            start_index += len(packed["params"])
+            return packed
+
+        param_groups = [pack_group(g) for g in self.param_groups]
+        packed_state = {param_mappings[id(p)]: state for p, state in self.state.items()}
+        return {"state": packed_state, "param_groups": param_groups}
+
+    # From: torch/optim/optimizer.py (Optimizer.load_state_dict)
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        """Loads a dict from :meth:`state_dict`. The groups must have the same
+        number of parameters, which are matched by position."""
+        groups = self.param_groups
+        saved_groups = deepcopy(state_dict["param_groups"])
+        if len(groups) != len(saved_groups):
+            raise ValueError("loaded state dict has a different number of parameter groups")
+        if any(len(g["params"]) != len(s["params"]) for g, s in zip(groups, saved_groups)):
+            raise ValueError(
+                "loaded state dict contains a parameter group that doesn't match "
+                "the size of optimizer's group")
+
+        id_map = dict(zip(chain.from_iterable(g["params"] for g in saved_groups),
+                          chain.from_iterable(g["params"] for g in groups)))
+
+        def cast(param, value, key=None):
+            # PyTorch keeps the dtype of floating state equal to the param's
+            # and only converts (no copy when it already matches). raxis
+            # copies, so two optimizers never share their buffers.
+            if isinstance(value, Tensor):
+                if key != "step" and param.dtype.is_floating and value.dtype.is_floating:
+                    value = value.to(param.dtype)
+                return value.clone()
+            if isinstance(value, dict):
+                return {k: cast(param, v, key=k) for k, v in value.items()}
+            return deepcopy(value)
+
+        self.state = defaultdict(dict)
+        for k, v in state_dict["state"].items():
+            if k in id_map:
+                self.state[id_map[k]] = cast(id_map[k], v)
+
+        # Hyperparameters come from the dict, the parameters stay
+        for group, saved in zip(groups, saved_groups):
+            saved["params"] = group["params"]
+        self.param_groups = saved_groups
 
 
 class SGD(Optimizer):

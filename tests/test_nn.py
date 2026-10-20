@@ -486,6 +486,85 @@ class TestModuleStateDict:
             mlp(raxis).load_state_dict(sd, strict=False)
 
 
+class TestOptimizerStateDict:
+
+    @pytest.mark.parametrize("name, make_opt", OPTIMIZERS, ids=[n for n, _ in OPTIMIZERS])
+    def test_layout_matches_torch(self, name, make_opt):
+        r_model, t_model = mlp(raxis, out_features=1), mlp(torch, out_features=1)
+        copy_params(r_model, t_model)
+        r_opt, t_opt = make_opt(raxis, r_model.parameters()), make_opt(torch, t_model.parameters())
+        x, y = randf_centered(16, 6, seed=1), randf_centered(16, 1, seed=2)
+        train_both(r_model, t_model, r_opt, t_opt, nn.MSELoss(), torch.nn.MSELoss(),
+                   x, y, (raxis.float32, torch.float32), steps=2)
+        r_sd, t_sd = r_opt.state_dict(), t_opt.state_dict()
+        assert r_sd["state"].keys() == t_sd["state"].keys()
+        for idx, r_state in r_sd["state"].items():
+            assert r_state.keys() == t_sd["state"][idx].keys()
+            for key, value in r_state.items():
+                if key != "step":
+                    check_match(value, t_sd["state"][idx][key], atol=1e-6)
+        [r_group], [t_group] = r_sd["param_groups"], t_sd["param_groups"]
+        assert r_group["params"] == t_group["params"]
+        assert all(r_group[k] == t_group[k] for k in r_group)
+
+    @pytest.mark.parametrize("name, make_opt", OPTIMIZERS, ids=[n for n, _ in OPTIMIZERS])
+    def test_resume_training(self, name, make_opt):
+        # 3 steps, checkpoint, 3 more steps in new objects == 6 steps in a row
+        x, y = randf_centered(16, 6, seed=1), randf_centered(16, 1, seed=2)
+        xs, ys = raxis.tensor(x), raxis.tensor(y)
+
+        def train(model, opt, steps):
+            losses = []
+            for _ in range(steps):
+                opt.zero_grad()
+                loss = nn.functional.mse_loss(model(xs), ys)
+                loss.backward()
+                opt.step()
+                losses.append(loss.item())
+            return losses
+
+        model = mlp(raxis, out_features=1)
+        opt = make_opt(raxis, model.parameters())
+        expected = train(model, opt, 6)
+
+        model = mlp(raxis, out_features=1)
+        opt = make_opt(raxis, model.parameters())
+        first = train(model, opt, 3)
+        model_sd, opt_sd = model.state_dict(), opt.state_dict()
+
+        resumed_model = mlp(raxis, out_features=1)
+        resumed_model.load_state_dict(model_sd)
+        resumed_opt = make_opt(raxis, resumed_model.parameters())
+        resumed_opt.load_state_dict(opt_sd)
+        np.testing.assert_allclose(first + train(resumed_model, resumed_opt, 3), expected, rtol=1e-6)
+
+    def test_loaded_state_is_a_copy(self):
+        model = mlp(raxis)
+        opt = raxis.optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
+        model(raxis.ones((2, 6))).sum().backward()
+        opt.step()
+        other = raxis.optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
+        other.load_state_dict(opt.state_dict())
+        buf = opt.state[model[0].weight]["momentum_buffer"]
+        assert other.state[model[0].weight]["momentum_buffer"]._cdata != buf._cdata
+
+    def test_loads_hyperparameters_keeps_params(self):
+        model = mlp(raxis)
+        opt = raxis.optim.SGD(two_groups(raxis, model), lr=0.1)
+        sd = opt.state_dict()
+        sd["param_groups"][1]["lr"] = 0.5
+        new_opt = raxis.optim.SGD(two_groups(raxis, model), lr=0.1)
+        new_opt.load_state_dict(sd)
+        assert new_opt.param_groups[1]["lr"] == 0.5
+        assert new_opt.param_groups[1]["params"][0] is model[2].weight
+
+    def test_group_size_mismatch(self):
+        model = mlp(raxis)
+        sd = raxis.optim.SGD(model[0].parameters(), lr=0.1).state_dict()
+        with pytest.raises(ValueError):
+            raxis.optim.SGD(model.parameters(), lr=0.1).load_state_dict(sd)
+
+
 # ===========================================================================
 # ACTIVATION MODULES
 # ===========================================================================
