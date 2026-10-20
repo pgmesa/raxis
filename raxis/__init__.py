@@ -59,6 +59,9 @@ import collections as _collections
 import functools as _functools
 
 Tensor.__repr__ = _str
+# Identity hash, as torch: __eq__ is elementwise, so pybind11 leaves Tensor
+# unhashable, but tensors must key dicts (optimizer state, parameter maps)
+Tensor.__hash__ = object.__hash__
 
 # Dtype aliases, as in torch
 float = float32

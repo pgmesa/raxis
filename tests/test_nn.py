@@ -347,6 +347,50 @@ class TestTraining:
 
 
 # ===========================================================================
+# PARAM GROUPS
+# ===========================================================================
+
+def two_groups(lib, model, lr=0.1):
+    return [{"params": model[0].parameters()},
+            {"params": model[2].parameters(), "lr": lr / 10, "momentum": 0.5}]
+
+
+class TestParamGroups:
+
+    @pytest.mark.parametrize("name, make_opt", OPTIMIZERS, ids=[n for n, _ in OPTIMIZERS])
+    def test_groups_match_torch(self, name, make_opt):
+        r_model, t_model = mlp(raxis, out_features=1), mlp(torch, out_features=1)
+        copy_params(r_model, t_model)
+        groups = lambda lib, m: [{"params": m[0].parameters()},
+                                 {"params": m[2].parameters(), "lr": 1e-3, "weight_decay": 0.1}]
+        r_opt, t_opt = make_opt(raxis, groups(raxis, r_model)), make_opt(torch, groups(torch, t_model))
+        assert r_opt.param_groups[1]["lr"] == t_opt.param_groups[1]["lr"] == 1e-3
+        x, y = randf_centered(16, 6, seed=1), randf_centered(16, 1, seed=2)
+        r_losses, t_losses = train_both(r_model, t_model, r_opt, t_opt, nn.MSELoss(), torch.nn.MSELoss(),
+                                        x, y, (raxis.float32, torch.float32), steps=10)
+        np.testing.assert_allclose(r_losses, t_losses, rtol=1e-4, atol=1e-5)
+
+    def test_changing_lr(self):
+        r_model, t_model = mlp(raxis, out_features=1), mlp(torch, out_features=1)
+        copy_params(r_model, t_model)
+        r_opt = raxis.optim.SGD(two_groups(raxis, r_model), lr=0.1, momentum=0.9)
+        t_opt = torch.optim.SGD(two_groups(torch, t_model), lr=0.1, momentum=0.9)
+        x, y = randf_centered(16, 6, seed=1), randf_centered(16, 1, seed=2)
+        args = (nn.MSELoss(), torch.nn.MSELoss(), x, y, (raxis.float32, torch.float32))
+        train_both(r_model, t_model, r_opt, t_opt, *args, steps=3)
+        for opt in (r_opt, t_opt):
+            for group in opt.param_groups:
+                group["lr"] *= 0.1
+        r_losses, t_losses = train_both(r_model, t_model, r_opt, t_opt, *args, steps=3)
+        np.testing.assert_allclose(r_losses, t_losses, rtol=1e-4, atol=1e-5)
+
+    def test_parameter_in_two_groups(self):
+        layer = nn.Linear(2, 2)
+        with pytest.raises(ValueError, match="more than one parameter group"):
+            raxis.optim.SGD([{"params": layer.parameters()}, {"params": [layer.weight]}], lr=0.1)
+
+
+# ===========================================================================
 # ACTIVATION MODULES
 # ===========================================================================
 
