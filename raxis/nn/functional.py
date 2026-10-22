@@ -4,6 +4,7 @@ Most functions call C++ ops (top-level raxis ops or raxis._C._nn, as torch
 does with torch._C._nn). leaky_relu and selu are composed in Python.
 """
 
+import math
 from typing import Sequence
 
 import raxis
@@ -111,6 +112,24 @@ def avg_pool2d(input: Tensor, kernel_size, stride=None, padding=0, ceil_mode: bo
                count_include_pad: bool = True, divisor_override: int | None = None) -> Tensor:
     return raxis.avg_pool2d(input, kernel_size, stride, padding, ceil_mode,
                             count_include_pad, divisor_override)
+
+
+# -- Normalization --
+
+# From: torch/nn/functional.py (_verify_batch_size, batch_norm)
+def batch_norm(input: Tensor, running_mean: Tensor | None, running_var: Tensor | None,
+               weight: Tensor | None = None, bias: Tensor | None = None, training: bool = False,
+               momentum: float = 0.1, eps: float = 1e-5) -> Tensor:
+    if training:
+        # A single value per channel has zero variance: nothing to normalize
+        if math.prod(input.shape[2:]) * input.shape[0] == 1:
+            raise ValueError(
+                f"Expected more than 1 value per channel when training, got input size {input.shape}")
+        if eps <= 0.0:
+            raise ValueError(f"batch_norm eps must be positive during training, but got {eps}")
+    elif eps < 0.0:
+        raise ValueError(f"batch_norm eps must be non-negative, but got {eps}")
+    return raxis.batch_norm(input, weight, bias, running_mean, running_var, training, momentum, eps)
 
 
 # -- Losses --

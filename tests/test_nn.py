@@ -704,3 +704,84 @@ def test_cnn_training_matches_torch():
         nn.CrossEntropyLoss(), torch.nn.CrossEntropyLoss(), x, y, (raxis.long, torch.long))
     np.testing.assert_allclose(r_losses, t_losses, rtol=1e-4, atol=1e-5)
     assert r_losses[-1] < r_losses[0]
+
+
+# ===========================================================================
+# BATCH NORM MODULES
+# ===========================================================================
+
+BATCH_NORM_MODULES = [
+    ("bn2d", lambda lib: lib.nn.BatchNorm2d(4), (8, 4, 5, 5)),
+    ("bn1d_2d_input", lambda lib: lib.nn.BatchNorm1d(6), (32, 6)),
+    ("bn1d_3d_input", lambda lib: lib.nn.BatchNorm1d(3, momentum=0.3), (4, 3, 7)),
+    ("cumulative_average", lambda lib: lib.nn.BatchNorm2d(3, momentum=None), (4, 3, 4, 4)),
+    ("no_affine", lambda lib: lib.nn.BatchNorm2d(3, affine=False), (4, 3, 4, 4)),
+    ("no_running_stats", lambda lib: lib.nn.BatchNorm1d(5, track_running_stats=False), (16, 5)),
+]
+
+
+@pytest.mark.parametrize("name, make, x_shape", BATCH_NORM_MODULES, ids=[n for n, _, _ in BATCH_NORM_MODULES])
+def test_batch_norm_modules(name, make, x_shape):
+    r_bn, t_bn = make(raxis), make(torch)
+    assert repr(r_bn) == repr(t_bn)
+    assert list(r_bn.state_dict()) == list(t_bn.state_dict())
+    # A few training steps update the running statistics, then eval uses them
+    for step in range(3):
+        data = randf_centered(*x_shape, seed=step) * 2 + 1
+        r = raxis.tensor(data, requires_grad=True)
+        t = torch.tensor(data, requires_grad=True)
+        r_out, t_out = r_bn(r), t_bn(t)
+        check_match(r_out, t_out, atol=1e-5, context=f"{name} train step {step}")
+        grad = randf_centered(*x_shape, seed=10 + step)
+        r_out.backward(raxis.tensor(grad))
+        t_out.backward(torch.from_numpy(grad))
+        check_match(r.grad, t.grad, atol=1e-5, context=f"{name} input grad")
+    for (key, r_value), t_value in zip(r_bn.state_dict().items(), t_bn.state_dict().values()):
+        check_match(r_value, t_value, atol=1e-6, context=f"{name} {key}")
+    r_bn.eval()
+    t_bn.eval()
+    data = randf_centered(*x_shape, seed=99)
+    check_match(r_bn(raxis.tensor(data)), t_bn(torch.tensor(data)), atol=1e-5, context=f"{name} eval")
+
+
+def test_batch_norm_module_errors():
+    with pytest.raises(ValueError, match="expected 4D input"):
+        nn.BatchNorm2d(3)(raxis.randn(4, 3))
+    with pytest.raises(ValueError, match="expected 2D or 3D input"):
+        nn.BatchNorm1d(3)(raxis.randn(4, 3, 2, 2))
+    with pytest.raises(ValueError, match="Expected more than 1 value per channel"):
+        nn.BatchNorm1d(3)(raxis.randn(1, 3))
+    # One sample is fine in eval: the running statistics are used
+    bn = nn.BatchNorm1d(3)
+    bn.eval()
+    assert tuple(bn(raxis.randn(1, 3)).shape) == (1, 3)
+
+
+def cnn_bn(lib):
+    lib.manual_seed(0)
+    return lib.nn.Sequential(
+        lib.nn.Conv2d(1, 4, 3, padding="same", bias=False), lib.nn.BatchNorm2d(4),
+        lib.nn.ReLU(), lib.nn.MaxPool2d(2),
+        lib.nn.Flatten(), lib.nn.Linear(4 * 5 * 5, 8), lib.nn.BatchNorm1d(8), lib.nn.ReLU(),
+        lib.nn.Linear(8, 3))
+
+
+def test_cnn_batch_norm_training_matches_torch():
+    # SGD, not Adam: the bias of the Linear before BatchNorm1d has a zero
+    # gradient (BatchNorm subtracts the mean), so its computed gradient is
+    # rounding noise that Adam normalizes into steps of size lr, different in
+    # each library. It does not change the loss, but it moves running_mean.
+    r_model, t_model = cnn_bn(raxis), cnn_bn(torch)
+    copy_params(r_model, t_model)
+    x = randf_centered(16, 1, 10, 10, seed=1)
+    y = np.random.RandomState(2).randint(0, 3, size=16).astype(np.int64)
+    r_losses, t_losses = train_both(
+        r_model, t_model,
+        raxis.optim.SGD(r_model.parameters(), lr=0.05, momentum=0.9),
+        torch.optim.SGD(t_model.parameters(), lr=0.05, momentum=0.9),
+        nn.CrossEntropyLoss(), torch.nn.CrossEntropyLoss(), x, y, (raxis.long, torch.long))
+    np.testing.assert_allclose(r_losses, t_losses, rtol=1e-4, atol=1e-5)
+    assert r_losses[-1] < r_losses[0]
+    r_model.eval()
+    t_model.eval()
+    check_match(r_model(raxis.tensor(x)), t_model(torch.from_numpy(x)), atol=1e-4, context="eval")
