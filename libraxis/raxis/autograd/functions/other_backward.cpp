@@ -149,6 +149,69 @@ TensorList WhereBackward0::apply(const TensorList& grads) {
 }
 
 
+ClampBackward0::ClampBackward0(const Tensor& self, const Tensor& min, const Tensor& max)
+    : needs_grad_{self.requires_grad(), min.requires_grad(), max.requires_grad()}
+{
+    self_.save(self);
+    min_.save(min);
+    max_.save(max);
+    shapes_[0] = DimVector(self.shape());
+    if (min.defined()) shapes_[1] = DimVector(min.shape());
+    if (max.defined()) shapes_[2] = DimVector(max.shape());
+}
+
+std::string ClampBackward0::name() const { return "ClampBackward0"; }
+
+// From: torch/csrc/autograd/FunctionsManual.cpp (clamp_backward and
+// clamp_backward_min_max for tensor bounds)
+// The output is the input, min or max element by element, and the gradient
+// goes to whichever was selected. Where two of them tie (x == min < max),
+// each gets half. With reversed bounds (min > max) the output is max, so max
+// gets everything. masked_fill(g, m, 0) is written where(m, 0, g).
+TensorList ClampBackward0::apply(const TensorList& grads) {
+    const Tensor& self = self_.unpack();
+    const Tensor& min = min_.unpack();
+    const Tensor& max = max_.unpack();
+    const Tensor& grad = grads[0];
+    const Tensor half = grad / 2;
+    Tensor grad_self, grad_min, grad_max;
+
+    if (min.defined() && max.defined()) {
+        const Tensor min_lt_max = min.lt(max);
+        const Tensor min_eq_max = min.eq(max);
+        if (needs_grad_[0]) {
+            const Tensor tie = self.eq(min).logical_or(self.eq(max)).logical_and(min_lt_max);
+            const Tensor inactive = self.lt(min).logical_or(self.gt(max));
+            grad_self = ops::where(inactive, 0, ops::where(tie, half, grad));
+        }
+        if (needs_grad_[1]) {
+            const Tensor active = min_lt_max.logical_and(self.le(min))
+                .logical_or(min_eq_max.logical_and(self.lt(min)));
+            grad_min = ops::where(active.logical_not(), 0, ops::where(self.eq(min), half, grad));
+        }
+        if (needs_grad_[2]) {
+            const Tensor active = max.lt(min)
+                .logical_or(min_lt_max.logical_and(self.ge(max)))
+                .logical_or(min_eq_max.logical_and(self.gt(max)));
+            const Tensor tie = self.eq(max).logical_and(min_lt_max);
+            grad_max = ops::where(active.logical_not(), 0, ops::where(tie, half, grad));
+        }
+    } else if (min.defined()) {
+        const Tensor split = ops::where(self.eq(min), half, grad);
+        if (needs_grad_[0]) grad_self = ops::where(self.lt(min), 0, split);
+        if (needs_grad_[1]) grad_min = ops::where(self.gt(min), 0, split);
+    } else {
+        const Tensor split = ops::where(self.eq(max), half, grad);
+        if (needs_grad_[0]) grad_self = ops::where(self.gt(max), 0, split);
+        if (needs_grad_[2]) grad_max = ops::where(self.lt(max), 0, split);
+    }
+
+    if (grad_self.defined()) grad_self = unbroadcast(grad_self, shapes_[0]);
+    if (grad_min.defined()) grad_min = unbroadcast(grad_min, shapes_[1]);
+    if (grad_max.defined()) grad_max = unbroadcast(grad_max, shapes_[2]);
+    return {grad_self, grad_min, grad_max};
+}
+
 ClampBackward1::ClampBackward1(const Tensor& self, std::optional<Scalar> min, std::optional<Scalar> max)
     : min_(min), max_(max)
 {

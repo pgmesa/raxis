@@ -301,3 +301,69 @@ def test_minmax_dim_backward(name, keepdim):
     (getattr(t, name)(1, keepdim).values.exp() * 2.0).sum().backward()
     check_match(r.grad, t.grad)
     assert getattr(r, name)(0).values.grad_fn.name() == getattr(t, name)(0).values.grad_fn.name()
+
+
+# ===========================================================================
+# clamp with tensor bounds
+# ===========================================================================
+
+@pytest.mark.parametrize("n", SIZES)
+@pytest.mark.parametrize("dtype", DTYPES, ids=lambda d: np.dtype(d).name)
+def test_clamp_tensor_bounds(dtype, n):
+    r, t = make_pair(rand_of(dtype, n))
+    rlo, tlo = make_pair(rand_of(dtype, n, seed=1))
+    rhi, thi = make_pair(rand_of(dtype, n, seed=2))
+    # Some bounds reversed (lo > hi): the result is hi there, as in torch
+    check_match(r.clamp(rlo, rhi), t.clamp(tlo, thi))
+    check_match(raxis.clamp(r, min=rlo), torch.clamp(t, min=tlo))
+    check_match(raxis.clamp(r, max=rhi), torch.clamp(t, max=thi))
+    check_match(r.clip(rlo, rhi), t.clip(tlo, thi))
+
+
+def test_clamp_tensor_bounds_broadcast_and_promotion():
+    r, t = make_pair(randf_centered(4, 5))
+    rlo, tlo = make_pair(np.array([[-0.3], [0.0], [0.1], [-1.0]], dtype=np.float32))
+    rhi, thi = make_pair(np.array([0.2, 0.4, 0.5, 0.6, 0.7], dtype=np.float64))
+    check_match(r.clamp(rlo, rhi), t.clamp(tlo, thi))
+    assert np.array(r.clamp(rlo, rhi)).dtype == np.float64
+    ri, ti = make_pair(np.array([1, 5, 9], dtype=np.int64))
+    rf, tf = make_pair(np.array([2.5, 2.5, 2.5], dtype=np.float32))
+    check_match(ri.clamp(rf, None), ti.clamp(tf, None))
+
+
+def test_clamp_tensor_bounds_nan():
+    data = randf_centered(1003)
+    data[::7] = np.nan
+    lo = np.full(1003, -0.5, dtype=np.float32)
+    lo[::11] = np.nan
+    r, t = make_pair(data)
+    rlo, tlo = make_pair(lo)
+    rhi, thi = make_pair(np.full(1003, 0.5, dtype=np.float32))
+    check_match(r.clamp(rlo, rhi), t.clamp(tlo, thi))
+
+
+@pytest.mark.parametrize("bounds", ["both", "min", "max"])
+def test_clamp_tensor_bounds_backward(bounds):
+    # Values on the bounds (ties split the gradient), inside, outside, and a
+    # column with reversed bounds
+    x = np.array([[-2.0, -1.0, 0.0, 1.0, 2.0, 0.5]] * 3, dtype=np.float32)
+    lo = np.array([-1.0, -1.0, -1.0, -1.0, -1.0, 1.0], dtype=np.float32)
+    hi = np.array([[1.0], [1.0], [-1.0]], dtype=np.float32)
+    r, t = make_grad_pair(x)
+    rlo, tlo = make_grad_pair(lo)
+    rhi, thi = make_grad_pair(hi)
+    kw_r = {"both": (rlo, rhi), "min": (rlo, None), "max": (None, rhi)}[bounds]
+    kw_t = {"both": (tlo, thi), "min": (tlo, None), "max": (None, thi)}[bounds]
+    w = np.random.default_rng(3).standard_normal((3, 6)).astype(np.float32)
+    r_out = r.clamp(*kw_r)
+    t_out = t.clamp(*kw_t)
+    check_match(r_out, t_out)
+    assert r_out.grad_fn.name() == t_out.grad_fn.name()
+    (r_out * raxis.from_numpy(w)).sum().backward()
+    (t_out * torch.from_numpy(w)).sum().backward()
+    check_match(r.grad, t.grad)
+    for rb, tb in ((rlo, tlo), (rhi, thi)):
+        if tb.grad is None:
+            assert rb.grad is None
+        else:
+            check_match(rb.grad, tb.grad)

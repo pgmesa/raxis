@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+
 #include <raxis/autograd/graph.h>
 #include <raxis/autograd/saved_variable.h>
 #include <raxis/tensor/tensor.h>
@@ -69,6 +71,21 @@ private:
     DimVector other_shape_;
     bool self_requires_grad_;
     bool other_requires_grad_;
+};
+
+// clamp with tensor bounds (clamp.Tensor); min or max may be undefined
+class RAXIS_API ClampBackward0 : public Node {
+public:
+    ClampBackward0(const Tensor& self, const Tensor& min, const Tensor& max);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    SavedVariable self_{this, "self"};
+    SavedVariable min_{this, "min"};
+    SavedVariable max_{this, "max"};
+    std::array<bool, 3> needs_grad_;
+    std::array<DimVector, 3> shapes_;
 };
 
 class RAXIS_API ClampBackward1 : public Node {

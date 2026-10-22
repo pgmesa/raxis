@@ -245,6 +245,19 @@ Tensor clamp(const Tensor& self, std::optional<Scalar> min, std::optional<Scalar
     return result;
 }
 
+Tensor clamp(const Tensor& self, const std::optional<Tensor>& min, const std::optional<Tensor>& max) {
+    Tensor result = ops::clamp(self, min, max);
+    const Tensor min_t = min.value_or(Tensor());
+    const Tensor max_t = max.value_or(Tensor());
+    if (autograd::requires_autograd({self, min_t, max_t})) {
+        auto grad_fn = std::make_shared<autograd::ClampBackward0>(self, min_t, max_t);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, {self, min_t, max_t});
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
 Tensor& clamp_(Tensor& self, std::optional<Scalar> min, std::optional<Scalar> max) {
     RAXIS_CHECK(!autograd::requires_autograd(self),
         "a leaf Variable that requires grad is being used in an in-place operation (clamp_)");

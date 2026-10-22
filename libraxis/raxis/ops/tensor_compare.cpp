@@ -11,6 +11,7 @@
 #include <raxis/tensor/tensor_iterator.h>
 #include <raxis/tensor/type_promotion.h>
 
+#include <raxis/ops/binary_ops.h>
 #include <raxis/ops/scalar_ops.h>
 
 
@@ -109,6 +110,31 @@ Tensor& clamp_(Tensor& self, std::optional<Scalar> min, std::optional<Scalar> ma
     return self;
 }
 
+// From: aten/src/ATen/native/TensorCompare.cpp (clamp_Tensor meta and
+// clamp_Tensor_out). With one bound it is maximum / minimum; with two, one
+// ternary kernel promotes the three operands to their common dtype.
+Tensor clamp(const Tensor& self, const std::optional<Tensor>& min, const std::optional<Tensor>& max) {
+    RAXIS_CHECK(min || max, "torch.clamp: At least one of 'min' or 'max' must not be None");
+    if (!max) {
+        return ops::maximum(self, *min);
+    }
+    if (!min) {
+        return ops::minimum(self, *max);
+    }
+    Tensor out;
+    auto iter = TensorIteratorConfig()
+        .add_output(out)
+        .add_input(self)
+        .add_input(*min)
+        .add_input(*max)
+        .promote_inputs_to_common_dtype(true)
+        .cast_common_dtype_to_outputs(true)
+        .enforce_safe_casting_to_output(true)
+        .build();
+    clamp_stub(iter.device_type(), iter);
+    return iter.get_output(0);
+}
+
 // From: aten/src/ATen/native/TensorCompare.cpp (minmax_out_impl)
 // The kernel writes through keepdim views of the results (size 1 at dim),
 // which have as many dims as self, as its iterator needs
@@ -159,5 +185,6 @@ DEFINE_DISPATCH(where_stub);
 DEFINE_DISPATCH(clamp_scalar_stub);
 DEFINE_DISPATCH(clamp_min_scalar_stub);
 DEFINE_DISPATCH(clamp_max_scalar_stub);
+DEFINE_DISPATCH(clamp_stub);
 
 } // namespace raxis

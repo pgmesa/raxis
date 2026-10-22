@@ -701,6 +701,13 @@ PYBIND11_MODULE(_C, c) {
         .def("clip", [](const raxis::Tensor& self, std::optional<raxis::Scalar> min, std::optional<raxis::Scalar> max) {
             return raxis::clamp(self, min, max);
         }, py::arg("min") = py::none(), py::arg("max") = py::none())
+        // Tensor bounds: tried after the Scalar overloads above
+        .def("clamp", [](const raxis::Tensor& self, std::optional<raxis::Tensor> min, std::optional<raxis::Tensor> max) {
+            return raxis::clamp(self, min, max);
+        }, py::arg("min") = py::none(), py::arg("max") = py::none())
+        .def("clip", [](const raxis::Tensor& self, std::optional<raxis::Tensor> min, std::optional<raxis::Tensor> max) {
+            return raxis::clamp(self, min, max);
+        }, py::arg("min") = py::none(), py::arg("max") = py::none())
         .def("clamp_", [](raxis::Tensor& self, std::optional<raxis::Scalar> min, std::optional<raxis::Scalar> max) -> raxis::Tensor& {
             return raxis::clamp_(self, min, max);
         }, py::arg("min") = py::none(), py::arg("max") = py::none())
@@ -877,13 +884,6 @@ PYBIND11_MODULE(_C, c) {
             py::arg("dim") = raxis::Vec{},
             py::arg("keepdim") = false
         )
-        
-        ;
-    
-    // Factories
-    c.def("tensor", [](py::object data, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
-        raxis::Tensor t;
-        if (raxis::python::is_numpy_array(data)) {
         .def("cumsum", [](const raxis::Tensor& self, int64_t dim, std::optional<raxis::Dtype> dtype) {
             return self.cumsum(dim, dtype);
         }, py::arg("dim"), py::kw_only(), py::arg("dtype") = py::none())
@@ -893,6 +893,13 @@ PYBIND11_MODULE(_C, c) {
         .def("any", [](const raxis::Tensor& self, std::optional<raxis::VecOrInt> dim, bool keepdim) {
             return self.any(dim.value_or(raxis::VecOrInt{}), keepdim);
         }, py::arg("dim") = py::none(), py::arg("keepdim") = false)
+        
+        ;
+    
+    // Factories
+    c.def("tensor", [](py::object data, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
+        raxis::Tensor t;
+        if (raxis::python::is_numpy_array(data)) {
             RAXIS_CHECK(!device || device->is_cpu(),
                 "tensor(): only CPU tensors can be created from a numpy array");
             // tensor() always copies (from_numpy is the aliasing variant)
@@ -1223,6 +1230,12 @@ PYBIND11_MODULE(_C, c) {
     c.def("clip", [](const raxis::Tensor& input, std::optional<raxis::Scalar> min, std::optional<raxis::Scalar> max) {
         return raxis::clamp(input, min, max);
     }, py::arg("input"), py::arg("min") = py::none(), py::arg("max") = py::none());
+    c.def("clamp", [](const raxis::Tensor& input, std::optional<raxis::Tensor> min, std::optional<raxis::Tensor> max) {
+        return raxis::clamp(input, min, max);
+    }, py::arg("input"), py::arg("min") = py::none(), py::arg("max") = py::none());
+    c.def("clip", [](const raxis::Tensor& input, std::optional<raxis::Tensor> min, std::optional<raxis::Tensor> max) {
+        return raxis::clamp(input, min, max);
+    }, py::arg("input"), py::arg("min") = py::none(), py::arg("max") = py::none());
     c.def("clamp_min", &raxis::clamp_min, py::arg("input"), py::arg("min"));
     c.def("clamp_max", &raxis::clamp_max, py::arg("input"), py::arg("max"));
     c.def("where", py::overload_cast<const raxis::Tensor&, const raxis::Tensor&, const raxis::Tensor&>(&raxis::where),
@@ -1488,6 +1501,15 @@ PYBIND11_MODULE(_C, c) {
     c.def("argmin", [](const raxis::Tensor& input, std::optional<int64_t> dim, bool keepdim) {
         return raxis::argmin(input, dim, keepdim);
     }, py::arg("input"), py::arg("dim") = py::none(), py::arg("keepdim") = false);
+    c.def("cumsum", [](const raxis::Tensor& input, int64_t dim, std::optional<raxis::Dtype> dtype) {
+        return raxis::cumsum(input, dim, dtype);
+    }, py::arg("input"), py::arg("dim"), py::kw_only(), py::arg("dtype") = py::none());
+    c.def("all", [](const raxis::Tensor& input, std::optional<raxis::VecOrInt> dim, bool keepdim) {
+        return raxis::all(input, dim.value_or(raxis::VecOrInt{}), keepdim);
+    }, py::arg("input"), py::arg("dim") = py::none(), py::arg("keepdim") = false);
+    c.def("any", [](const raxis::Tensor& input, std::optional<raxis::VecOrInt> dim, bool keepdim) {
+        return raxis::any(input, dim.value_or(raxis::VecOrInt{}), keepdim);
+    }, py::arg("input"), py::arg("dim") = py::none(), py::arg("keepdim") = false);
     c.def("amax", [](
             const raxis::Tensor& tensor, 
             raxis::VecOrInt dim,
@@ -1501,15 +1523,6 @@ PYBIND11_MODULE(_C, c) {
     );
     c.def("amin", [](
             const raxis::Tensor& tensor, 
-    c.def("cumsum", [](const raxis::Tensor& input, int64_t dim, std::optional<raxis::Dtype> dtype) {
-        return raxis::cumsum(input, dim, dtype);
-    }, py::arg("input"), py::arg("dim"), py::kw_only(), py::arg("dtype") = py::none());
-    c.def("all", [](const raxis::Tensor& input, std::optional<raxis::VecOrInt> dim, bool keepdim) {
-        return raxis::all(input, dim.value_or(raxis::VecOrInt{}), keepdim);
-    }, py::arg("input"), py::arg("dim") = py::none(), py::arg("keepdim") = false);
-    c.def("any", [](const raxis::Tensor& input, std::optional<raxis::VecOrInt> dim, bool keepdim) {
-        return raxis::any(input, dim.value_or(raxis::VecOrInt{}), keepdim);
-    }, py::arg("input"), py::arg("dim") = py::none(), py::arg("keepdim") = false);
             raxis::VecOrInt dim,
             bool keepdim
         ) -> raxis::Tensor {

@@ -11,6 +11,7 @@
 #include <raxis/tensor/tensor_iterator.h>
 
 #include <algorithm>
+#include <limits>
 
 
 namespace raxis {
@@ -73,6 +74,24 @@ void clamp_max_scalar_kernel(TensorIterator& iter, Scalar max_) {
             },
             [=](Vectorized<scalar_t> a) {
                 return vec::clamp_max(a, max_vec);
+            }
+        );
+    });
+}
+
+// From: aten/src/ATen/native/cpu/TensorCompareKernel.cpp (clamp_kernel_impl)
+// min(max(a, lo), hi) propagates a NaN in a; a NaN bound gives NaN too
+void clamp_kernel(TensorIterator& iter) {
+    iter.common_dtype().dispatch_all_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+        cpu_kernel_vec(iter,
+            [](scalar_t a, scalar_t min, scalar_t max) -> scalar_t {
+                if (_isnan(min) || _isnan(max)) {
+                    return std::numeric_limits<scalar_t>::quiet_NaN();
+                }
+                return std::min(std::max(a, min), max);
+            },
+            [](Vectorized<scalar_t> a, Vectorized<scalar_t> min, Vectorized<scalar_t> max) {
+                return vec::minimum(vec::maximum(a, min), max);
             }
         );
     });
@@ -163,5 +182,6 @@ REGISTER_DISPATCH(where_stub, &where_kernel);
 REGISTER_DISPATCH(clamp_scalar_stub, &clamp_scalar_kernel);
 REGISTER_DISPATCH(clamp_min_scalar_stub, &clamp_min_scalar_kernel);
 REGISTER_DISPATCH(clamp_max_scalar_stub, &clamp_max_scalar_kernel);
+REGISTER_DISPATCH(clamp_stub, &clamp_kernel);
 
 } // namespace raxis
