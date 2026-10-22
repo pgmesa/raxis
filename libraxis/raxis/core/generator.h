@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <mutex>
-#include <random>
 #include <utility>
 
 #include <raxis/export.h>
@@ -14,12 +13,18 @@ namespace raxis {
 inline constexpr uint64_t default_rng_seed_val = 67280421310721ULL;
 
 
-/// Lightweight RNG wrapper around std::mt19937_64, plus the offset of a
-/// Philox stream (see core/philox.h) for kernels that draw in parallel.
+/// CPU random generator: a seed and the offset into its Philox stream (see
+/// core/philox.h). Every random op reserves the blocks it needs and draws
+/// them in parallel.
+///
+/// PyTorch's CPUGeneratorImpl is an mt19937 that ops draw from serially,
+/// under its mutex; it keeps it for compatibility (the sequence for a given
+/// seed and the get_rng_state format are relied upon). Its CUDA generator is
+/// this one: seed + Philox offset (CUDAGeneratorImpl).
 class RAXIS_API Generator {
 public:
     explicit Generator(uint64_t seed = default_rng_seed_val)
-        : seed_(seed), engine_(seed) {}
+        : seed_(seed) {}
 
     Generator(const Generator&) = delete;
     Generator& operator=(const Generator&) = delete;
@@ -29,25 +34,11 @@ public:
     void seed(uint64_t s) {
         std::lock_guard<std::mutex> lock(mutex_);
         seed_ = s;
-        engine_.seed(s);
         philox_offset_ = 0;
     }
 
     uint64_t current_seed() const {
         return seed_;
-    }
-
-    /// Access the raw engine. Caller MUST hold mutex() before calling this.
-    std::mt19937_64& engine() { 
-        return engine_; 
-    }
-
-    /// Mutex for external locking. The pattern is:
-    ///   std::lock_guard<std::mutex> lock(gen.mutex());
-    ///   auto& eng = gen.engine();
-    ///   // ... draw samples ...
-    std::mutex& mutex() { 
-        return mutex_; 
     }
 
     /// Reserves `increment` Philox blocks (4 x 32 bits each) and returns
@@ -64,7 +55,6 @@ public:
 
 private:
     uint64_t seed_;
-    std::mt19937_64 engine_;
     uint64_t philox_offset_ = 0;
     std::mutex mutex_;
 };

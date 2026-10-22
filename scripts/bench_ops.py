@@ -709,6 +709,17 @@ def run_forward_benchmarks(runner):
         lambda t: raxis.batch_norm(t, None, None, None, None, True, 0.1, 1e-5),
         lambda t: torch.batch_norm(t, None, None, None, None, True, 0.1, 1e-5, False)),
     ])
+
+    S_RANDOM = S2D + [(128, 16, 28, 28)]
+
+    _run_section(runner, "Random", [
+        ("uniform_", FLOAT, S_RANDOM, lambda r: r.uniform_(), lambda t: t.uniform_()),
+        ("normal_", FLOAT, S_RANDOM, lambda r: r.normal_(), lambda t: t.normal_()),
+        ("randint_", NO_BOOL, S_RANDOM, lambda r: r.randint_(0, 100), lambda t: t.random_(0, 100)),
+        ("dropout", FLOAT, S_RANDOM,
+        lambda r: raxis.dropout(r, 0.5, True),
+        lambda t: torch.dropout(t, 0.5, True)),
+    ])
                 
             
 def run_backward_benchmarks(runner):

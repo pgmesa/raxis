@@ -1,6 +1,8 @@
 
 #include <raxis/core/generator.h>
 
+#include <random>
+
 
 namespace raxis {
 

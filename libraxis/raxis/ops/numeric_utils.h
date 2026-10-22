@@ -2,8 +2,8 @@
 
 #include <limits>
 #include <type_traits>
+#include <algorithm>
 #include <cmath>
-#include <random>
 
 
 namespace raxis {
@@ -56,28 +56,5 @@ constexpr scalar_t lower_bound() {
     }
 }
 
-
-/// Draw a uniform integer in [0, range) from a raw 64-bit engine.
-/// Uses bitmask-with-rejection (Lemire-style) to avoid modulo bias.
-template <typename T>
-T uniform_int_from(std::mt19937_64& engine, uint64_t range) {
-    if (range <= 1) return static_cast<T>(0);
-
-    uint64_t mask = range - 1;
-    mask |= mask >> 1;
-    mask |= mask >> 2;
-    mask |= mask >> 4;
-    mask |= mask >> 8;
-    mask |= mask >> 16;
-    mask |= mask >> 32;
-    
-    uint64_t draw;
-    do {
-        draw = engine() & mask;
-    } while (draw >= range);
-
-    return static_cast<T>(draw);
-}
-    
 } // namespace raxis
 

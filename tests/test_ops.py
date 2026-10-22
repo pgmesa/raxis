@@ -1,4 +1,9 @@
 
+import json
+import os
+import subprocess
+import sys
+
 import pytest
 import raxis
 import torch
@@ -1108,6 +1113,129 @@ class TestFactories:
         r_np = np.array(r)
         assert r_np.min() >= 0
         assert r_np.max() < 100
+
+
+class TestRandom:
+    """Philox-based rand/randn/randint. The values differ from torch's for the
+    same seed (torch draws from mt19937), so these tests check the
+    distributions and the reproducibility guarantees."""
+
+    # Around the batch boundaries: 64 floats, 32 doubles or int64s per batch,
+    # 16-element Box-Muller chunks, 8192-element parallel tasks
+    SIZES = [1, 15, 17, 33, 63, 65, 1000, 100_003]
+    DTYPES = [raxis.float32, raxis.float64]
+
+    @pytest.mark.parametrize("n", SIZES)
+    @pytest.mark.parametrize("dtype", DTYPES)
+    def test_uniform_moments(self, n, dtype):
+        raxis.manual_seed(0)
+        x = np.array(raxis.zeros((n,), dtype=dtype).uniform_(-3.0, 5.0))
+        assert x.min() >= -3.0 and x.max() < 5.0
+        if n >= 1000:
+            # U(-3, 5): mean 1, variance 64 / 12
+            assert abs(x.mean() - 1.0) < 5 * np.sqrt(64 / 12 / n)
+            assert abs(x.var() / (64 / 12) - 1.0) < 0.1
+
+    @pytest.mark.parametrize("n", SIZES)
+    @pytest.mark.parametrize("dtype", DTYPES)
+    def test_normal_moments(self, n, dtype):
+        raxis.manual_seed(0)
+        x = np.array(raxis.zeros((n,), dtype=dtype).normal_(2.0, 3.0))
+        assert np.isfinite(x).all()
+        if n >= 100_000:
+            z = (x - 2.0) / 3.0
+            assert abs(z.mean()) < 5 / np.sqrt(n)
+            assert abs(z.std() - 1.0) < 0.01
+            assert abs((z ** 3).mean()) < 0.05      # skewness 0
+            assert abs((z ** 4).mean() - 3.0) < 0.1  # kurtosis 3
+            assert abs((np.abs(z) < 1).mean() - 0.6827) < 0.01
+            # The two outputs of each Box-Muller pair (j, j + 8 in a chunk of
+            # 16) must be uncorrelated
+            chunks = z[: n // 16 * 16].reshape(-1, 16)
+            assert abs(np.corrcoef(chunks[:, :8].ravel(), chunks[:, 8:].ravel())[0, 1]) < 0.02
+
+    def test_randn_std_zero(self):
+        x = np.array(raxis.zeros((100,)).normal_(1.5, 0.0))
+        np.testing.assert_array_equal(x, 1.5)
+
+    @pytest.mark.parametrize("dtype", [raxis.int64, raxis.int32, raxis.uint8])
+    def test_randint_counts(self, dtype):
+        raxis.manual_seed(0)
+        n = 100_000
+        x = np.array(raxis.randint(3, 13, (n,), dtype=dtype))
+        counts = np.bincount(x.astype(np.int64) - 3, minlength=10)
+        assert len(counts) == 10
+        # Each count is Binomial(n, 0.1): standard deviation ~95
+        assert np.abs(counts - n / 10).max() < 5 * np.sqrt(n * 0.1 * 0.9)
+
+    def test_randint_wide_and_degenerate_ranges(self):
+        raxis.manual_seed(0)
+        low, high = -(2 ** 62), 2 ** 62
+        x = np.array(raxis.randint(low, high, (10_000,)))
+        assert x.min() >= low and x.max() < high
+        assert abs(x.mean() / high) < 0.05
+        np.testing.assert_array_equal(np.array(raxis.randint(7, 8, (50,))), 7)
+        b = np.array(raxis.randint(0, 2, (1000,), dtype=raxis.bool))
+        assert 0.4 < b.mean() < 0.6
+
+    @pytest.mark.parametrize("factory", ["rand", "randn", "randint"])
+    def test_seeded_and_independent_draws(self, factory):
+        def draw():
+            if factory == "randint":
+                return np.array(raxis.randint(0, 1000, (5000,)))
+            return np.array(getattr(raxis, factory)((5000,)))
+        raxis.manual_seed(11)
+        first, second = draw(), draw()
+        raxis.manual_seed(11)
+        np.testing.assert_array_equal(draw(), first)
+        # Each call reserves new Philox counters
+        assert (first != second).mean() > 0.9
+
+    def test_fill_order_is_row_major_for_views(self):
+        # A non-contiguous tensor gets the values of a contiguous tensor of
+        # its shape, in row-major order
+        raxis.manual_seed(5)
+        expected = np.array(raxis.rand((40, 50)))
+        base = raxis.zeros((50, 40))
+        view = base.transpose(0, 1)
+        raxis.manual_seed(5)
+        view.uniform_()
+        np.testing.assert_array_equal(np.array(view), expected)
+        np.testing.assert_array_equal(np.array(base), expected.T)
+
+    def test_independent_of_thread_count(self):
+        threads = raxis.get_num_threads()
+        results = []
+        try:
+            for n in (1, threads):
+                raxis.set_num_threads(n)
+                raxis.manual_seed(3)
+                results.append([np.array(raxis.rand((100_003,))),
+                                np.array(raxis.randn((100_003,), dtype=raxis.float64)),
+                                np.array(raxis.randint(-50, 50, (100_003,)))])
+        finally:
+            raxis.set_num_threads(threads)
+        for a, b in zip(*results):
+            np.testing.assert_array_equal(a, b)
+
+    def test_independent_of_cpu_capability(self):
+        # The SIMD and scalar Philox paths draw the same words, so uniform and
+        # randint match exactly; randn goes through SIMD log/sin/cos (sleef)
+        # or the scalar libm ones, which may differ in the last ulp.
+        code = ("import json, raxis, numpy as np; raxis.manual_seed(9); "
+                "print(json.dumps([np.array(raxis.rand((1001,))).tolist(), "
+                "np.array(raxis.randint(0, 10**12, (1001,))).tolist(), "
+                "np.array(raxis.randn((1001,))).tolist()]))")
+        outputs = []
+        for capability in ("default", ""):
+            env = dict(os.environ, RAXIS_CPU_CAPABILITY=capability)
+            result = subprocess.run([sys.executable, "-c", code], env=env,
+                                    capture_output=True, text=True, check=True)
+            outputs.append(json.loads(result.stdout))
+        (rand_a, randint_a, randn_a), (rand_b, randint_b, randn_b) = outputs
+        assert rand_a == rand_b
+        assert randint_a == randint_b
+        np.testing.assert_allclose(randn_a, randn_b, rtol=1e-5, atol=1e-6)
 
 
 # ===========================================================================

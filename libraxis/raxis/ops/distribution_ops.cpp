@@ -1,17 +1,41 @@
 
 #include <raxis/ops/distribution_ops.h>
 
+#include <cstdint>
+#include <limits>
+#include <type_traits>
+
 #include <raxis/core/dtype.h>
 #include <raxis/core/generator.h>
+#include <raxis/core/philox.h>
 
 #include <raxis/tensor/tensor.h>
-#include <raxis/tensor/tensor_iterator.h>
 #include <raxis/tensor/factories.h>
 
 #include <raxis/util/exception.h>
 
 
 namespace raxis {
+
+namespace {
+
+// Runs a kernel that fills a contiguous tensor: on self directly, or on a
+// contiguous buffer copied into self, so element i of the stream always goes
+// to the i-th element in row-major order, whatever the strides of self.
+template <typename Fill>
+void fill_contiguous(Tensor& self, int words_per_element, const Fill& fill) {
+    const auto [seed, offset] =
+        get_default_generator().philox_engine_inputs(philox_blocks(self.numel(), words_per_element));
+    if (self.is_contiguous()) {
+        fill(self, seed, offset);
+        return;
+    }
+    Tensor buffer = empty(self.shape(), self.options());
+    fill(buffer, seed, offset);
+    self.copy_(buffer);
+}
+
+} // namespace
 
 Tensor& uniform_(Tensor& self, double low, double high) {
     RAXIS_CHECK(
@@ -24,12 +48,9 @@ Tensor& uniform_(Tensor& self, double low, double high) {
     );
     if (self.numel() == 0) return self;
 
-    auto iter = TensorIteratorConfig()
-        .check_all_same_dtype(false)
-        .add_output(self)
-        .build();
-
-    uniform_stub(iter.device_type(), iter, low, high, get_default_generator());
+    fill_contiguous(self, real_words_per_element(self.dtype()), [&](const Tensor& t, uint64_t seed, uint64_t offset) {
+        uniform_stub(DeviceType::CPU, t, low, high, seed, offset);
+    });
     return self;
 }
 
@@ -41,12 +62,9 @@ Tensor& normal_(Tensor& self, double mean, double std) {
     RAXIS_CHECK(std >= 0.0, "normal_ expects std >= 0, got ", std);
     if (self.numel() == 0) return self;
 
-    auto iter = TensorIteratorConfig()
-        .check_all_same_dtype(false)
-        .add_output(self)
-        .build();
-
-    normal_stub(iter.device_type(), iter, mean, std, get_default_generator());
+    fill_contiguous(self, real_words_per_element(self.dtype()), [&](const Tensor& t, uint64_t seed, uint64_t offset) {
+        normal_stub(DeviceType::CPU, t, mean, std, seed, offset);
+    });
     return self;
 }
 
@@ -73,12 +91,9 @@ Tensor& randint_(Tensor& self, int64_t low, int64_t high) {
         );
     });
 
-    auto iter = TensorIteratorConfig()
-        .check_all_same_dtype(false)
-        .add_output(self)
-        .build();
-
-    randint_stub(iter.device_type(), iter, low, range, get_default_generator());
+    fill_contiguous(self, kRandintWordsPerElement, [&](const Tensor& t, uint64_t seed, uint64_t offset) {
+        randint_stub(DeviceType::CPU, t, low, range, seed, offset);
+    });
     return self;
 }
 
