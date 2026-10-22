@@ -11,7 +11,8 @@ read end to end, while running at PyTorch speed on CPU.
 
 > **Status: alpha.** CPU only. Tensors with views and broadcasting, type
 > promotion, elementwise ops, reductions, matmul, autograd, and an `nn`/`optim`
-> package with enough to train MLPs. CNN layers and CUDA are next.
+> package with enough to train MLPs and CNNs (Conv1d/2d, pooling, BatchNorm).
+> CUDA is next.
 
 ## Install
 
@@ -83,9 +84,10 @@ the `raxis/` package. To work on the C++ side, `libraxis/CMakePresets.json`
 has `debug` and `release` presets; `CMakeLists.txt` lists the build options
 (`RAXIS_USE_*`).
 
-`scripts/bench_ops.py` benchmarks each op against PyTorch and NumPy, and
-`examples/` has notebooks that train MLPs on two moons and MNIST with either
-Raxis or PyTorch.
+`scripts/bench_ops.py` benchmarks each op against PyTorch and NumPy,
+`scripts/bench_training.py` times a training step of the example models, and
+`examples/` has notebooks that train MLPs on two moons and MNIST and a CNN on
+MNIST with either Raxis or PyTorch.
 
 ## License
 
