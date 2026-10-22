@@ -591,3 +591,116 @@ def test_activation_modules(name, make):
     r_out.backward(raxis.tensor(grad))
     t_out.backward(torch.from_numpy(grad))
     check_match(r.grad, t.grad, atol=1e-5, context=f"{name} grad")
+
+
+# ===========================================================================
+# CONVOLUTION AND POOLING MODULES
+# ===========================================================================
+
+CONV_MODULES = [
+    ("conv2d", lambda lib: lib.nn.Conv2d(3, 8, 3, padding=1), (2, 3, 7, 7)),
+    ("conv2d_groups", lambda lib: lib.nn.Conv2d(4, 6, (3, 2), stride=2, groups=2, bias=False), (2, 4, 9, 8)),
+    ("conv2d_same", lambda lib: lib.nn.Conv2d(2, 4, 3, padding="same", dilation=2), (1, 2, 8, 8)),
+    ("conv1d", lambda lib: lib.nn.Conv1d(3, 5, 4, stride=2, padding="valid"), (2, 3, 11)),
+    ("conv2d_unbatched", lambda lib: lib.nn.Conv2d(3, 4, 3), (3, 6, 6)),
+]
+
+
+@pytest.mark.parametrize("name, make, x_shape", CONV_MODULES, ids=[n for n, _, _ in CONV_MODULES])
+def test_conv_modules(name, make, x_shape):
+    r_conv, t_conv = make(raxis), make(torch)
+    assert repr(r_conv) == repr(t_conv)
+    copy_params(r_conv, t_conv)
+    data = randf_centered(*x_shape)
+    r = raxis.tensor(data, requires_grad=True)
+    t = torch.tensor(data, requires_grad=True)
+    r_out, t_out = r_conv(r), t_conv(t)
+    check_match(r_out, t_out, atol=1e-5, context=name)
+    grad = randf_centered(*t_out.shape, seed=9)
+    r_out.backward(raxis.tensor(grad))
+    t_out.backward(torch.from_numpy(grad))
+    check_match(r.grad, t.grad, atol=1e-5, context=f"{name} input grad")
+    for (r_name, r_param), (t_name, t_param) in zip(r_conv.named_parameters(), t_conv.named_parameters()):
+        assert r_name == t_name
+        check_match(r_param.grad, t_param.grad, atol=1e-4, context=f"{name} {r_name} grad")
+
+
+def test_conv_init():
+    raxis.manual_seed(0)
+    conv = nn.Conv2d(8, 16, 3)
+    assert tuple(conv.weight.shape) == (16, 8, 3, 3)
+    assert list(conv.state_dict()) == ["weight", "bias"]
+    # kaiming_uniform_ with a = sqrt(5) is U(-1/sqrt(fan_in), 1/sqrt(fan_in))
+    bound = 1 / math.sqrt(8 * 3 * 3)
+    for param in (conv.weight, conv.bias):
+        values = np.array(param.detach())
+        assert np.abs(values).max() <= bound
+        assert np.abs(values).max() > 0.9 * bound
+
+
+def test_conv_module_errors():
+    with pytest.raises(ValueError, match="in_channels must be divisible by groups"):
+        nn.Conv2d(3, 6, 3, groups=2)
+    with pytest.raises(ValueError, match="Invalid padding string"):
+        nn.Conv2d(3, 6, 3, padding="full")
+    with pytest.raises(ValueError, match="not supported for strided convolutions"):
+        nn.Conv2d(3, 6, 3, stride=2, padding="same")
+    with pytest.raises(NotImplementedError):
+        nn.Conv2d(3, 6, 3, padding_mode="reflect")
+    # Even kernel: 'same' needs one more pad on one side
+    with pytest.raises(NotImplementedError):
+        nn.Conv2d(3, 6, 2, padding="same")(raxis.randn(1, 3, 5, 5))
+
+
+POOL_MODULES = [
+    ("max", lambda lib: lib.nn.MaxPool2d(2)),
+    ("max_ceil", lambda lib: lib.nn.MaxPool2d(3, stride=2, padding=1, ceil_mode=True)),
+    ("max_dilation", lambda lib: lib.nn.MaxPool2d(2, stride=1, dilation=2)),
+    ("avg", lambda lib: lib.nn.AvgPool2d(2)),
+    ("avg_no_pad_count", lambda lib: lib.nn.AvgPool2d(3, stride=1, padding=1, count_include_pad=False)),
+]
+
+
+@pytest.mark.parametrize("name, make", POOL_MODULES, ids=[n for n, _ in POOL_MODULES])
+def test_pool_modules(name, make):
+    r_pool, t_pool = make(raxis), make(torch)
+    assert repr(r_pool) == repr(t_pool)
+    data = randf_centered(2, 3, 9, 9)
+    r = raxis.tensor(data, requires_grad=True)
+    t = torch.tensor(data, requires_grad=True)
+    r_out, t_out = r_pool(r), t_pool(t)
+    check_match(r_out, t_out, context=name)
+    grad = randf_centered(*t_out.shape, seed=9)
+    r_out.backward(raxis.tensor(grad))
+    t_out.backward(torch.from_numpy(grad))
+    check_match(r.grad, t.grad, atol=1e-6, context=f"{name} grad")
+
+
+def test_max_pool_return_indices():
+    data = randf_centered(2, 3, 8, 8)
+    r_out, r_idx = nn.MaxPool2d(2, return_indices=True)(raxis.tensor(data))
+    t_out, t_idx = torch.nn.MaxPool2d(2, return_indices=True)(torch.tensor(data))
+    check_match(r_out, t_out)
+    check_match(r_idx, t_idx, atol=0)
+
+
+def cnn(lib):
+    lib.manual_seed(0)
+    return lib.nn.Sequential(
+        lib.nn.Conv2d(1, 4, 3, padding=1), lib.nn.ReLU(), lib.nn.MaxPool2d(2),
+        lib.nn.Conv2d(4, 8, 3), lib.nn.ReLU(), lib.nn.AvgPool2d(2),
+        lib.nn.Flatten(), lib.nn.Linear(8, 3))
+
+
+def test_cnn_training_matches_torch():
+    r_model, t_model = cnn(raxis), cnn(torch)
+    copy_params(r_model, t_model)
+    x = randf_centered(16, 1, 10, 10, seed=1)
+    y = np.random.RandomState(2).randint(0, 3, size=16).astype(np.int64)
+    r_losses, t_losses = train_both(
+        r_model, t_model,
+        raxis.optim.SGD(r_model.parameters(), lr=0.05, momentum=0.9),
+        torch.optim.SGD(t_model.parameters(), lr=0.05, momentum=0.9),
+        nn.CrossEntropyLoss(), torch.nn.CrossEntropyLoss(), x, y, (raxis.long, torch.long))
+    np.testing.assert_allclose(r_losses, t_losses, rtol=1e-4, atol=1e-5)
+    assert r_losses[-1] < r_losses[0]

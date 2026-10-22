@@ -4,6 +4,8 @@ Most functions call C++ ops (top-level raxis ops or raxis._C._nn, as torch
 does with torch._C._nn). leaky_relu and selu are composed in Python.
 """
 
+from typing import Sequence
+
 import raxis
 from raxis import Tensor
 from raxis._C import _nn
@@ -54,6 +56,61 @@ def linear(input: Tensor, weight: Tensor, bias: Tensor | None = None) -> Tensor:
 
 def dropout(input: Tensor, p: float = 0.5, training: bool = True) -> Tensor:
     return raxis.dropout(input, p, training)
+
+
+# -- Convolution and pooling --
+
+def _expand(value: int | Sequence[int], n: int) -> list[int]:
+    return list(value) if isinstance(value, (tuple, list)) else [value] * n
+
+
+# From: aten/src/ATen/native/Convolution.cpp (_convolution_mode, convolution_same)
+def _padding_from_string(padding: str, weight: Tensor, stride, dilation) -> list[int]:
+    spatial_dims = weight.dim() - 2
+    if padding == "valid":
+        return [0] * spatial_dims
+    if padding != "same":
+        raise RuntimeError(f"Invalid padding string: '{padding}'")
+    if any(s != 1 for s in _expand(stride, spatial_dims)):
+        raise RuntimeError("padding='same' is not supported for strided convolutions")
+    # The output keeps the input size when the d * (k - 1) positions the
+    # kernel overhangs are split between both sides
+    pads = []
+    for d, k in zip(_expand(dilation, spatial_dims), weight.shape[2:]):
+        total = d * (k - 1)
+        if total % 2 != 0:
+            raise NotImplementedError(
+                "padding='same' with an even kernel size needs more padding on one side "
+                "than on the other, which raxis does not support yet")
+        pads.append(total // 2)
+    return pads
+
+
+def conv1d(input: Tensor, weight: Tensor, bias: Tensor | None = None, stride=1,
+           padding: int | Sequence[int] | str = 0, dilation=1, groups: int = 1) -> Tensor:
+    if isinstance(padding, str):
+        padding = _padding_from_string(padding, weight, stride, dilation)
+    return raxis.conv1d(input, weight, bias, stride, padding, dilation, groups)
+
+
+def conv2d(input: Tensor, weight: Tensor, bias: Tensor | None = None, stride=1,
+           padding: int | Sequence[int] | str = 0, dilation=1, groups: int = 1) -> Tensor:
+    if isinstance(padding, str):
+        padding = _padding_from_string(padding, weight, stride, dilation)
+    return raxis.conv2d(input, weight, bias, stride, padding, dilation, groups)
+
+
+def max_pool2d(input: Tensor, kernel_size, stride=None, padding=0, dilation=1,
+               ceil_mode: bool = False, return_indices: bool = False):
+    if return_indices:
+        return raxis.max_pool2d_with_indices(input, kernel_size, stride, padding, dilation, ceil_mode)
+    return raxis.max_pool2d(input, kernel_size, stride, padding, dilation, ceil_mode)
+
+
+def avg_pool2d(input: Tensor, kernel_size, stride=None, padding=0, ceil_mode: bool = False,
+               count_include_pad: bool = True, divisor_override: int | None = None) -> Tensor:
+    return raxis.avg_pool2d(input, kernel_size, stride, padding, ceil_mode,
+                            count_include_pad, divisor_override)
 
 
 # -- Losses --
