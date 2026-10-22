@@ -341,6 +341,23 @@ class TestTraining:
             nn.CrossEntropyLoss(), torch.nn.CrossEntropyLoss(), x, y, (raxis.long, torch.long))
         np.testing.assert_allclose(r_losses, t_losses, rtol=1e-4, atol=1e-5)
 
+    def test_classification_weighted_cross_entropy(self):
+        r_model, t_model = mlp(raxis), mlp(torch)
+        copy_params(r_model, t_model)
+        x = randf_centered(32, 6, seed=5)
+        y = np.random.RandomState(6).randint(0, 3, size=32).astype(np.int64)
+        weight = np.array([0.2, 1.0, 3.0], dtype=np.float32)
+        r_loss_fn = nn.CrossEntropyLoss(weight=raxis.from_numpy(weight))
+        t_loss_fn = torch.nn.CrossEntropyLoss(weight=torch.from_numpy(weight))
+        # The weight is a buffer: it goes into the state_dict
+        assert list(r_loss_fn.state_dict()) == list(t_loss_fn.state_dict()) == ["weight"]
+        r_losses, t_losses = train_both(
+            r_model, t_model,
+            raxis.optim.SGD(r_model.parameters(), lr=0.1),
+            torch.optim.SGD(t_model.parameters(), lr=0.1),
+            r_loss_fn, t_loss_fn, x, y, (raxis.long, torch.long))
+        np.testing.assert_allclose(r_losses, t_losses, rtol=1e-4, atol=1e-5)
+
     def test_optimizer_rejects_empty_params(self):
         with pytest.raises(ValueError):
             raxis.optim.SGD([], lr=0.1)

@@ -47,19 +47,21 @@ TensorList LogSoftmaxBackward0::apply(const TensorList& grads) {
 
 
 NllLossBackward0::NllLossBackward0(
-    const Tensor& self, const Tensor& target,
+    const Tensor& self, const Tensor& target, const Tensor& weight,
     Reduction reduction, int64_t ignore_index, double total_weight)
     : reduction_(reduction), ignore_index_(ignore_index), total_weight_(total_weight)
 {
     self_.save(self);
     target_.save(target);
+    weight_.save(weight);
 }
 std::string NllLossBackward0::name() const { return "NllLossBackward0"; }
 
 // Only self gets a gradient: target holds class indices
 TensorList NllLossBackward0::apply(const TensorList& grads) {
     return {ops::nll_loss_backward(
-        grads[0], self_.unpack(), target_.unpack(), reduction_, ignore_index_, total_weight_)};
+        grads[0], self_.unpack(), target_.unpack(), weight_.unpack(),
+        reduction_, ignore_index_, total_weight_)};
 }
 
 

@@ -1543,16 +1543,20 @@ PYBIND11_MODULE(_C, c) {
     }, py::arg("input"), py::arg("weight"), py::arg("bias") = py::none());
 
     nn.def("nll_loss", [](const raxis::Tensor& input, const raxis::Tensor& target,
-                          const std::string& reduction, int64_t ignore_index) {
-        return raxis::nll_loss(input, target, raxis::parse_reduction(reduction), ignore_index);
-    }, py::arg("input"), py::arg("target"), py::arg("reduction") = "mean",
-       py::arg("ignore_index") = -100);
+                          std::optional<raxis::Tensor> weight, const std::string& reduction,
+                          int64_t ignore_index) {
+        return raxis::nll_loss(input, target, weight.value_or(raxis::Tensor{}),
+                               raxis::parse_reduction(reduction), ignore_index);
+    }, py::arg("input"), py::arg("target"), py::arg("weight") = py::none(),
+       py::arg("reduction") = "mean", py::arg("ignore_index") = -100);
 
     nn.def("cross_entropy", [](const raxis::Tensor& input, const raxis::Tensor& target,
-                               const std::string& reduction, int64_t ignore_index) {
-        return raxis::cross_entropy(input, target, raxis::parse_reduction(reduction), ignore_index);
-    }, py::arg("input"), py::arg("target"), py::arg("reduction") = "mean",
-       py::arg("ignore_index") = -100);
+                               std::optional<raxis::Tensor> weight, const std::string& reduction,
+                               int64_t ignore_index) {
+        return raxis::cross_entropy(input, target, weight.value_or(raxis::Tensor{}),
+                                    raxis::parse_reduction(reduction), ignore_index);
+    }, py::arg("input"), py::arg("target"), py::arg("weight") = py::none(),
+       py::arg("reduction") = "mean", py::arg("ignore_index") = -100);
 
     nn.def("mse_loss", [](const raxis::Tensor& input, const raxis::Tensor& target,
                           const std::string& reduction) {

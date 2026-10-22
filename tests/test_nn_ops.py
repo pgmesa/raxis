@@ -158,6 +158,45 @@ class TestNllLoss:
         backward_both(r_out, t_out)
         check_match(r.grad, t.grad, context="nll_loss ignore grad")
 
+    @pytest.mark.parametrize("reduction", REDUCTIONS)
+    @pytest.mark.parametrize("shape", [(8, 5), (5,)])
+    def test_weight(self, shape, reduction, device):
+        target = class_targets(shape[0], 5) if len(shape) == 2 else np.array(3, dtype=np.int64)
+        if len(shape) == 2:
+            target[[1, 4]] = -100
+        weight = np.array([0.5, 2.0, 1.0, 3.0, 0.25], dtype=np.float32)
+        r, t = make_grad_pair(randf_centered(*shape), device)
+        r_y, t_y = make_pair(target, device)
+        r_w, t_w = make_pair(weight, device)
+        r_out = raxis._C._nn.nll_loss(r, r_y, r_w, reduction=reduction)
+        t_out = F.nll_loss(t, t_y, t_w, reduction=reduction)
+        check_match(r_out, t_out, context="nll_loss weight")
+        backward_both(r_out, t_out)
+        check_match(r.grad, t.grad, context="nll_loss weight grad")
+
+    @pytest.mark.parametrize("weighted", [False, True])
+    @pytest.mark.parametrize("dtype", [np.float32, np.float64])
+    def test_mean_is_bitwise_torch(self, dtype, weighted):
+        # Large batch: the cascade summation (8 levels of partial sums in
+        # scalar_t) reproduces torch's rounding exactly
+        n, c = 100_003, 10
+        x = (np.random.default_rng(0).standard_normal((n, c)) * 3).astype(dtype)
+        target = class_targets(n, c)
+        weight = np.random.default_rng(1).random(c).astype(dtype) if weighted else None
+        r_out = raxis._C._nn.nll_loss(raxis.from_numpy(x), raxis.from_numpy(target),
+                                      raxis.from_numpy(weight) if weighted else None)
+        t_out = F.nll_loss(torch.from_numpy(x), torch.from_numpy(target),
+                           torch.from_numpy(weight) if weighted else None)
+        np.testing.assert_array_equal(np.array(r_out), t_out.numpy())
+
+    def test_bad_weight_raises(self):
+        x = raxis.zeros((2, 3))
+        y = raxis.tensor([0, 1])
+        with pytest.raises(RuntimeError, match="weight tensor should be defined"):
+            raxis._C._nn.nll_loss(x, y, raxis.ones((4,)))
+        with pytest.raises(RuntimeError):
+            raxis._C._nn.nll_loss(x, y, raxis.ones((3,), dtype=raxis.float64))
+
     def test_out_of_range_target_raises(self):
         x = raxis.zeros((2, 3))
         with pytest.raises(RuntimeError):

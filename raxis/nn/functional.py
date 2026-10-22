@@ -138,14 +138,14 @@ def mse_loss(input: Tensor, target: Tensor, reduction: str = "mean") -> Tensor:
     return _nn.mse_loss(input, target, reduction)
 
 
-def nll_loss(input: Tensor, target: Tensor, ignore_index: int = -100,
-             reduction: str = "mean") -> Tensor:
-    return _nn.nll_loss(input, target, reduction, ignore_index)
+def nll_loss(input: Tensor, target: Tensor, weight: Tensor | None = None, *,
+             ignore_index: int = -100, reduction: str = "mean") -> Tensor:
+    return _nn.nll_loss(input, target, weight, reduction, ignore_index)
 
 
-def cross_entropy(input: Tensor, target: Tensor, ignore_index: int = -100,
-                  reduction: str = "mean") -> Tensor:
-    return _nn.cross_entropy(input, target, reduction, ignore_index)
+def cross_entropy(input: Tensor, target: Tensor, weight: Tensor | None = None, *,
+                  ignore_index: int = -100, reduction: str = "mean") -> Tensor:
+    return _nn.cross_entropy(input, target, weight, reduction, ignore_index)
 
 
 def binary_cross_entropy(input: Tensor, target: Tensor, reduction: str = "mean") -> Tensor:

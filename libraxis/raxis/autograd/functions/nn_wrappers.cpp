@@ -40,11 +40,13 @@ Tensor log_softmax(const Tensor& self, int64_t dim) {
     return result;
 }
 
-Tensor nll_loss(const Tensor& self, const Tensor& target, Reduction reduction, int64_t ignore_index) {
-    auto [result, total_weight] = ops::nll_loss_forward(self, target, reduction, ignore_index);
+Tensor nll_loss(
+    const Tensor& self, const Tensor& target, const Tensor& weight, Reduction reduction, int64_t ignore_index
+) {
+    auto [result, total_weight] = ops::nll_loss_forward(self, target, weight, reduction, ignore_index);
     if (autograd::requires_autograd(self)) {
         auto grad_fn = std::make_shared<autograd::NllLossBackward0>(
-            self, target, reduction, ignore_index, total_weight);
+            self, target, weight, reduction, ignore_index, total_weight);
         grad_fn->set_num_inputs(1);
         autograd::set_next_edges(grad_fn, self);
         autograd::set_autograd_meta(result, grad_fn);
