@@ -92,7 +92,7 @@ del _name, _is_inplace_method, _is_inplace_operator
 
 def _is_int_sequence(args):
     # `int` is the raxis.int dtype here, as in torch
-    return len(args) > 1 and all(isinstance(a, _builtins.int) for a in args)
+    return len(args) > 1 and _builtins.all(isinstance(a, _builtins.int) for a in args)
 
 
 def _sizes_as_varargs(fn):
