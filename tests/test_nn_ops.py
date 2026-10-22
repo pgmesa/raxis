@@ -297,6 +297,123 @@ class TestDropout:
 
 
 # ===========================================================================
+# CONVOLUTION
+# ===========================================================================
+
+CONV2D_CASES = [
+    # x_shape, w_shape, kwargs
+    ((2, 3, 7, 9), (4, 3, 3, 3), {}),
+    ((2, 3, 7, 9), (4, 3, 3, 2), dict(stride=(2, 3), padding=(1, 2), dilation=(2, 1))),
+    ((2, 3, 8, 8), (5, 3, 3, 3), dict(stride=2, padding=1)),
+    ((3, 4, 8, 8), (6, 2, 3, 3), dict(groups=2, padding=1)),
+    ((2, 6, 6, 6), (6, 1, 3, 3), dict(groups=6, padding=1)),
+    ((2, 4, 5, 5), (8, 4, 1, 1), {}),
+    ((2, 4, 5, 5), (8, 4, 1, 1), dict(stride=2)),
+    ((2, 4, 5, 5), (8, 4, 1, 1), dict(padding=1)),
+    ((1, 2, 3, 3), (2, 2, 5, 5), dict(padding=1)),
+    ((2, 2, 9, 9), (3, 2, 3, 3), dict(dilation=3, stride=2, padding=2)),
+    # More images than threads: the batch is split in parallel chunks
+    ((17, 3, 6, 6), (4, 3, 3, 3), dict(padding=1)),
+]
+
+
+def conv_both(x_shape, w_shape, bias, dtype, conv_r, conv_t, **kwargs):
+    """Runs the convolution and its backward on both sides; returns the
+    (raxis, torch) pairs of output, input grad, weight grad and bias grad."""
+    x = randf_centered(*x_shape, seed=1).astype(dtype)
+    w = randf_centered(*w_shape, seed=2).astype(dtype)
+    r_x, t_x = make_grad_pair(x)
+    r_w, t_w = make_grad_pair(w)
+    r_b, t_b = make_grad_pair(randf_centered(w_shape[0], seed=3).astype(dtype)) if bias else (None, None)
+    r_out = conv_r(r_x, r_w, r_b, **kwargs)
+    t_out = conv_t(t_x, t_w, t_b, **kwargs)
+    grad = randf_centered(*t_out.shape, seed=4).astype(dtype)
+    t_out.backward(torch.from_numpy(grad.copy()))
+    r_out.backward(raxis.from_numpy(grad.copy()))
+    pairs = [(r_out, t_out), (r_x.grad, t_x.grad), (r_w.grad, t_w.grad)]
+    if bias:
+        pairs.append((r_b.grad, t_b.grad))
+    return pairs
+
+
+class TestConvolution:
+
+    @pytest.mark.parametrize("x_shape, w_shape, kwargs", CONV2D_CASES)
+    @pytest.mark.parametrize("bias", [True, False])
+    def test_conv2d(self, x_shape, w_shape, kwargs, bias):
+        pairs = conv_both(x_shape, w_shape, bias, np.float64, raxis.conv2d, F.conv2d, **kwargs)
+        for (r, t), name in zip(pairs, ["output", "input grad", "weight grad", "bias grad"]):
+            check_match(r, t, atol=1e-10, rtol=1e-10, context=f"conv2d {name}")
+
+    @pytest.mark.parametrize("x_shape, w_shape, kwargs", [
+        ((20, 3, 12, 12), (8, 3, 5, 5), dict(padding=2)),
+        ((4, 16, 10, 10), (16, 4, 3, 3), dict(groups=4, stride=2)),
+    ])
+    def test_conv2d_float32(self, x_shape, w_shape, kwargs):
+        pairs = conv_both(x_shape, w_shape, True, np.float32, raxis.conv2d, F.conv2d, **kwargs)
+        for (r, t), name in zip(pairs, ["output", "input grad", "weight grad", "bias grad"]):
+            check_match(r, t, atol=1e-4, context=f"conv2d float32 {name}")
+
+    @pytest.mark.parametrize("x_shape, w_shape, kwargs", [
+        ((2, 3, 10), (5, 3, 4), dict(padding=2, stride=2)),
+        ((2, 4, 9), (4, 2, 3), dict(groups=2, dilation=2)),
+        ((3, 2, 7), (3, 2, 1), {}),
+    ])
+    def test_conv1d(self, x_shape, w_shape, kwargs):
+        pairs = conv_both(x_shape, w_shape, True, np.float64, raxis.conv1d, F.conv1d, **kwargs)
+        for (r, t), name in zip(pairs, ["output", "input grad", "weight grad", "bias grad"]):
+            check_match(r, t, atol=1e-10, rtol=1e-10, context=f"conv1d {name}")
+
+    def test_unbatched(self):
+        for x_shape, w_shape, conv_r, conv_t in [
+            ((3, 9, 9), (2, 3, 3, 3), raxis.conv2d, F.conv2d),
+            ((3, 9), (2, 3, 3), raxis.conv1d, F.conv1d),
+        ]:
+            pairs = conv_both(x_shape, w_shape, True, np.float64, conv_r, conv_t)
+            for r, t in pairs:
+                check_match(r, t, atol=1e-10, rtol=1e-10, context=f"unbatched {x_shape}")
+
+    def test_empty_batch(self):
+        pairs = conv_both((0, 2, 5, 5), (3, 2, 3, 3), True, np.float64, raxis.conv2d, F.conv2d)
+        for r, t in pairs:
+            check_match(r, t, context="empty batch")
+
+    def test_only_weight_requires_grad(self):
+        # First layer of a network: the input does not require grad
+        x = randf_centered(2, 3, 6, 6)
+        r_w, t_w = make_grad_pair(randf_centered(4, 3, 3, 3, seed=2))
+        r_out = raxis.conv2d(raxis.from_numpy(x), r_w)
+        t_out = F.conv2d(torch.from_numpy(x), t_w)
+        backward_both(r_out, t_out)
+        check_match(r_w.grad, t_w.grad, atol=1e-4, context="weight grad")
+
+    def test_grad_fn(self):
+        x = raxis.randn(1, 2, 5, 5, requires_grad=True)
+        w = raxis.randn(3, 2, 3, 3, requires_grad=True)
+        out = raxis.conv2d(x, w)
+        assert out.grad_fn.name() == "ConvolutionBackward0"
+        assert out.grad_fn._saved_input._cdata == x._cdata
+        assert out.grad_fn._saved_weight._cdata == w._cdata
+
+    def test_errors(self):
+        x = raxis.randn(1, 3, 5, 5)
+        with pytest.raises(RuntimeError, match="to have 6 channels, but got 3 channels"):
+            raxis.conv2d(x, raxis.randn(4, 6, 3, 3))
+        with pytest.raises(RuntimeError, match="Kernel size can't be greater than actual input size"):
+            raxis.conv2d(x, raxis.randn(4, 3, 7, 7))
+        with pytest.raises(RuntimeError, match="expected weight to be divisible by 2"):
+            raxis.conv2d(raxis.randn(1, 4, 5, 5), raxis.randn(3, 2, 3, 3), groups=2)
+        with pytest.raises(RuntimeError, match="expected bias to be 1-dimensional with 4 elements"):
+            raxis.conv2d(x, raxis.randn(4, 3, 3, 3), raxis.randn(3))
+        with pytest.raises(RuntimeError, match="non-positive stride"):
+            raxis.conv2d(x, raxis.randn(4, 3, 3, 3), stride=0)
+        with pytest.raises(RuntimeError, match="should be the same"):
+            raxis.conv2d(x, raxis.randn(4, 3, 3, 3, dtype=raxis.float64))
+        with pytest.raises(RuntimeError, match=r"Expected 3D \(unbatched\) or 4D \(batched\) input to conv2d"):
+            raxis.conv2d(raxis.randn(5, 5), raxis.randn(4, 3, 3, 3))
+
+
+# ===========================================================================
 # TENSOR CREATION FROM NUMPY
 # ===========================================================================
 

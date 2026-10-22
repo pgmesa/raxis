@@ -4,6 +4,7 @@
 #include <raxis/autograd/saved_variable.h>
 #include <raxis/ops/loss.h>
 #include <raxis/tensor/tensor.h>
+#include <raxis/util/small_vector.h>
 
 
 namespace raxis::autograd {
@@ -57,6 +58,30 @@ private:
     Reduction reduction_;
     int64_t ignore_index_;
     double total_weight_;
+};
+
+
+
+// Saves input and weight unconditionally, as PyTorch: grad_weight needs the
+// input and grad_input needs the weight, which is alive anyway as a parameter.
+class RAXIS_API ConvolutionBackward0 : public Node {
+public:
+    ConvolutionBackward0(
+        const Tensor& input, const Tensor& weight, const Tensor& bias,
+        IntArrayRef stride, IntArrayRef padding, IntArrayRef dilation, int64_t groups);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    SavedVariable input_{this, "input"};
+    SavedVariable weight_{this, "weight"};
+    DimVector stride_;
+    DimVector padding_;
+    DimVector dilation_;
+    int64_t groups_;
+    bool input_requires_grad_;
+    bool weight_requires_grad_;
+    bool bias_requires_grad_;
 };
 
 } // namespace raxis::autograd

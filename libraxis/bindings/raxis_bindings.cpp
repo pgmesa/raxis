@@ -1256,6 +1256,24 @@ PYBIND11_MODULE(_C, c) {
     c.def("log_softmax", &raxis::log_softmax, py::arg("input"), py::arg("dim"));
     c.def("dropout", &raxis::dropout,
         py::arg("input"), py::arg("p") = 0.5, py::arg("train") = true);
+
+    // stride, padding and dilation take an int or one value per spatial dim
+    c.def("conv1d", [](const raxis::Tensor& input, const raxis::Tensor& weight,
+                       std::optional<raxis::Tensor> bias, raxis::VecOrInt stride,
+                       raxis::VecOrInt padding, raxis::VecOrInt dilation, int64_t groups) {
+        return raxis::conv1d(input, weight, bias.value_or(raxis::Tensor{}),
+                             stride, padding, dilation, groups);
+    }, py::arg("input"), py::arg("weight"), py::arg("bias") = py::none(),
+       py::arg("stride") = 1, py::arg("padding") = 0, py::arg("dilation") = 1,
+       py::arg("groups") = 1);
+    c.def("conv2d", [](const raxis::Tensor& input, const raxis::Tensor& weight,
+                       std::optional<raxis::Tensor> bias, raxis::VecOrInt stride,
+                       raxis::VecOrInt padding, raxis::VecOrInt dilation, int64_t groups) {
+        return raxis::conv2d(input, weight, bias.value_or(raxis::Tensor{}),
+                             stride, padding, dilation, groups);
+    }, py::arg("input"), py::arg("weight"), py::arg("bias") = py::none(),
+       py::arg("stride") = 1, py::arg("padding") = 0, py::arg("dilation") = 1,
+       py::arg("groups") = 1);
     c.def("logical_not",
         py::overload_cast<const raxis::Tensor&>(&raxis::logical_not),
         py::arg("input"));

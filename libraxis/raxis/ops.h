@@ -15,4 +15,5 @@
 #include <raxis/ops/tensor_compare.h>
 #include <raxis/ops/tensor_advanced_indexing.h>
 #include <raxis/ops/linear_algebra.h>
+#include <raxis/ops/convolution.h>
 #include <raxis/ops/distribution_ops.h>

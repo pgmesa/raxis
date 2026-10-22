@@ -1,6 +1,7 @@
 #include <raxis/autograd/functions/nn_backward.h>
 
 #include <raxis/ops/activation.h>
+#include <raxis/ops/convolution.h>
 #include <raxis/ops/softmax.h>
 #include <raxis/tensor/shape_utils.h>
 
@@ -56,6 +57,30 @@ std::string NllLossBackward0::name() const { return "NllLossBackward0"; }
 TensorList NllLossBackward0::apply(const TensorList& grads) {
     return {ops::nll_loss_backward(
         grads[0], self_.unpack(), target_.unpack(), reduction_, ignore_index_, total_weight_)};
+}
+
+
+ConvolutionBackward0::ConvolutionBackward0(
+    const Tensor& input, const Tensor& weight, const Tensor& bias,
+    IntArrayRef stride, IntArrayRef padding, IntArrayRef dilation, int64_t groups)
+    : stride_(stride.begin(), stride.end()),
+      padding_(padding.begin(), padding.end()),
+      dilation_(dilation.begin(), dilation.end()),
+      groups_(groups),
+      input_requires_grad_(input.requires_grad()),
+      weight_requires_grad_(weight.requires_grad()),
+      bias_requires_grad_(bias.requires_grad())
+{
+    input_.save(input);
+    weight_.save(weight);
+}
+std::string ConvolutionBackward0::name() const { return "ConvolutionBackward0"; }
+
+TensorList ConvolutionBackward0::apply(const TensorList& grads) {
+    auto [grad_input, grad_weight, grad_bias] = ops::convolution_backward(
+        grads[0], input_.unpack(), weight_.unpack(), stride_, padding_, dilation_, groups_,
+        {input_requires_grad_, weight_requires_grad_, bias_requires_grad_});
+    return {grad_input, grad_weight, grad_bias};
 }
 
 } // namespace raxis::autograd

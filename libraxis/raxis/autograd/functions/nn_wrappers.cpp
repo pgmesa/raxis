@@ -1,4 +1,5 @@
 #include <raxis/ops/activation.h>
+#include <raxis/ops/convolution.h>
 #include <raxis/ops/loss.h>
 #include <raxis/ops/softmax.h>
 
@@ -46,6 +47,47 @@ Tensor nll_loss(const Tensor& self, const Tensor& target, Reduction reduction, i
         autograd::set_autograd_meta(result, grad_fn);
     }
     return result;
+}
+
+Tensor convolution(
+    const Tensor& input, const Tensor& weight, const Tensor& bias,
+    IntArrayRef stride, IntArrayRef padding, IntArrayRef dilation, int64_t groups
+) {
+    Tensor result = ops::convolution(input, weight, bias, stride, padding, dilation, groups);
+    if (autograd::requires_autograd({input, weight, bias})) {
+        auto grad_fn = std::make_shared<autograd::ConvolutionBackward0>(
+            input, weight, bias, stride, padding, dilation, groups);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, {input, weight, bias});
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+// From: aten/src/ATen/native/Convolution.cpp (conv1d, conv2d): unbatched
+// inputs get a batch dim of 1 for the convolution
+Tensor conv1d(
+    const Tensor& input, const Tensor& weight, const Tensor& bias,
+    IntArrayRef stride, IntArrayRef padding, IntArrayRef dilation, int64_t groups
+) {
+    RAXIS_CHECK(input.ndim() == 2 || input.ndim() == 3,
+        "Expected 2D (unbatched) or 3D (batched) input to conv1d, but got input of size: ", input.shape());
+    const bool is_batched = input.ndim() == 3;
+    Tensor output = convolution(
+        is_batched ? input : input.unsqueeze(0), weight, bias, stride, padding, dilation, groups);
+    return is_batched ? output : output.squeeze(0);
+}
+
+Tensor conv2d(
+    const Tensor& input, const Tensor& weight, const Tensor& bias,
+    IntArrayRef stride, IntArrayRef padding, IntArrayRef dilation, int64_t groups
+) {
+    RAXIS_CHECK(input.ndim() == 3 || input.ndim() == 4,
+        "Expected 3D (unbatched) or 4D (batched) input to conv2d, but got input of size: ", input.shape());
+    const bool is_batched = input.ndim() == 4;
+    Tensor output = convolution(
+        is_batched ? input : input.unsqueeze(0), weight, bias, stride, padding, dilation, groups);
+    return is_batched ? output : output.squeeze(0);
 }
 
 } // namespace raxis
