@@ -257,6 +257,8 @@ PYBIND11_MODULE(_C, c) {
 
         .def("detach", &raxis::Tensor::detach)
         .def("_use_count", &raxis::Tensor::use_count)
+        // C++ operator<< output (libtorch's format), not the Python repr
+        .def("_cpp_str", &raxis::Tensor::to_string)
         // Address of the TensorImpl: identifies the tensor across Python
         // wrappers (each access to .grad or .variable creates a new one)
         .def_property_readonly("_cdata", [](const raxis::Tensor& self) {

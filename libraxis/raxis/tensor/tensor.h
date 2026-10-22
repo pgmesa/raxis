@@ -111,6 +111,7 @@ public:
     long use_count() const noexcept { return impl_.use_count(); }
     bool is_wrapped_number() const;
 
+    // Values, type and shape as printed by operator<< (tensor/formatting.h)
     std::string to_string() const;
 
     // ======================== Autograd =========================

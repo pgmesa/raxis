@@ -10,6 +10,7 @@
 #include <raxis/tensor/tensor_indexing.h>
 #include <raxis/tensor/tensor_shape.h>
 #include <raxis/tensor/factories.h>
+#include <raxis/tensor/formatting.h>
 
 #include <raxis/autograd/engine.h>
 #include <raxis/autograd/graph.h>

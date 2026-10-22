@@ -1238,6 +1238,49 @@ class TestRandom:
         np.testing.assert_allclose(randn_a, randn_b, rtol=1e-5, atol=1e-6)
 
 
+class TestCppPrint:
+    """C++ operator<< (Tensor::to_string), in libtorch's format
+    (aten/src/ATen/core/Formatting.cpp), quirks included."""
+
+    @pytest.mark.parametrize("make, expected", [
+        (lambda: raxis.tensor(3.5), "3.5\n[ CPUFloatType{} ]"),
+        (lambda: raxis.tensor([1, 2, 300]), "   1\n   2\n 300\n[ CPULongType{3} ]"),
+        (lambda: raxis.tensor([True, False]), " 1\n 0\n[ CPUBoolType{2} ]"),
+        (lambda: raxis.tensor([1e-8, 1.0, 1e8], dtype=raxis.float64),
+         " 1.0000e-08\n 1.0000e+00\n 1.0000e+08\n[ CPUDoubleType{3} ]"),
+        (lambda: raxis.tensor([float("nan"), float("inf"), 1.5]),
+         "    nan\n    inf\n 1.5000\n[ CPUFloatType{3} ]"),
+        (lambda: raxis.tensor([[0.1, 0.2, 0.3], [1.0, 2.0, 3.0]]),
+         " 0.1000  0.2000  0.3000\n 1.0000  2.0000  3.0000\n[ CPUFloatType{2,3} ]"),
+        # Common scale factor; rows after the first get one more space
+        (lambda: raxis.tensor([[1e-3, 2e-3], [3e-3, 4e-3]]),
+         "0.001 *\n 1.0000  2.0000\n  3.0000  4.0000\n[ CPUFloatType{2,2} ]"),
+        (lambda: raxis.zeros((0, 3)), "[ CPUFloatType{0,3} ]"),
+    ])
+    def test_formats(self, make, expected):
+        assert make()._cpp_str() == expected
+
+    def test_column_blocks(self):
+        # Values of width 2 plus a separator: 26 columns fit in 80 characters.
+        # No line break after the "Columns a to b" header, as in libtorch.
+        row = " ".join([" 1"] * 26)
+        expected = (f"Columns 1 to 26{row}\n{row}\n\n"
+                    "Columns 27 to 30 1  1  1  1\n 1  1  1  1\n[ CPUFloatType{2,30} ]")
+        assert raxis.ones((2, 30))._cpp_str() == expected
+
+    def test_nd_matrices(self):
+        x = raxis.from_numpy(np.arange(8, dtype=np.float32).reshape(2, 2, 2))
+        # One matrix per leading index, each with its own format, indent 1
+        assert x._cpp_str() == (
+            "(1,.,.) = \n 0  1\n  2  3\n\n"
+            "(2,.,.) = \n 4  5\n  6  7\n[ CPUFloatType{2,2,2} ]")
+
+    def test_nd_order_first_dim_fastest(self):
+        x = raxis.from_numpy(np.arange(4, dtype=np.float32).reshape(2, 2, 1, 1))
+        headers = [line for line in x._cpp_str().splitlines() if line.startswith("(")]
+        assert headers == ["(1,1,.,.) = ", "(2,1,.,.) = ", "(1,2,.,.) = ", "(2,2,.,.) = "]
+
+
 # ===========================================================================
 # LINEAR ALGEBRA
 # ===========================================================================

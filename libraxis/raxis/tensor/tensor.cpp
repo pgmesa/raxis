@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <algorithm>
 #include <iosfwd>
+#include <sstream>
 
 #include <raxis/ops.h>
 
@@ -17,6 +18,7 @@
 #include <raxis/tensor/detail/storage_impl.h>
 #include <raxis/tensor/tensor_options.h>
 #include <raxis/tensor/factories.h>
+#include <raxis/tensor/formatting.h>
 #include <raxis/tensor/tensor_indexing.h>
 #include <raxis/tensor/tensor_shape.h>
 
@@ -155,12 +157,8 @@ bool Tensor::is_wrapped_number() const {
 }
 
 std::string Tensor::to_string() const {
-    ensure_defined("to_string");
     std::ostringstream os;
-    os << "raxis(shape=" << impl_->shape()
-       << ", strides=" << impl_->strides()
-       << ", dtype=" << impl_->dtype().name()
-       << ", device='" << impl_->device().str() << "')";
+    print(os, *this);
     return os.str();
 }
 
