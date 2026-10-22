@@ -632,10 +632,13 @@ def test_conv_init():
     assert list(conv.state_dict()) == ["weight", "bias"]
     # kaiming_uniform_ with a = sqrt(5) is U(-1/sqrt(fan_in), 1/sqrt(fan_in))
     bound = 1 / math.sqrt(8 * 3 * 3)
-    for param in (conv.weight, conv.bias):
+    # The max of n draws of |U(-b, b)| exceeds q * b with probability 1 - q^n:
+    # 1152 weights reach 0.9 b almost surely, the 16 biases reach 0.5 b with
+    # probability 1 - 2^-16
+    for param, q in ((conv.weight, 0.9), (conv.bias, 0.5)):
         values = np.array(param.detach())
         assert np.abs(values).max() <= bound
-        assert np.abs(values).max() > 0.9 * bound
+        assert np.abs(values).max() > q * bound
 
 
 def test_conv_module_errors():
