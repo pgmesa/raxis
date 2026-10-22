@@ -3,7 +3,6 @@
 #include <array>
 #include <cstdint>
 
-
 namespace raxis {
 
 // Philox4x32-10 (Salmon et al., "Parallel random numbers: as easy as 1, 2, 3",
@@ -101,6 +100,18 @@ inline void philox4x32_10_lanes(uint64_t counter, uint64_t key, uint32_t* out) {
         out[2 * Lanes + l] = c2[l];
         out[3 * Lanes + l] = c3[l];
     }
+}
+
+// CPU kernels draw in batches of kPhiloxLanes consecutive blocks
+// (philox4x32_10_lanes order): kPhiloxBatchWords 32-bit words per batch.
+inline constexpr int kPhiloxLanes = 16;
+inline constexpr int kPhiloxBatchWords = 4 * kPhiloxLanes;
+
+// Blocks to reserve from the generator to draw `words_per_element` words for
+// each of n elements, in whole batches
+inline uint64_t philox_blocks(int64_t n, int words_per_element) {
+    const int64_t per_batch = kPhiloxBatchWords / words_per_element;
+    return static_cast<uint64_t>((n + per_batch - 1) / per_batch) * kPhiloxLanes;
 }
 
 } // namespace raxis

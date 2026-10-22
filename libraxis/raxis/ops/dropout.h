@@ -10,20 +10,9 @@
 
 namespace raxis {
 
-// Elements are drawn in batches of kDropoutBatch from kDropoutLanes Philox
-// blocks: element j of batch b is word j / kDropoutLanes of block
-// offset + b * kDropoutLanes + j % kDropoutLanes (philox4x32_10_lanes order).
-inline constexpr int kDropoutLanes = 16;
-inline constexpr int64_t kDropoutBatch = 4 * kDropoutLanes;
-
-// Philox blocks to reserve from the generator for n elements
-inline uint64_t dropout_philox_blocks(int64_t n) {
-    return static_cast<uint64_t>((n + kDropoutBatch - 1) / kDropoutBatch * kDropoutLanes);
-}
-
-// One pass over a contiguous input: draws a Philox number per element from
-// the blocks [offset, offset + dropout_philox_blocks(n)) of the stream keyed
-// by seed, keeps the element with probability p_keep and writes mask (bool)
+// One pass over a contiguous input: draws a Philox word per element from
+// the blocks [offset, offset + philox_blocks(n, 1)) of the stream keyed by
+// seed, keeps the element with probability p_keep and writes mask (bool)
 // and output = input * mask / p_keep.
 using fused_dropout_fn = void(*)(
     const Tensor& output, const Tensor& mask, const Tensor& input,

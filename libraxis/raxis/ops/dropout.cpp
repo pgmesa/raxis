@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include <raxis/core/generator.h>
+#include <raxis/core/philox.h>
 #include <raxis/util/exception.h>
 #include <raxis/tensor/factories.h>
 
@@ -29,7 +30,7 @@ std::tuple<Tensor, Tensor> native_dropout(const Tensor& input_, double p, bool t
     Tensor mask = empty(input.shape(), input.options().dtype(dtypes::Bool));
     if (input.numel() > 0) {
         const auto [seed, offset] =
-            get_default_generator().philox_engine_inputs(dropout_philox_blocks(input.numel()));
+            get_default_generator().philox_engine_inputs(philox_blocks(input.numel(), 1));
         fused_dropout_stub(DeviceType::CPU, output, mask, input, 1.0 - p, seed, offset);
     }
     return {output, mask};
