@@ -528,6 +528,83 @@ class TestAvgPool2d:
 
 
 # ===========================================================================
+# BATCH NORM
+# ===========================================================================
+
+# 2-D inputs with more rows than threads take the [N, C] rows path
+BATCH_NORM_SHAPES = [(8, 4, 5, 5), (6, 3, 7), (64, 5), (3, 5), (2, 3, 1, 1)]
+
+
+def batch_norm_both(shape, training, affine=True, running=True, seed=0):
+    rng = np.random.RandomState(seed)
+    channels = shape[1]
+    x = (rng.randn(*shape) * 3 + 1).astype(np.float32)
+    r_x, t_x = make_grad_pair(x)
+    r_w, t_w = make_grad_pair(rng.randn(channels).astype(np.float32)) if affine else (None, None)
+    r_b, t_b = make_grad_pair(rng.randn(channels).astype(np.float32)) if affine else (None, None)
+    if running:
+        r_rm, t_rm = make_pair(rng.randn(channels).astype(np.float32))
+        r_rv, t_rv = make_pair((rng.rand(channels) + 0.5).astype(np.float32))
+    else:
+        r_rm = t_rm = r_rv = t_rv = None
+    r_out = raxis.nn.functional.batch_norm(r_x, r_rm, r_rv, r_w, r_b, training, 0.1, 1e-5)
+    t_out = F.batch_norm(t_x, t_rm, t_rv, t_w, t_b, training, 0.1, 1e-5)
+    backward_both(r_out, t_out)
+    pairs = {"output": (r_out, t_out), "input grad": (r_x.grad, t_x.grad)}
+    if affine:
+        pairs["weight grad"] = (r_w.grad, t_w.grad)
+        pairs["bias grad"] = (r_b.grad, t_b.grad)
+    if running:
+        pairs["running_mean"] = (r_rm, t_rm)
+        pairs["running_var"] = (r_rv, t_rv)
+    return pairs
+
+
+class TestBatchNorm:
+
+    @pytest.mark.parametrize("shape", BATCH_NORM_SHAPES)
+    @pytest.mark.parametrize("training", [True, False])
+    def test_forward_backward(self, shape, training):
+        for name, (r, t) in batch_norm_both(shape, training).items():
+            check_match(r, t, atol=1e-5, context=f"batch_norm {shape} training={training} {name}")
+
+    @pytest.mark.parametrize("shape", [(8, 4, 5, 5), (64, 5)])
+    def test_no_affine_no_running_stats(self, shape):
+        for name, (r, t) in batch_norm_both(shape, True, affine=False, running=False).items():
+            check_match(r, t, atol=1e-5, context=f"batch_norm {name}")
+
+    def test_float64(self):
+        x = randf_centered(4, 3, 6, 6).astype(np.float64)
+        r_x, t_x = make_grad_pair(x)
+        r_out = raxis.nn.functional.batch_norm(r_x, None, None, training=True)
+        t_out = F.batch_norm(t_x, None, None, training=True)
+        check_match(r_out, t_out, atol=1e-12)
+        grad = x + 0.5
+        t_out.backward(torch.from_numpy(grad))
+        r_out.backward(raxis.from_numpy(grad))
+        check_match(r_x.grad, t_x.grad, atol=1e-12)
+
+    def test_grad_fn(self):
+        x = raxis.randn(4, 3, requires_grad=True)
+        out = raxis.nn.functional.batch_norm(x, raxis.zeros(3), raxis.ones(3), training=True)
+        assert out.grad_fn.name() == "NativeBatchNormBackward0"
+        assert tuple(out.grad_fn._saved_result1.shape) == (3,)  # save_mean
+        assert tuple(out.grad_fn._saved_result2.shape) == (3,)  # save_invstd
+
+    def test_errors(self):
+        x = raxis.randn(4, 3, 5)
+        bn = raxis.nn.functional.batch_norm
+        with pytest.raises(RuntimeError, match="running_mean should contain 3 elements not 4"):
+            bn(x, raxis.zeros(4), raxis.ones(4))
+        with pytest.raises(RuntimeError, match="must either both be None or neither be None"):
+            bn(x, raxis.zeros(3), None, training=True)
+        with pytest.raises(ValueError, match="Expected more than 1 value per channel when training"):
+            bn(raxis.randn(1, 3), None, None, training=True)
+        with pytest.raises(ValueError, match="eps must be positive during training"):
+            bn(x, None, None, training=True, eps=0.0)
+
+
+# ===========================================================================
 # TENSOR CREATION FROM NUMPY
 # ===========================================================================
 

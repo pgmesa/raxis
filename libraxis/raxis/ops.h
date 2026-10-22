@@ -17,4 +17,5 @@
 #include <raxis/ops/linear_algebra.h>
 #include <raxis/ops/convolution.h>
 #include <raxis/ops/pooling.h>
+#include <raxis/ops/normalization.h>
 #include <raxis/ops/distribution_ops.h>

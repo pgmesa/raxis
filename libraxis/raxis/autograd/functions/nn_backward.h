@@ -3,6 +3,7 @@
 #include <raxis/autograd/graph.h>
 #include <raxis/autograd/saved_variable.h>
 #include <raxis/ops/loss.h>
+#include <raxis/ops/normalization.h>
 #include <raxis/ops/pooling.h>
 #include <raxis/tensor/tensor.h>
 #include <raxis/util/small_vector.h>
@@ -116,6 +117,30 @@ private:
     bool ceil_mode_;
     bool count_include_pad_;
     std::optional<int64_t> divisor_override_;
+};
+
+
+class RAXIS_API NativeBatchNormBackward0 : public Node {
+public:
+    NativeBatchNormBackward0(
+        const Tensor& input, const Tensor& weight, const Tensor& bias,
+        const Tensor& running_mean, const Tensor& running_var,
+        const Tensor& save_mean, const Tensor& save_invstd, bool training, double eps);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    SavedVariable input_{this, "input"};
+    SavedVariable weight_{this, "weight"};
+    SavedVariable running_mean_{this, "running_mean"};
+    SavedVariable running_var_{this, "running_var"};
+    SavedVariable result1_{this, "result1"};  // save_mean
+    SavedVariable result2_{this, "result2"};  // save_invstd
+    bool training_;
+    double eps_;
+    bool input_requires_grad_;
+    bool weight_requires_grad_;
+    bool bias_requires_grad_;
 };
 
 } // namespace raxis::autograd

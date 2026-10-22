@@ -1299,6 +1299,17 @@ PYBIND11_MODULE(_C, c) {
     }, py::arg("input"), py::arg("kernel_size"), py::arg("stride") = py::none(),
        py::arg("padding") = 0, py::arg("ceil_mode") = false, py::arg("count_include_pad") = true,
        py::arg("divisor_override") = py::none());
+    // Same argument order as torch.batch_norm (without cudnn_enabled)
+    c.def("batch_norm", [](const raxis::Tensor& input, std::optional<raxis::Tensor> weight,
+                           std::optional<raxis::Tensor> bias, std::optional<raxis::Tensor> running_mean,
+                           std::optional<raxis::Tensor> running_var, bool training,
+                           double momentum, double eps) {
+        return raxis::batch_norm(
+            input, weight.value_or(raxis::Tensor{}), bias.value_or(raxis::Tensor{}),
+            running_mean.value_or(raxis::Tensor{}), running_var.value_or(raxis::Tensor{}),
+            training, momentum, eps);
+    }, py::arg("input"), py::arg("weight"), py::arg("bias"), py::arg("running_mean"),
+       py::arg("running_var"), py::arg("training"), py::arg("momentum"), py::arg("eps"));
     c.def("logical_not",
         py::overload_cast<const raxis::Tensor&>(&raxis::logical_not),
         py::arg("input"));

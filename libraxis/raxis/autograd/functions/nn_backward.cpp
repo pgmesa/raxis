@@ -2,6 +2,7 @@
 
 #include <raxis/ops/activation.h>
 #include <raxis/ops/convolution.h>
+#include <raxis/ops/normalization.h>
 #include <raxis/ops/pooling.h>
 #include <raxis/ops/softmax.h>
 #include <raxis/tensor/shape_utils.h>
@@ -114,6 +115,34 @@ TensorList AvgPool2DBackward0::apply(const TensorList& grads) {
     return {ops::avg_pool2d_backward(
         grads[0], self_shape_, kernel_size_, stride_, padding_,
         ceil_mode_, count_include_pad_, divisor_override_)};
+}
+
+
+NativeBatchNormBackward0::NativeBatchNormBackward0(
+    const Tensor& input, const Tensor& weight, const Tensor& bias,
+    const Tensor& running_mean, const Tensor& running_var,
+    const Tensor& save_mean, const Tensor& save_invstd, bool training, double eps)
+    : training_(training),
+      eps_(eps),
+      input_requires_grad_(input.requires_grad()),
+      weight_requires_grad_(weight.requires_grad()),
+      bias_requires_grad_(bias.requires_grad())
+{
+    input_.save(input);
+    weight_.save(weight);
+    running_mean_.save(running_mean);
+    running_var_.save(running_var);
+    result1_.save(save_mean);
+    result2_.save(save_invstd);
+}
+std::string NativeBatchNormBackward0::name() const { return "NativeBatchNormBackward0"; }
+
+TensorList NativeBatchNormBackward0::apply(const TensorList& grads) {
+    auto [grad_input, grad_weight, grad_bias] = ops::native_batch_norm_backward(
+        grads[0], input_.unpack(), weight_.unpack(), running_mean_.unpack(), running_var_.unpack(),
+        result1_.unpack(), result2_.unpack(), training_, eps_,
+        {input_requires_grad_, weight_requires_grad_, bias_requires_grad_});
+    return {grad_input, grad_weight, grad_bias};
 }
 
 } // namespace raxis::autograd

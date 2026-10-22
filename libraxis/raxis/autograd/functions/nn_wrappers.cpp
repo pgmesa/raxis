@@ -1,6 +1,7 @@
 #include <raxis/ops/activation.h>
 #include <raxis/ops/convolution.h>
 #include <raxis/ops/loss.h>
+#include <raxis/ops/normalization.h>
 #include <raxis/ops/pooling.h>
 #include <raxis/ops/softmax.h>
 
@@ -125,6 +126,23 @@ Tensor avg_pool2d(
             input, kernel_size, stride, padding, ceil_mode, count_include_pad, divisor_override);
         grad_fn->set_num_inputs(1);
         autograd::set_next_edges(grad_fn, input);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor batch_norm(
+    const Tensor& input, const Tensor& weight, const Tensor& bias,
+    const Tensor& running_mean, const Tensor& running_var,
+    bool training, double momentum, double eps
+) {
+    auto [result, save_mean, save_invstd] = ops::native_batch_norm(
+        input, weight, bias, running_mean, running_var, training, momentum, eps);
+    if (autograd::requires_autograd({input, weight, bias})) {
+        auto grad_fn = std::make_shared<autograd::NativeBatchNormBackward0>(
+            input, weight, bias, running_mean, running_var, save_mean, save_invstd, training, eps);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, {input, weight, bias});
         autograd::set_autograd_meta(result, grad_fn);
     }
     return result;
