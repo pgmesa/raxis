@@ -682,6 +682,33 @@ def run_forward_benchmarks(runner):
         lambda a, b: torch.matmul(a, b),
         lambda a, b: np.matmul(a, b)),
     ])
+
+    # -- NN layers (NCHW, MNIST and CIFAR sized) --
+    S_CONV = [
+        ((64, 1, 28, 28), (32, 1, 3, 3)),
+        ((64, 32, 26, 26), (64, 32, 3, 3)),
+        ((64, 64, 32, 32), (64, 64, 3, 3)),
+        ((32, 256, 14, 14), (64, 256, 1, 1)),
+    ]
+    S_NCHW = [(64, 32, 26, 26), (32, 64, 56, 56)]
+
+    _run_section_pair(runner, "Convolution", [
+        ("conv2d", FLOAT, S_CONV,
+        lambda x, w: raxis.conv2d(x, w),
+        lambda x, w: torch.conv2d(x, w)),
+    ])
+
+    _run_section(runner, "Pooling and normalization", [
+        ("max_pool2d", FLOAT, S_NCHW,
+        lambda t: raxis.max_pool2d(t, 2),
+        lambda t: torch.max_pool2d(t, 2)),
+        ("avg_pool2d", FLOAT, S_NCHW,
+        lambda t: raxis.avg_pool2d(t, 2),
+        lambda t: torch.nn.functional.avg_pool2d(t, 2)),
+        ("batch_norm", FLOAT, S_NCHW + [(256, 512)],
+        lambda t: raxis.batch_norm(t, None, None, None, None, True, 0.1, 1e-5),
+        lambda t: torch.batch_norm(t, None, None, None, None, True, 0.1, 1e-5, False)),
+    ])
                 
             
 def run_backward_benchmarks(runner):
