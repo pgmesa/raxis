@@ -57,6 +57,18 @@ def test_var_std_degenerate(name):
     check_match(getattr(r, name)(0), getattr(t, name)(0))
 
 
+@pytest.mark.parametrize("name", ["sum", "mean", "prod"])
+def test_reduce_empty_dim(name):
+    # Reducing a size-0 dim gives a non-empty result: the identity (0 for
+    # sum, 1 for prod) or NaN (mean)
+    cases = [((0, 3), 0), ((2, 0, 3), 1)]
+    if name != "prod":  # torch.prod takes a single dim
+        cases.append(((2, 0, 3), (0, 1)))
+    for shape, dim in cases:
+        r, t = make_pair(np.zeros(shape, dtype=np.float32))
+        check_match(getattr(r, name)(dim), getattr(t, name)(dim))
+
+
 def test_var_requires_float():
     with pytest.raises(RuntimeError):
         raxis.tensor([1, 2, 3]).var()

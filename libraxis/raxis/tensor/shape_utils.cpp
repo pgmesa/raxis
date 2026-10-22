@@ -172,7 +172,9 @@ DimVector broadcast_shapes(IntArrayRef shape1, IntArrayRef shape2) {
         RAXIS_CHECK(!broadcastable, "Shapes ", shape1, " and ", shape2, 
             " are not broadcastable at dimension ", i);
         
-        result_shape[target_ndim - ridx] = std::max(size1, size2);
+        // Not max(size1, size2): a size 1 broadcasts to 0 too
+        // From: aten/src/ATen/ExpandUtils.cpp (infer_size_impl)
+        result_shape[target_ndim - ridx] = size1 == 1 ? size2 : size1;
     }
 
     return result_shape;

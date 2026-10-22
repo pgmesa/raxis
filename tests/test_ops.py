@@ -33,6 +33,8 @@ BROADCAST_CASES = [
     ((256, 128), (1, 128),    "large row broadcast"),
     ((256, 128), (256, 1),    "large col broadcast"),
     ((64, 64, 64), (64,),     "large trailing dim"),
+    ((0, 20), (1, 20),        "empty row broadcast"),
+    ((10, 0), (10, 1),        "empty col broadcast"),
 ]
 
 REDUCE_ALL_SHAPES = [(10,), (10, 20), (5, 10, 20),
