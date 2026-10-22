@@ -1,4 +1,8 @@
 
+import os
+import subprocess
+import sys
+
 import pytest
 import raxis
 import torch
@@ -294,6 +298,65 @@ class TestDropout:
     def test_invalid_p_raises(self):
         with pytest.raises(RuntimeError):
             raxis.dropout(raxis.rand((2, 2)), 1.5, train=True)
+
+    @pytest.mark.parametrize("p", [0.1, 0.5, 0.9])
+    @pytest.mark.parametrize("dtype", [raxis.float32, raxis.float64])
+    def test_keep_rate_and_scale(self, p, dtype):
+        raxis.manual_seed(1)
+        x = raxis.ones((300, 1001), dtype=dtype)  # not a multiple of the 64-element batches
+        values = np.array(raxis.dropout(x, p, train=True))
+        kept = values != 0
+        # 300k Bernoulli draws: the standard deviation of the rate is < 0.001
+        assert abs(kept.mean() - (1.0 - p)) < 0.005
+        np.testing.assert_allclose(values[kept], 1.0 / (1.0 - p), rtol=1e-6)
+
+    def test_grad_fn_and_backward(self):
+        x = raxis.randn((64, 50), requires_grad=True)
+        out = raxis.dropout(x, 0.4, train=True)
+        assert out.grad_fn.name() == "NativeDropoutBackward0"
+        mask = np.array(out.grad_fn._saved_result1)
+        assert mask.dtype == np.bool_
+        grad = randf_centered(64, 50)
+        out.backward(raxis.from_numpy(grad))
+        np.testing.assert_allclose(np.array(x.grad), grad * mask / 0.6, rtol=1e-6)
+        np.testing.assert_allclose(np.array(out.detach()), np.array(x.detach()) * mask / 0.6, rtol=1e-6)
+
+    def test_seeded_and_independent_draws(self):
+        x = raxis.ones((100, 100))
+        raxis.manual_seed(7)
+        first = np.array(raxis.dropout(x, 0.5, train=True))
+        second = np.array(raxis.dropout(x, 0.5, train=True))
+        raxis.manual_seed(7)
+        np.testing.assert_array_equal(np.array(raxis.dropout(x, 0.5, train=True)), first)
+        # Each call reserves new Philox counters, so masks do not repeat
+        assert (first != second).mean() > 0.4
+
+    def test_mask_independent_of_thread_count(self):
+        x = raxis.ones((513, 999))
+        masks = []
+        threads = raxis.get_num_threads()
+        try:
+            for n in (1, threads):
+                raxis.set_num_threads(n)
+                raxis.manual_seed(3)
+                masks.append(np.array(raxis.dropout(x, 0.3, train=True)))
+        finally:
+            raxis.set_num_threads(threads)
+        np.testing.assert_array_equal(masks[0], masks[1])
+
+    def test_mask_independent_of_cpu_capability(self):
+        # The SIMD and scalar Philox paths must draw the same stream
+        code = ("import raxis, numpy as np; raxis.manual_seed(5); "
+                "print(np.array(raxis.dropout(raxis.ones((97, 131)), 0.3, True)).sum())")
+        sums = set()
+        for capability in ("default", None):  # None: the best one the CPU has
+            env = {k: v for k, v in os.environ.items() if k != "RAXIS_CPU_CAPABILITY"}
+            if capability is not None:
+                env["RAXIS_CPU_CAPABILITY"] = capability
+            result = subprocess.run([sys.executable, "-c", code], env=env,
+                                    capture_output=True, text=True, check=True)
+            sums.add(result.stdout.strip())
+        assert len(sums) == 1
 
 
 class TestPhilox:

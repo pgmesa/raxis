@@ -2,6 +2,7 @@
 
 #include <raxis/autograd/graph.h>
 #include <raxis/autograd/saved_variable.h>
+#include <raxis/ops/dropout.h>
 #include <raxis/ops/loss.h>
 #include <raxis/ops/normalization.h>
 #include <raxis/ops/pooling.h>
@@ -141,6 +142,20 @@ private:
     bool input_requires_grad_;
     bool weight_requires_grad_;
     bool bias_requires_grad_;
+};
+
+
+// The mask is a bool tensor (1 byte per element); the scale 1 / (1 - p) is
+// applied again in the backward instead of being stored in the mask
+class RAXIS_API NativeDropoutBackward0 : public Node {
+public:
+    NativeDropoutBackward0(const Tensor& mask, double scale);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    SavedVariable result1_{this, "result1"};
+    double scale_;
 };
 
 } // namespace raxis::autograd

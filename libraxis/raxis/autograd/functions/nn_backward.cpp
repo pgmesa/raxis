@@ -2,6 +2,7 @@
 
 #include <raxis/ops/activation.h>
 #include <raxis/ops/convolution.h>
+#include <raxis/ops/dropout.h>
 #include <raxis/ops/normalization.h>
 #include <raxis/ops/pooling.h>
 #include <raxis/ops/softmax.h>
@@ -143,6 +144,18 @@ TensorList NativeBatchNormBackward0::apply(const TensorList& grads) {
         result1_.unpack(), result2_.unpack(), training_, eps_,
         {input_requires_grad_, weight_requires_grad_, bias_requires_grad_});
     return {grad_input, grad_weight, grad_bias};
+}
+
+
+NativeDropoutBackward0::NativeDropoutBackward0(const Tensor& mask, double scale)
+    : scale_(scale)
+{
+    result1_.save(mask);
+}
+std::string NativeDropoutBackward0::name() const { return "NativeDropoutBackward0"; }
+
+TensorList NativeDropoutBackward0::apply(const TensorList& grads) {
+    return {ops::native_dropout_backward(grads[0], result1_.unpack(), scale_)};
 }
 
 } // namespace raxis::autograd

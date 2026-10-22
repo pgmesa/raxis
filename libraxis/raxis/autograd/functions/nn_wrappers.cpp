@@ -1,5 +1,6 @@
 #include <raxis/ops/activation.h>
 #include <raxis/ops/convolution.h>
+#include <raxis/ops/dropout.h>
 #include <raxis/ops/loss.h>
 #include <raxis/ops/normalization.h>
 #include <raxis/ops/pooling.h>
@@ -143,6 +144,24 @@ Tensor batch_norm(
             input, weight, bias, running_mean, running_var, save_mean, save_invstd, training, eps);
         grad_fn->set_num_inputs(1);
         autograd::set_next_edges(grad_fn, {input, weight, bias});
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+// From: aten/src/ATen/native/Dropout.cpp (dropout, _dropout_impl)
+Tensor dropout(const Tensor& input, double p, bool train) {
+    RAXIS_CHECK(p >= 0.0 && p <= 1.0,
+        "dropout probability has to be between 0 and 1, but got ", p);
+    if (!train || p == 0.0 || input.numel() == 0) {
+        return input;
+    }
+    auto [result, mask] = ops::native_dropout(input, p, true);
+    if (autograd::requires_autograd(input)) {
+        const double scale = p == 1.0 ? 0.0 : 1.0 / (1.0 - p);
+        auto grad_fn = std::make_shared<autograd::NativeDropoutBackward0>(mask, scale);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, input);
         autograd::set_autograd_meta(result, grad_fn);
     }
     return result;
