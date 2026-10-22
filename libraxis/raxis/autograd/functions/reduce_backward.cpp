@@ -7,6 +7,7 @@
 #include <raxis/autograd/variable.h>
 #include <raxis/tensor/factories.h>
 #include <raxis/ops/tensor_advanced_indexing.h>
+#include <raxis/ops/reduce_ops.h>
 #include <raxis/ops/tensor_compare.h>
 
 
@@ -360,6 +361,22 @@ TensorList NanmeanBackward1::apply(const TensorList& grads) {
 
     Tensor not_nan = self.isnan().logical_not().to(grad.dtype());
     return {grad.broadcast_to(self_shape_) * not_nan / count.broadcast_to(self_shape_)};
+}
+
+CumsumBackward0::CumsumBackward0(const Tensor& self, int64_t dim)
+    : self_dtype_(self.dtype()), dim_(dim) {}
+
+std::string CumsumBackward0::name() const { return "CumsumBackward0"; }
+
+// From: torch/csrc/autograd/FunctionsManual.cpp (cumsum_backward)
+// out[i] = sum of x[j] for j <= i, so dL/dx[j] = sum of grad[i] for i >= j:
+// a cumulative sum from the end. PyTorch writes it flip + cumsum + flip.
+TensorList CumsumBackward0::apply(const TensorList& grads) {
+    Tensor grad = grads[0].to(self_dtype_);
+    if (grad.numel() <= 1 || grad.ndim() == 0 || grad.shape()[wrap_dim(dim_, grad.ndim())] == 1) {
+        return {grad};
+    }
+    return {ops::reversed_cumsum(grad, dim_)};
 }
 
 } // namespace raxis::autograd

@@ -9,6 +9,11 @@
 
 #include <raxis/core/dtype.h>
 #include <raxis/tensor/tensor_iterator.h>
+#include <raxis/util/parallel.h>
+
+#include <algorithm>
+#include <cstdint>
+#include <type_traits>
 
 namespace raxis {
 
@@ -89,6 +94,68 @@ void std_var_kernel(TensorIterator& iter, double correction, bool take_sqrt) {
     });
 }
 
+// From: aten/src/ATen/native/cpu/ReduceOpsKernel.cpp (and_kernel_impl,
+// or_kernel_impl). The input was cast to bool, whose lanes hold 0 or 1, so
+// the bitwise & and | are the logical ones and run on whole words.
+void and_kernel(TensorIterator& iter) {
+    cpu_reduce_kernel_vec<bool>(
+        iter,
+        [](bool a, bool b) -> bool { return a && b; },
+        [](Vectorized<bool> a, Vectorized<bool> b) { return a & b; },
+        /*ident=*/true);
+}
+
+void or_kernel(TensorIterator& iter) {
+    cpu_reduce_kernel_vec<bool>(
+        iter,
+        [](bool a, bool b) -> bool { return a || b; },
+        [](Vectorized<bool> a, Vectorized<bool> b) { return a | b; },
+        /*ident=*/false);
+}
+
+// From: aten/src/ATen/native/cpu/ReduceOpsKernel.cpp (cpu_cum_base_kernel,
+// cumsum_cpu_kernel). Elementwise over the positions of self with dim
+// squashed to 1, each one scanning its whole slice along dim. The running
+// sum is kept in double for float (int64 for integers), as PyTorch's
+// acc_type on CPU, so a long float cumsum does not drift. reverse scans
+// from the end with the same additions as flip + cumsum + flip.
+void cumsum_kernel(const Tensor& result, const Tensor& self, int64_t dim, bool reverse) {
+    const int64_t size = self.shape()[dim];
+    const int64_t self_stride = self.strides()[dim];
+    const int64_t result_stride = result.strides()[dim];
+
+    auto iter = TensorIteratorConfig()
+        .check_all_same_dtype(false)
+        .declare_static_shape(self.shape(), {dim})
+        .add_output(result)
+        .add_input(self)
+        .build();
+
+    self.dtype().dispatch_all_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+        using acc_t = std::conditional_t<std::is_floating_point_v<scalar_t>, double, int64_t>;
+        // Walk from the last element with negative strides when reversed
+        const int64_t first = reverse ? size - 1 : 0;
+        const int64_t step_self = reverse ? -self_stride : self_stride;
+        const int64_t step_result = reverse ? -result_stride : result_stride;
+        auto loop = [&](char** data, const int64_t* strides, int64_t n) {
+            char* result_bytes = data[0];
+            const char* self_bytes = data[1];
+            for (int64_t i = 0; i < n; i++) {
+                scalar_t* out = reinterpret_cast<scalar_t*>(result_bytes) + first * result_stride;
+                const scalar_t* in = reinterpret_cast<const scalar_t*>(self_bytes) + first * self_stride;
+                acc_t acc = 0;
+                for (int64_t j = 0; j < size; j++) {
+                    acc += in[j * step_self];
+                    out[j * step_result] = static_cast<scalar_t>(acc);
+                }
+                result_bytes += strides[0];
+                self_bytes += strides[1];
+            }
+        };
+        iter.for_each(loop, /*grain_size=*/std::max<int64_t>(1, detail::GRAIN_SIZE / size));
+    });
+}
+
 void argmax_kernel(TensorIterator& iter) {
     arg_reduce_kernel<ArgMaxOps>(iter, /*find_max=*/true);
 }
@@ -104,7 +171,10 @@ REGISTER_DISPATCH(prod_stub, &prod_kernel);
 REGISTER_DISPATCH(max_values_stub, &max_values_kernel);
 REGISTER_DISPATCH(min_values_stub, &min_values_kernel);
 REGISTER_DISPATCH(std_var_stub, &std_var_kernel);
+REGISTER_DISPATCH(cumsum_stub, &cumsum_kernel);
 REGISTER_DISPATCH(argmax_stub, &argmax_kernel);
 REGISTER_DISPATCH(argmin_stub, &argmin_kernel);
+REGISTER_DISPATCH(and_stub, &and_kernel);
+REGISTER_DISPATCH(or_stub, &or_kernel);
 
 } // namespace raxis

@@ -206,6 +206,25 @@ Tensor argmin(const Tensor& self, std::optional<int64_t> dim, bool keepdim) {
     return ops::argmin(self, dim, keepdim);
 }
 
+Tensor cumsum(const Tensor& self, int64_t dim, std::optional<Dtype> dtype) {
+    Tensor result = ops::cumsum(self, dim, dtype);
+    if (autograd::requires_autograd(self)) {
+        auto grad_fn = std::make_shared<autograd::CumsumBackward0>(self, dim);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor all(const Tensor& self, IntArrayRef dim, bool keepdim) {
+    return ops::all(self, dim, keepdim);
+}
+
+Tensor any(const Tensor& self, IntArrayRef dim, bool keepdim) {
+    return ops::any(self, dim, keepdim);
+}
+
 Tensor amax(const Tensor& self, IntArrayRef dim, bool keepdim) {
     Tensor result = ops::amax(self, dim, keepdim);
     if (autograd::requires_autograd(self)) {

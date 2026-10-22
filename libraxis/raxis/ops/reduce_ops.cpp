@@ -378,6 +378,53 @@ Tensor std(const Tensor& self, IntArrayRef dim, std::optional<double> correction
     return std_var("std", self, dim, correction, keepdim, /*take_sqrt=*/true);
 }
 
+// From: aten/src/ATen/native/ReduceOps.cpp (allany_impl, get_allany_iter)
+// On CPU the input is cast to bool first (make_reduction casts it to the
+// output dtype), so one bool kernel serves every dtype. A uint8 input gives
+// a uint8 result: the bool result is converted at the end.
+template <bool identity, typename Stub>
+static Tensor all_any_impl(const char* name, const Tensor& self, IntArrayRef dim, bool keepdim, Stub& stub) {
+    Tensor result;
+    auto iter = make_reduction(name, self, result, dim, keepdim, dtypes::Bool);
+    if (self.numel() == 0) {
+        result.fill_(identity);
+    } else {
+        stub(iter.device_type(), iter);
+    }
+    return self.dtype() == dtypes::Uint8 ? result.to(dtypes::Uint8) : result;
+}
+
+// From: aten/src/ATen/native/ReduceOps.cpp (cumsum, cumsum_out)
+static Tensor cumsum_impl(const Tensor& self, int64_t dim, std::optional<Dtype> dtype, bool reverse) {
+    const int64_t wrapped = wrap_dim(dim, std::max<int64_t>(self.ndim(), 1));
+    const Dtype out_dtype = dtype.value_or(
+        self.dtype().is_integral(/*include_bool=*/true) ? dtypes::Int64 : self.dtype());
+    const Tensor input = self.dtype() == out_dtype ? self : self.to(out_dtype);
+    Tensor result = empty(self.shape(), self.options().dtype(out_dtype));
+    if (self.ndim() == 0) {
+        result.copy_(input);
+    } else if (self.numel() > 0) {
+        cumsum_stub(self.device().type(), result, input, wrapped, reverse);
+    }
+    return result;
+}
+
+Tensor cumsum(const Tensor& self, int64_t dim, std::optional<Dtype> dtype) {
+    return cumsum_impl(self, dim, dtype, /*reverse=*/false);
+}
+
+Tensor reversed_cumsum(const Tensor& self, int64_t dim) {
+    return cumsum_impl(self, dim, std::nullopt, /*reverse=*/true);
+}
+
+Tensor all(const Tensor& self, IntArrayRef dim, bool keepdim) {
+    return all_any_impl<true>("all", self, dim, keepdim, and_stub);
+}
+
+Tensor any(const Tensor& self, IntArrayRef dim, bool keepdim) {
+    return all_any_impl<false>("any", self, dim, keepdim, or_stub);
+}
+
 Tensor argmax(const Tensor& self, std::optional<int64_t> dim, bool keepdim) {
     return argmax_argmin_impl("argmax()", self, dim, keepdim, argmax_stub);
 }
@@ -398,6 +445,9 @@ DEFINE_DISPATCH(max_values_stub);
 DEFINE_DISPATCH(min_values_stub);
 DEFINE_DISPATCH(argmax_stub);
 DEFINE_DISPATCH(argmin_stub);
+DEFINE_DISPATCH(and_stub);
+DEFINE_DISPATCH(or_stub);
 DEFINE_DISPATCH(std_var_stub);
+DEFINE_DISPATCH(cumsum_stub);
 
 } // namespace raxis

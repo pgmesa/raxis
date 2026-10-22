@@ -464,8 +464,8 @@ static inline Vectorized<T> bitwise_binary_op(
     );
 
     alignas(VECTOR_WIDTH) intmax_t buffer[num_chunks];
-    const auto* a_bytes = reinterpret_cast<const char*>(&a[0]);
-    const auto* b_bytes = reinterpret_cast<const char*>(&b[0]);
+    const auto* a_bytes = reinterpret_cast<const char*>(a.as_bytes());
+    const auto* b_bytes = reinterpret_cast<const char*>(b.as_bytes());
 
     for (uint32_t i = 0; i < num_chunks; i++) {
         intmax_t a_chunk, b_chunk;

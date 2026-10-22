@@ -215,6 +215,11 @@ public:
     Tensor amax(IntArrayRef dim = {}, bool keepdim = false) const;
     Tensor amin(IntArrayRef dim = {}, bool keepdim = false) const;
 
+    Tensor cumsum(int64_t dim, std::optional<Dtype> dtype = std::nullopt) const;
+
+    Tensor all(IntArrayRef dim = {}, bool keepdim = false) const;
+    Tensor any(IntArrayRef dim = {}, bool keepdim = false) const;
+
     // ====================== Linear Algebra ======================
     Tensor dot(const Tensor& other) const;
     Tensor mv(const Tensor& vec) const;

@@ -472,6 +472,18 @@ Tensor Tensor::amin(IntArrayRef dim, bool keepdim) const {
     return ::raxis::amin(*this, dim, keepdim);
 }
 
+Tensor Tensor::cumsum(int64_t dim, std::optional<Dtype> dtype) const {
+    return ::raxis::cumsum(*this, dim, dtype);
+}
+
+Tensor Tensor::all(IntArrayRef dim, bool keepdim) const {
+    return ::raxis::all(*this, dim, keepdim);
+}
+
+Tensor Tensor::any(IntArrayRef dim, bool keepdim) const {
+    return ::raxis::any(*this, dim, keepdim);
+}
+
 // ====================== Linear Algebra =====================
 Tensor Tensor::dot(const Tensor& other) const { 
     return ::raxis::dot(*this, other); 

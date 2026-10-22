@@ -227,4 +227,15 @@ private:
     bool keepdim_;
 };
 
+class RAXIS_API CumsumBackward0 : public Node {
+public:
+    CumsumBackward0(const Tensor& self, int64_t dim);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    Dtype self_dtype_;
+    int64_t dim_;
+};
+
 } // namespace raxis::autograd
