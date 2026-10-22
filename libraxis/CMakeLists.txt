@@ -270,61 +270,70 @@ endif()
 option(BUILD_PYTHON_BINDINGS "Build Python bindings" ON)
 if(BUILD_PYTHON_BINDINGS)
     add_subdirectory("${RAXIS_BINDINGS_DIR}")
+endif()
 
-    include(GNUInstallDirs)
-    include(CMakePackageConfigHelpers)
+# ─────────────────────────────────────────────────────────────────────────────
+# Install: the library, its headers and a CMake package (find_package(Raxis)),
+# plus the Python module when it is built
+include(CMakePackageConfigHelpers)
 
-    install(TARGETS raxis raxis_bindings
-        EXPORT      raxisTargets
-        RUNTIME     DESTINATION ${CMAKE_INSTALL_LIBDIR}
+install(TARGETS raxis
+    EXPORT      raxisTargets
+    RUNTIME     DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY     DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE     DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+
+if(BUILD_PYTHON_BINDINGS)
+    install(TARGETS raxis_bindings
         LIBRARY     DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        ARCHIVE     DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME     DESTINATION ${CMAKE_INSTALL_LIBDIR}
     )
+endif()
 
-    install(DIRECTORY ${RAXIS_LIB_DIR}/
-        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/raxis
-        FILES_MATCHING
-            PATTERN "*.h"
-            # PATTERN "detail" EXCLUDE
+install(DIRECTORY ${RAXIS_LIB_DIR}/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/raxis
+    FILES_MATCHING
+        PATTERN "*.h"
+        # PATTERN "detail" EXCLUDE
+)
+
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/RaxisConfigVersion.cmake"
+    VERSION       ${PROJECT_VERSION}
+    COMPATIBILITY AnyNewerVersion
+)
+
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RaxisConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/RaxisConfig.cmake"
+    INSTALL_DESTINATION "${CMAKE_INSTALL_DATADIR}/cmake/raxis"
+)
+
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/RaxisConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/RaxisConfigVersion.cmake"
+    DESTINATION "${CMAKE_INSTALL_DATADIR}/cmake/raxis"
+)
+
+install(
+    EXPORT raxisTargets
+    FILE RaxisTargets.cmake
+    NAMESPACE Raxis::
+    DESTINATION "${CMAKE_INSTALL_DATADIR}/cmake/raxis"
+)
+
+if(IOMP5_RUNTIME)
+    install(FILES "${IOMP5_RUNTIME}"
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}
     )
+endif()
 
-    write_basic_package_version_file(
-        "${CMAKE_CURRENT_BINARY_DIR}/RaxisConfigVersion.cmake"
-        VERSION       ${PROJECT_VERSION}
-        COMPATIBILITY AnyNewerVersion
-    )
-
-    configure_package_config_file(
-        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RaxisConfig.cmake.in"
-        "${CMAKE_CURRENT_BINARY_DIR}/RaxisConfig.cmake"
-        INSTALL_DESTINATION "${CMAKE_INSTALL_DATADIR}/cmake/raxis"
-    )
-
-    install(FILES
-        "${CMAKE_CURRENT_BINARY_DIR}/RaxisConfig.cmake"
-        "${CMAKE_CURRENT_BINARY_DIR}/RaxisConfigVersion.cmake"
-        DESTINATION "${CMAKE_INSTALL_DATADIR}/cmake/raxis"
-    )
-
-    install(
-        EXPORT raxisTargets
-        FILE RaxisTargets.cmake
-        NAMESPACE Raxis::
-        DESTINATION "${CMAKE_INSTALL_DATADIR}/cmake/raxis"
-    )
-
-    if(IOMP5_RUNTIME)
-        install(FILES "${IOMP5_RUNTIME}"
-            DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        )
-    endif()
-
-    # Ship the MSVC C++ runtime next to raxis.dll: Python only brings
-    # vcruntime140, not msvcp140, and an older msvcp140 found elsewhere on
-    # PATH can crash code built with a newer toolset
-    if(MSVC)
-        set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION ${CMAKE_INSTALL_LIBDIR})
-        set(CMAKE_INSTALL_UCRT_LIBRARIES OFF)
-        include(InstallRequiredSystemLibraries)
-    endif()
+# Ship the MSVC C++ runtime next to raxis.dll: Python only brings
+# vcruntime140, not msvcp140, and an older msvcp140 found elsewhere on
+# PATH can crash code built with a newer toolset
+if(MSVC)
+    set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION ${CMAKE_INSTALL_LIBDIR})
+    set(CMAKE_INSTALL_UCRT_LIBRARIES OFF)
+    include(InstallRequiredSystemLibraries)
 endif()
