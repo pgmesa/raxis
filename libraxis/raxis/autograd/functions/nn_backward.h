@@ -3,6 +3,7 @@
 #include <raxis/autograd/graph.h>
 #include <raxis/autograd/saved_variable.h>
 #include <raxis/ops/loss.h>
+#include <raxis/ops/pooling.h>
 #include <raxis/tensor/tensor.h>
 #include <raxis/util/small_vector.h>
 
@@ -82,6 +83,39 @@ private:
     bool input_requires_grad_;
     bool weight_requires_grad_;
     bool bias_requires_grad_;
+};
+
+
+// Saves the input shape, not the input (PyTorch saves self): the scatter only
+// needs the indices of the maxima
+class RAXIS_API MaxPool2DWithIndicesBackward0 : public Node {
+public:
+    MaxPool2DWithIndicesBackward0(const Tensor& self, const Tensor& indices);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    DimVector self_shape_;
+    SavedVariable result1_{this, "result1"};
+};
+
+
+class RAXIS_API AvgPool2DBackward0 : public Node {
+public:
+    AvgPool2DBackward0(
+        const Tensor& self, IntArrayRef kernel_size, IntArrayRef stride, IntArrayRef padding,
+        bool ceil_mode, bool count_include_pad, std::optional<int64_t> divisor_override);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    DimVector self_shape_;
+    DimVector kernel_size_;
+    DimVector stride_;
+    DimVector padding_;
+    bool ceil_mode_;
+    bool count_include_pad_;
+    std::optional<int64_t> divisor_override_;
 };
 
 } // namespace raxis::autograd

@@ -1274,6 +1274,31 @@ PYBIND11_MODULE(_C, c) {
     }, py::arg("input"), py::arg("weight"), py::arg("bias") = py::none(),
        py::arg("stride") = 1, py::arg("padding") = 0, py::arg("dilation") = 1,
        py::arg("groups") = 1);
+
+    // stride=None (or an empty list) means stride = kernel_size
+    c.def("max_pool2d", [](const raxis::Tensor& input, raxis::VecOrInt kernel_size,
+                           std::optional<raxis::VecOrInt> stride, raxis::VecOrInt padding,
+                           raxis::VecOrInt dilation, bool ceil_mode) {
+        return raxis::max_pool2d(input, kernel_size, stride.value_or(raxis::VecOrInt{}),
+                                 padding, dilation, ceil_mode);
+    }, py::arg("input"), py::arg("kernel_size"), py::arg("stride") = py::none(),
+       py::arg("padding") = 0, py::arg("dilation") = 1, py::arg("ceil_mode") = false);
+    c.def("max_pool2d_with_indices", [](const raxis::Tensor& input, raxis::VecOrInt kernel_size,
+                                        std::optional<raxis::VecOrInt> stride, raxis::VecOrInt padding,
+                                        raxis::VecOrInt dilation, bool ceil_mode) {
+        return raxis::max_pool2d_with_indices(input, kernel_size, stride.value_or(raxis::VecOrInt{}),
+                                              padding, dilation, ceil_mode);
+    }, py::arg("input"), py::arg("kernel_size"), py::arg("stride") = py::none(),
+       py::arg("padding") = 0, py::arg("dilation") = 1, py::arg("ceil_mode") = false);
+    c.def("avg_pool2d", [](const raxis::Tensor& input, raxis::VecOrInt kernel_size,
+                           std::optional<raxis::VecOrInt> stride, raxis::VecOrInt padding,
+                           bool ceil_mode, bool count_include_pad,
+                           std::optional<int64_t> divisor_override) {
+        return raxis::avg_pool2d(input, kernel_size, stride.value_or(raxis::VecOrInt{}),
+                                 padding, ceil_mode, count_include_pad, divisor_override);
+    }, py::arg("input"), py::arg("kernel_size"), py::arg("stride") = py::none(),
+       py::arg("padding") = 0, py::arg("ceil_mode") = false, py::arg("count_include_pad") = true,
+       py::arg("divisor_override") = py::none());
     c.def("logical_not",
         py::overload_cast<const raxis::Tensor&>(&raxis::logical_not),
         py::arg("input"));

@@ -1,6 +1,7 @@
 #include <raxis/ops/activation.h>
 #include <raxis/ops/convolution.h>
 #include <raxis/ops/loss.h>
+#include <raxis/ops/pooling.h>
 #include <raxis/ops/softmax.h>
 
 #include <raxis/tensor/shape_utils.h>
@@ -88,6 +89,45 @@ Tensor conv2d(
     Tensor output = convolution(
         is_batched ? input : input.unsqueeze(0), weight, bias, stride, padding, dilation, groups);
     return is_batched ? output : output.squeeze(0);
+}
+
+std::tuple<Tensor, Tensor> max_pool2d_with_indices(
+    const Tensor& input, IntArrayRef kernel_size, IntArrayRef stride,
+    IntArrayRef padding, IntArrayRef dilation, bool ceil_mode
+) {
+    auto [result, indices] = ops::max_pool2d_with_indices(
+        input, kernel_size, stride, padding, dilation, ceil_mode);
+    if (autograd::requires_autograd(input)) {
+        auto grad_fn = std::make_shared<autograd::MaxPool2DWithIndicesBackward0>(input, indices);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, input);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return {result, indices};
+}
+
+Tensor max_pool2d(
+    const Tensor& input, IntArrayRef kernel_size, IntArrayRef stride,
+    IntArrayRef padding, IntArrayRef dilation, bool ceil_mode
+) {
+    return std::get<0>(max_pool2d_with_indices(input, kernel_size, stride, padding, dilation, ceil_mode));
+}
+
+Tensor avg_pool2d(
+    const Tensor& input, IntArrayRef kernel_size, IntArrayRef stride,
+    IntArrayRef padding, bool ceil_mode, bool count_include_pad,
+    std::optional<int64_t> divisor_override
+) {
+    Tensor result = ops::avg_pool2d(
+        input, kernel_size, stride, padding, ceil_mode, count_include_pad, divisor_override);
+    if (autograd::requires_autograd(input)) {
+        auto grad_fn = std::make_shared<autograd::AvgPool2DBackward0>(
+            input, kernel_size, stride, padding, ceil_mode, count_include_pad, divisor_override);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, input);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
 }
 
 } // namespace raxis

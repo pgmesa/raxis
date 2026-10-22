@@ -414,6 +414,120 @@ class TestConvolution:
 
 
 # ===========================================================================
+# POOLING
+# ===========================================================================
+
+MAX_POOL_CASES = [
+    # x_shape, kwargs
+    ((2, 3, 8, 8), dict(kernel_size=2)),
+    ((2, 3, 9, 7), dict(kernel_size=3, stride=2)),
+    ((2, 3, 9, 7), dict(kernel_size=(3, 2), stride=(2, 1), padding=(1, 1))),
+    ((2, 2, 10, 10), dict(kernel_size=3, stride=2, padding=1, dilation=2)),
+    ((1, 2, 7, 7), dict(kernel_size=2, ceil_mode=True)),
+    ((1, 2, 8, 8), dict(kernel_size=3, stride=2, padding=1, ceil_mode=True)),
+    ((3, 6, 6), dict(kernel_size=2)),
+    ((2, 1, 5, 5), dict(kernel_size=5)),
+]
+
+AVG_POOL_CASES = [
+    ((2, 3, 8, 8), dict(kernel_size=2)),
+    ((2, 3, 9, 7), dict(kernel_size=3, stride=2)),
+    ((2, 3, 9, 7), dict(kernel_size=(3, 2), stride=(2, 1), padding=(1, 1))),
+    ((2, 3, 9, 7), dict(kernel_size=3, padding=1, count_include_pad=False)),
+    ((1, 2, 7, 7), dict(kernel_size=2, ceil_mode=True)),
+    ((1, 2, 8, 8), dict(kernel_size=3, stride=2, padding=1, ceil_mode=True, count_include_pad=False)),
+    ((1, 2, 6, 6), dict(kernel_size=3, padding=1, divisor_override=5)),
+    ((3, 6, 6), dict(kernel_size=2)),
+]
+
+
+def pool_both(x, r_fn, t_fn, **kwargs):
+    r_x, t_x = make_grad_pair(x)
+    r_out, t_out = r_fn(r_x, **kwargs), t_fn(t_x, **kwargs)
+    backward_both(r_out, t_out)
+    return (r_out, t_out), (r_x.grad, t_x.grad)
+
+
+class TestMaxPool2d:
+
+    @pytest.mark.parametrize("x_shape, kwargs", MAX_POOL_CASES)
+    def test_forward_backward(self, x_shape, kwargs):
+        out, grad = pool_both(randf_centered(*x_shape), raxis.max_pool2d, F.max_pool2d, **kwargs)
+        check_match(*out, atol=0, context="max_pool2d")
+        check_match(*grad, atol=0, context="max_pool2d grad")
+
+    def test_overlapping_windows_accumulate(self):
+        # stride < kernel: an element can be the max of several windows
+        x = np.zeros((1, 1, 5, 5), dtype=np.float32)
+        x[0, 0, 2, 2] = 1.0
+        out, grad = pool_both(x, raxis.max_pool2d, F.max_pool2d, kernel_size=3, stride=1)
+        check_match(*grad, atol=0, context="overlapping grad")
+
+    def test_return_indices(self):
+        r, t = make_pair(randf_centered(2, 3, 9, 7))
+        r_out, r_idx = raxis.max_pool2d_with_indices(r, 3, stride=2, padding=1)
+        t_out, t_idx = F.max_pool2d(t, 3, stride=2, padding=1, return_indices=True)
+        check_match(r_out, t_out, atol=0)
+        check_match(r_idx, t_idx, atol=0)
+        assert r_idx.dtype == raxis.int64
+
+    def test_nan_propagates(self):
+        x = randf_centered(1, 1, 4, 4)
+        x[0, 0, 1, 2] = np.nan
+        r, t = make_pair(x)
+        check_match(raxis.max_pool2d(r, 2), F.max_pool2d(t, 2), atol=0)
+
+    @pytest.mark.parametrize("dtype", ["int32", "int64", "float64"])
+    def test_dtypes(self, dtype):
+        data = (randf_centered(2, 2, 6, 6) * 100).astype(dtype)
+        r, t = make_pair(data)
+        check_match(raxis.max_pool2d(r, 3, stride=2), F.max_pool2d(t, 3, stride=2), atol=0)
+
+    def test_empty_batch(self):
+        r, t = make_pair(np.zeros((0, 2, 4, 4), dtype=np.float32))
+        check_match(raxis.max_pool2d(r, 2), F.max_pool2d(t, 2))
+
+    def test_grad_fn(self):
+        x = raxis.randn(1, 2, 4, 4, requires_grad=True)
+        out = raxis.max_pool2d(x, 2)
+        assert out.grad_fn.name() == "MaxPool2DWithIndicesBackward0"
+        assert out.grad_fn._saved_result1.dtype == raxis.int64
+
+    def test_errors(self):
+        x = raxis.randn(1, 2, 5, 5)
+        with pytest.raises(RuntimeError, match="pad should be at most half of effective kernel size"):
+            raxis.max_pool2d(x, 2, padding=2)
+        with pytest.raises(RuntimeError, match="Output size is too small"):
+            raxis.max_pool2d(x, 7)
+        with pytest.raises(RuntimeError, match="kernel_size must either be a single int"):
+            raxis.max_pool2d(x, (2, 2, 2))
+        with pytest.raises(RuntimeError, match="non-empty 3D or 4D"):
+            raxis.max_pool2d(raxis.randn(5, 5), 2)
+        with pytest.raises(RuntimeError, match="optional 0 dim batch size"):
+            raxis.max_pool2d(raxis.randn(1, 0, 5, 5), 2)
+
+
+class TestAvgPool2d:
+
+    @pytest.mark.parametrize("x_shape, kwargs", AVG_POOL_CASES)
+    def test_forward_backward(self, x_shape, kwargs):
+        out, grad = pool_both(randf_centered(*x_shape), raxis.avg_pool2d, F.avg_pool2d, **kwargs)
+        check_match(*out, atol=1e-6, context="avg_pool2d")
+        check_match(*grad, atol=1e-6, context="avg_pool2d grad")
+
+    def test_grad_fn(self):
+        x = raxis.randn(1, 2, 4, 4, requires_grad=True)
+        assert raxis.avg_pool2d(x, 2).grad_fn.name() == "AvgPool2DBackward0"
+
+    def test_errors(self):
+        x = raxis.randn(1, 2, 5, 5)
+        with pytest.raises(RuntimeError, match="divisor must be not zero"):
+            raxis.avg_pool2d(x, 2, divisor_override=0)
+        with pytest.raises(RuntimeError, match="pad should be at most half"):
+            raxis.avg_pool2d(x, 2, padding=2)
+
+
+# ===========================================================================
 # TENSOR CREATION FROM NUMPY
 # ===========================================================================
 

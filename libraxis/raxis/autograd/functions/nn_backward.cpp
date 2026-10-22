@@ -2,6 +2,7 @@
 
 #include <raxis/ops/activation.h>
 #include <raxis/ops/convolution.h>
+#include <raxis/ops/pooling.h>
 #include <raxis/ops/softmax.h>
 #include <raxis/tensor/shape_utils.h>
 
@@ -81,6 +82,38 @@ TensorList ConvolutionBackward0::apply(const TensorList& grads) {
         grads[0], input_.unpack(), weight_.unpack(), stride_, padding_, dilation_, groups_,
         {input_requires_grad_, weight_requires_grad_, bias_requires_grad_});
     return {grad_input, grad_weight, grad_bias};
+}
+
+
+MaxPool2DWithIndicesBackward0::MaxPool2DWithIndicesBackward0(const Tensor& self, const Tensor& indices)
+    : self_shape_(self.shape().begin(), self.shape().end())
+{
+    result1_.save(indices);
+}
+std::string MaxPool2DWithIndicesBackward0::name() const { return "MaxPool2DWithIndicesBackward0"; }
+
+TensorList MaxPool2DWithIndicesBackward0::apply(const TensorList& grads) {
+    return {ops::max_pool2d_with_indices_backward(grads[0], self_shape_, result1_.unpack())};
+}
+
+
+AvgPool2DBackward0::AvgPool2DBackward0(
+    const Tensor& self, IntArrayRef kernel_size, IntArrayRef stride, IntArrayRef padding,
+    bool ceil_mode, bool count_include_pad, std::optional<int64_t> divisor_override)
+    : self_shape_(self.shape().begin(), self.shape().end()),
+      kernel_size_(kernel_size.begin(), kernel_size.end()),
+      stride_(stride.begin(), stride.end()),
+      padding_(padding.begin(), padding.end()),
+      ceil_mode_(ceil_mode),
+      count_include_pad_(count_include_pad),
+      divisor_override_(divisor_override)
+{}
+std::string AvgPool2DBackward0::name() const { return "AvgPool2DBackward0"; }
+
+TensorList AvgPool2DBackward0::apply(const TensorList& grads) {
+    return {ops::avg_pool2d_backward(
+        grads[0], self_shape_, kernel_size_, stride_, padding_,
+        ceil_mode_, count_include_pad_, divisor_override_)};
 }
 
 } // namespace raxis::autograd
