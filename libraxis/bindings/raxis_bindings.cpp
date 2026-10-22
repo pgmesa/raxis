@@ -1,4 +1,5 @@
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -10,6 +11,7 @@
 #include <pybind11/pybind11.h>
 
 #include <raxis/raxis.h>
+#include <raxis/core/philox.h>
 #include <raxis/util/build_config.h>
 #include <raxis/ops/dispatch_stub.h>
 #include <raxis/util/parallel.h>
@@ -995,6 +997,10 @@ PYBIND11_MODULE(_C, c) {
        py::arg_v("memory_format", raxis::MemoryFormat::Preserve, "preserve_format"));
 
     c.def("manual_seed", &raxis::manual_seed, py::arg("seed"));
+    // The Philox block function, for tests against its known-answer vectors
+    c.def("_philox4x32_10", [](std::array<uint32_t, 4> counter, uint64_t key) {
+        return raxis::philox4x32_10(counter, key);
+    }, py::arg("counter"), py::arg("key"));
 
     // Shape operations
     c.def("squeeze", &raxis::squeeze, py::arg("input"), py::arg("dim") = py::none());

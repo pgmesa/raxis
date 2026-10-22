@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <mutex>
 #include <random>
+#include <utility>
 
 #include <raxis/export.h>
 
@@ -13,7 +14,8 @@ namespace raxis {
 inline constexpr uint64_t default_rng_seed_val = 67280421310721ULL;
 
 
-/// Lightweight RNG wrapper around std::mt19937_64.
+/// Lightweight RNG wrapper around std::mt19937_64, plus the offset of a
+/// Philox stream (see core/philox.h) for kernels that draw in parallel.
 class RAXIS_API Generator {
 public:
     explicit Generator(uint64_t seed = default_rng_seed_val)
@@ -28,6 +30,7 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         seed_ = s;
         engine_.seed(s);
+        philox_offset_ = 0;
     }
 
     uint64_t current_seed() const {
@@ -47,9 +50,22 @@ public:
         return mutex_; 
     }
 
+    /// Reserves `increment` Philox blocks (4 x 32 bits each) and returns
+    /// (seed, offset): the caller owns counters [offset, offset + increment)
+    /// of the stream keyed by seed. Successive calls never overlap, so draws
+    /// stay independent, and manual_seed makes them reproducible.
+    /// From: aten/src/ATen/cuda/CUDAGeneratorImpl.cpp (philox_engine_inputs)
+    std::pair<uint64_t, uint64_t> philox_engine_inputs(uint64_t increment) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const uint64_t offset = philox_offset_;
+        philox_offset_ += increment;
+        return {seed_, offset};
+    }
+
 private:
     uint64_t seed_;
     std::mt19937_64 engine_;
+    uint64_t philox_offset_ = 0;
     std::mutex mutex_;
 };
 

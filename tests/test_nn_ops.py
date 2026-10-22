@@ -296,6 +296,19 @@ class TestDropout:
             raxis.dropout(raxis.rand((2, 2)), 1.5, train=True)
 
 
+class TestPhilox:
+
+    # Known-answer vectors of Philox4x32-10 from Random123 (kat_vectors)
+    @pytest.mark.parametrize("counter, key, expected", [
+        ((0, 0, 0, 0), 0, (0x6627e8d5, 0xe169c58d, 0xbc57ac4c, 0x9b00dbd8)),
+        ((0xffffffff,) * 4, 0xffffffffffffffff, (0x408f276d, 0x41c83b0e, 0xa20bc7c6, 0x6d5451fd)),
+        ((0x243f6a88, 0x85a308d3, 0x13198a2e, 0x03707344), 0x299f31d0a4093822,
+         (0xd16cfe09, 0x94fdcceb, 0x5001e420, 0x24126ea1)),
+    ])
+    def test_known_answers(self, counter, key, expected):
+        assert tuple(raxis._C._philox4x32_10(list(counter), key)) == expected
+
+
 # ===========================================================================
 # CONVOLUTION
 # ===========================================================================
