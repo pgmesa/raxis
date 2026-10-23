@@ -150,6 +150,75 @@ class TestHooks:
         assert calls == [1, 2]
 
 
+def _grad_values(grads):
+    return [None if g is None else np.asarray(g.tolist()).round(4).tolist() for g in grads]
+
+
+def _fixed_mlp(lib):
+    """mlp with the same parameter values in both libraries (their random
+    initializations differ for the same seed)."""
+    model = mlp(lib)
+    rng = np.random.default_rng(0)
+    with lib.no_grad():
+        for p in model.parameters():
+            values = rng.standard_normal(tuple(p.shape)).astype(np.float32)
+            p.copy_(lib.tensor(values.tolist()))
+    return model
+
+
+class TestBackwardHooks:
+
+    @staticmethod
+    def full_and_pre_hooks(lib):
+        model = _fixed_mlp(lib)
+        calls = []
+        for name, module in model.named_modules():
+            module.register_full_backward_pre_hook(
+                lambda m, grad_output, name=name: calls.append(("pre", name, _grad_values(grad_output))))
+            module.register_full_backward_hook(
+                lambda m, grad_input, grad_output, name=name: calls.append(("full", name, _grad_values(grad_input))))
+        x = lib.ones((2, 6), requires_grad=True)
+        model(x).sum().backward()
+        return calls, _grad_values([x.grad])
+
+    @staticmethod
+    def hooks_replace_gradients(lib):
+        layer = _fixed_mlp(lib)[0]
+        layer.register_full_backward_pre_hook(lambda m, grad_output: (grad_output[0] * 2,))
+        layer.register_full_backward_hook(lambda m, grad_input, grad_output: (grad_input[0] + 1,))
+        x = lib.ones((2, 6), requires_grad=True)
+        layer(x).sum().backward()
+        return _grad_values([x.grad, layer.weight.grad])
+
+    @staticmethod
+    def no_input_requires_grad(lib):
+        import warnings
+        layer = _fixed_mlp(lib)[0]
+        calls = []
+        layer.register_full_backward_hook(lambda m, grad_input, grad_output: calls.append(
+            (grad_input, _grad_values(grad_output))))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # torch warns that the hook sees no input gradients
+            layer(lib.ones((2, 6))).sum().backward()
+        return calls
+
+    CASES = [full_and_pre_hooks, hooks_replace_gradients, no_input_requires_grad]
+
+    @pytest.mark.parametrize("case", CASES, ids=[c.__name__ for c in CASES])
+    def test_matches_torch(self, case):
+        assert case(raxis) == case(torch)
+
+    def test_remove_and_prepend(self):
+        layer = nn.ReLU()
+        calls = []
+        handle = layer.register_full_backward_hook(lambda m, gi, go: calls.append("removed"))
+        layer.register_full_backward_hook(lambda m, gi, go: calls.append("last"))
+        layer.register_full_backward_hook(lambda m, gi, go: calls.append("first"), prepend=True)
+        handle.remove()
+        layer(raxis.ones(2, requires_grad=True)).sum().backward()
+        assert calls == ["first", "last"]
+
+
 # ===========================================================================
 # SUMMARY
 # ===========================================================================

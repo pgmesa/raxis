@@ -3,7 +3,7 @@ from typing import Any, Callable, Iterator, Mapping
 
 import raxis
 from raxis import Tensor
-from raxis.utils.hooks import RemovableHandle
+from raxis.utils.hooks import BackwardHook, RemovableHandle
 
 
 class Parameter(Tensor):
@@ -45,6 +45,8 @@ class Module:
         object.__setattr__(self, "training", True)
         object.__setattr__(self, "_forward_pre_hooks", OrderedDict())
         object.__setattr__(self, "_forward_hooks", OrderedDict())
+        object.__setattr__(self, "_backward_pre_hooks", OrderedDict())
+        object.__setattr__(self, "_backward_hooks", OrderedDict())
 
     def forward(self, *args, **kwargs) -> Tensor:
         raise NotImplementedError(
@@ -52,18 +54,29 @@ class Module:
 
     # From: torch/nn/modules/module.py (Module._call_impl)
     def __call__(self, *args, **kwargs) -> Tensor:
-        if not (self._forward_pre_hooks or self._forward_hooks):
+        if not (self._forward_pre_hooks or self._forward_hooks
+                or self._backward_pre_hooks or self._backward_hooks):
             return self.forward(*args, **kwargs)
 
         for hook in tuple(self._forward_pre_hooks.values()):
             args_result = hook(self, args)
             if args_result is not None:
                 args = args_result if isinstance(args_result, tuple) else (args_result,)
+
+        bw_hook = None
+        if self._backward_hooks or self._backward_pre_hooks:
+            bw_hook = BackwardHook(self, list(self._backward_hooks.values()),
+                                   list(self._backward_pre_hooks.values()))
+            args = bw_hook.setup_input_hook(args)
+
         result = self.forward(*args, **kwargs)
         for hook in tuple(self._forward_hooks.values()):
             hook_result = hook(self, args, result)
             if hook_result is not None:
                 result = hook_result
+
+        if bw_hook:
+            result = bw_hook.setup_output_hook(result)
         return result
 
     # -- Hooks --
@@ -81,6 +94,27 @@ class Module:
         other than None replaces the output."""
         handle = RemovableHandle(self._forward_hooks)
         self._forward_hooks[handle.id] = hook
+        return handle
+
+    def register_full_backward_pre_hook(self, hook: Callable, prepend: bool = False) -> RemovableHandle:
+        """hook(module, grad_output) runs when the gradients of the outputs are
+        computed. Returning something other than None replaces them (one entry
+        per output, None for non-tensor outputs)."""
+        handle = RemovableHandle(self._backward_pre_hooks)
+        self._backward_pre_hooks[handle.id] = hook
+        if prepend:
+            self._backward_pre_hooks.move_to_end(handle.id, last=False)
+        return handle
+
+    def register_full_backward_hook(self, hook: Callable, prepend: bool = False) -> RemovableHandle:
+        """hook(module, grad_input, grad_output) runs when the gradients of the
+        inputs are computed. Returning something other than None replaces
+        grad_input. The module's inputs and outputs become views (made by a
+        BackwardHookFunction), so they cannot be modified in place."""
+        handle = RemovableHandle(self._backward_hooks)
+        self._backward_hooks[handle.id] = hook
+        if prepend:
+            self._backward_hooks.move_to_end(handle.id, last=False)
         return handle
 
     def __setattr__(self, name: str, value: Any) -> None:
