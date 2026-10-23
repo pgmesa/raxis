@@ -1415,6 +1415,28 @@ class TestCreateGraph:
         with pytest.raises(RuntimeError, match="derivative for 'convolution_backward' is not implemented"):
             raxis.autograd.grad(g.sum(), x)
 
+    def test_once_differentiable_raises_on_second_derivative(self):
+        import warnings
+        for lib in (raxis, torch):
+            class Square(lib.autograd.Function):
+                @staticmethod
+                def forward(ctx, x):
+                    ctx.save_for_backward(x)
+                    return x * x
+
+                @staticmethod
+                @lib.autograd.function.once_differentiable
+                def backward(ctx, grad):
+                    x, = ctx.saved_tensors
+                    return 2 * grad * x
+
+            x = lib.tensor([1.0, 2.0], requires_grad=True)
+            g, = lib.autograd.grad((Square.apply(x * 1) * x).sum(), x, create_graph=True)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                with pytest.raises(RuntimeError, match="trying to differentiate twice"):
+                    g.sum().backward()
+
     def test_grad_does_not_touch_dot_grad(self):
         w = raxis.tensor([1.0, 2.0], requires_grad=True)
         other = raxis.tensor([1.0], requires_grad=True)

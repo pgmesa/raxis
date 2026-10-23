@@ -27,6 +27,23 @@ private:
 };
 
 
+// From: torch/csrc/autograd/functions/basic_ops.h (Error)
+// Raises when a backward reaches it (see delayed_error in the bindings)
+class Error : public Node {
+public:
+    explicit Error(std::string msg) : msg_(std::move(msg)) {}
+
+    std::string name() const override { return "Error"; }
+
+    TensorList apply(const TensorList&) override {
+        RAXIS_CHECK(false, msg_);
+        return {};
+    }
+
+private:
+    std::string msg_;
+};
+
 class RAXIS_API ZeroBackward0 : public Node {
 public:
     explicit ZeroBackward0(std::string op_name)

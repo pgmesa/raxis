@@ -20,6 +20,7 @@
 #include <raxis/autograd/variable.h>
 #include <raxis/autograd/autograd_meta.h>
 #include <raxis/autograd/saved_variable.h>
+#include <raxis/autograd/functions/common.h>
 #include <raxis/tensor/detail/tensor_impl.h>
 
 
@@ -334,6 +335,23 @@ inline py::object wrap_function_outputs(
     }
 
     return is_tuple ? py::object(results) : py::object(results[0]);
+}
+
+// From: torch/csrc/autograd/functions/basic_ops.cpp (DelayedError)
+// Aliases of the tensors whose grad_fn raises `msg`: what a backward marked
+// once_differentiable returns under create_graph, so that a second
+// derivative through it fails instead of treating it as a constant
+inline py::tuple delayed_error(const std::string& msg, const std::vector<Tensor>& tensors) {
+    auto node = std::make_shared<autograd::Error>(msg);
+    node->set_num_inputs(tensors.size());
+    autograd::set_next_edges(node, tensors);
+    py::tuple outputs(tensors.size());
+    for (size_t i = 0; i < tensors.size(); i++) {
+        Tensor alias = tensors[i].detach();
+        autograd::set_autograd_meta(alias, node, static_cast<uint32_t>(i));
+        outputs[i] = py::cast(alias);
+    }
+    return outputs;
 }
 
 // From: torch/csrc/autograd/engine.cpp (Engine::execute)

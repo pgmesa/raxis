@@ -121,11 +121,28 @@ class Function:
 
 def once_differentiable(fn: Callable) -> Callable:
     """Decorator for a backward that is not differentiable itself: it runs
-    without recording a graph (a second derivative through it is wrong)."""
+    without recording a graph. Under create_graph its results get a grad_fn
+    that raises, so a second derivative through it fails instead of
+    treating it as a constant."""
 
     @functools.wraps(fn)
     def wrapper(ctx, *args):
         with raxis.no_grad():
-            return fn(ctx, *args)
+            outputs = fn(ctx, *args)
+
+        if not raxis.is_grad_enabled():
+            return outputs
+        if not any(isinstance(arg, raxis.Tensor) and arg.requires_grad for arg in args):
+            return outputs
+
+        is_tuple = isinstance(outputs, tuple)
+        outputs_ = outputs if is_tuple else (outputs,)
+        # The node needs inputs that require grad to be part of the graph
+        fakes = [None if out is None else out.detach().requires_grad_() for out in outputs_]
+        errors = iter(_C._delayed_error(
+            "trying to differentiate twice a function that was marked with @once_differentiable",
+            [f for f in fakes if f is not None]))
+        wrapped = tuple(None if f is None else next(errors) for f in fakes)
+        return wrapped if is_tuple else wrapped[0]
 
     return wrapper

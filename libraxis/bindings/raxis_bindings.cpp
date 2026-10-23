@@ -1578,6 +1578,8 @@ PYBIND11_MODULE(_C, c) {
         return raxis::index_put(input, raxis::python::optional_tensor_list(indices), values, accumulate);
     }, py::arg("input"), py::arg("indices"), py::arg("values"), py::arg("accumulate") = false);
     c.def("masked_fill", &raxis::masked_fill, py::arg("input"), py::arg("mask"), py::arg("value"));
+    // once_differentiable (raxis/autograd/function.py) under create_graph
+    c.def("_delayed_error", &raxis::python::delayed_error, py::arg("message"), py::arg("tensors"));
     // raxis.autograd.backward / grad (raxis/autograd/__init__.py)
     c.def("_autograd_backward", [](const std::vector<raxis::Tensor>& tensors,
                                    const std::vector<std::optional<raxis::Tensor>>& grad_tensors,
