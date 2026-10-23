@@ -15,6 +15,8 @@
 
 namespace raxis {
 
+namespace ops {
+
 Tensor& fill_(Tensor& self, Scalar value) {
     // Shortcut
     if (self.device() == DeviceType::CPU && self.numel() == 1) {
@@ -34,7 +36,7 @@ Tensor& fill_(Tensor& self, Scalar value) {
 static Tensor& zero_cpu_(Tensor &self, int64_t nelements) {
     void* ptr = self.mutable_data_ptr();
     if (nullptr == ptr) {
-        return self.fill_(0);
+        return ops::fill_(self, 0);
     }
     auto size_bytes = nelements * self.dtype().itemsize();
     if (size_bytes > 0) {
@@ -51,8 +53,10 @@ Tensor& zero_(Tensor& self) {
         return zero_cpu_(self, numel);
     }
 
-    return self.fill_(0);
+    return ops::fill_(self, 0);
 }
+
+} // namespace ops
 
 DEFINE_DISPATCH(fill_stub);
 

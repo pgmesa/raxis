@@ -12,6 +12,7 @@
 
 #include <raxis/autograd/engine.h>
 #include <raxis/autograd/autograd_meta.h>
+#include <raxis/autograd/variable.h>
 
 #include <raxis/tensor/shape_utils.h>
 #include <raxis/tensor/detail/tensor_impl.h>
@@ -171,10 +172,31 @@ static autograd::AutogradMeta& ensure_autograd_meta(detail::TensorImpl* impl) {
     return *impl->autograd_meta();
 }
 
+// From: torch/csrc/autograd/variable.cpp (VariableHooks::grad_fn)
+// The memory of a view was written in place (through its base or another
+// view) since its grad_fn was set: rebuild it before reading the autograd
+// state. A null check for any tensor that is not a view.
+static void refresh_if_stale_view(const Tensor& t) {
+    detail::TensorImpl* impl = t.unsafe_get_tensor_impl();
+    if (impl->is_view() && impl->view_version() != impl->storage()->version()) {
+        autograd::refresh_view_grad_fn(t);
+    }
+}
+
 bool Tensor::requires_grad() const {
     if (!defined()) return false;
+    refresh_if_stale_view(*this);
     auto* meta = impl_->autograd_meta();
-    return meta && meta->requires_grad;
+    if (meta && meta->requires_grad) return true;
+    // From: torch/csrc/autograd/variable.h (DifferentiableViewMeta::requires_grad)
+    // A view of a tensor that requires grad does too, even one made under
+    // no_grad (which has no grad_fn: gradients through it go nowhere, but an
+    // in-place op on it is caught by check_inplace)
+    if (impl_->is_view()) {
+        auto* base_meta = impl_->view_base()->autograd_meta();
+        return base_meta && base_meta->requires_grad;
+    }
+    return false;
 }
 
 Tensor& Tensor::requires_grad_(bool requires_grad) {
@@ -201,17 +223,23 @@ void Tensor::set_grad(const Tensor& grad) {
 
 std::shared_ptr<autograd::Node> Tensor::grad_fn() const {
     if (!defined()) return nullptr;
+    refresh_if_stale_view(*this);
     auto* meta = impl_->autograd_meta();
     return meta ? meta->grad_fn : nullptr;
 }
 
+// A view keeps a grad_fn until its memory is written again
 void Tensor::set_grad_fn(std::shared_ptr<autograd::Node> fn) {
     ensure_defined("set_grad_fn");
     ensure_autograd_meta(impl_.get()).grad_fn = std::move(fn);
+    if (impl_->is_view()) {
+        impl_->set_view_version(impl_->storage()->version());
+    }
 }
 
 uint32_t Tensor::output_nr() const {
     if (!defined()) return 0;
+    refresh_if_stale_view(*this);
     auto* meta = impl_->autograd_meta();
     return meta ? meta->output_nr : 0;
 }
@@ -228,6 +256,7 @@ void Tensor::set_requires_grad(bool requires_grad) {
 
 bool Tensor::is_leaf() const {
     if (!defined()) return true;
+    refresh_if_stale_view(*this);
     auto* meta = impl_->autograd_meta();
     return !meta || meta->is_leaf();
 }
@@ -251,10 +280,25 @@ void Tensor::retain_grad() const {
     }
 }
 
+uint32_t Tensor::version() const {
+    ensure_defined("version");
+    return impl_->storage()->version();
+}
+
+bool Tensor::is_view() const {
+    return defined() && impl_->is_view();
+}
+
+Tensor Tensor::base() const {
+    return is_view() ? Tensor(impl_->view_base()) : Tensor();
+}
+
+// From: aten/src/ATen/native/TensorShape.cpp (detach)
+// Shares the memory (and so the version counter), but it is not a
+// differentiable view and starts with no autograd meta
 Tensor Tensor::detach() const {
-    Tensor result = alias();
-    // No autograd_meta on the detached tensor, it starts clean.
-    return result;
+    ensure_defined("detach");
+    return make_view(*this, storage_offset(), shape(), strides(), /*is_differentiable_view=*/false);
 }
 
 void Tensor::backward(const Tensor& grad, bool retain_graph) const {
@@ -349,7 +393,7 @@ void Tensor::index_put_(ArrayRef<indexing::TensorIndex> indices, Scalar value) {
 
 // ======================== Copy & Fill =======================
 Tensor& Tensor::copy_(const Tensor& other) const {
-    return ::raxis::copy(other, const_cast<Tensor&>(*this));
+    return ::raxis::copy_(const_cast<Tensor&>(*this), other);
 }
 
 Tensor Tensor::clone(MemoryFormat memory_format) const {

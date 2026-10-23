@@ -14,6 +14,13 @@ using fill_fn = void(*)(TensorIterator&, Scalar);
 DECLARE_DISPATCH(fill_fn, fill_stub);
 
 RAXIS_API Tensor& fill_(Tensor& self, Scalar value);
-RAXIS_API Tensor& zero_(Tensor& a);
+RAXIS_API Tensor& zero_(Tensor& self);
+
+namespace ops {
+
+RAXIS_API Tensor& fill_(Tensor& self, Scalar value);
+RAXIS_API Tensor& zero_(Tensor& self);
+
+} // namespace ops
 
 }

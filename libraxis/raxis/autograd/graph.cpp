@@ -1,6 +1,8 @@
 #include <raxis/autograd/graph.h>
 
+#include <cctype>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include <raxis/autograd/saved_variable.h>
@@ -11,6 +13,21 @@ namespace raxis::autograd {
 uint64_t next_sequence_nr() {
     static thread_local uint64_t sequence_nr = 0;
     return sequence_nr++;
+}
+
+// From: torch/csrc/autograd/function.cpp (Node::forward_op_name)
+// Strips a Backward<N> suffix, keeping N unless it is 0 (AddBackward1 -> Add1)
+std::string Node::forward_op_name() const {
+    std::string n = name();
+    const size_t pos = n.rfind("Backward");
+    if (pos == std::string::npos) {
+        return n;
+    }
+    const std::string suffix = n.substr(pos + 8);
+    for (char c : suffix) {
+        if (!std::isdigit(static_cast<unsigned char>(c))) return n;
+    }
+    return n.substr(0, pos) + (suffix == "0" ? "" : suffix);
 }
 
 void Node::release_variables() {

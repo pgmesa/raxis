@@ -8,6 +8,8 @@
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/shape_utils.h>
 #include <raxis/tensor/tensor_indexing.h>
+#include <raxis/autograd/grad_mode.h>
+#include <raxis/autograd/autograd_meta.h>
 
 
 namespace raxis {
@@ -16,7 +18,8 @@ Tensor make_view(
     const Tensor& self,
     int64_t new_storage_offset,
     IntArrayRef new_shape,
-    IntArrayRef new_strides
+    IntArrayRef new_strides,
+    bool is_differentiable_view
 ) {
     auto impl_ = self.unsafe_get_tensor_impl();
     auto impl = std::make_shared<detail::TensorImpl>(
@@ -26,6 +29,24 @@ Tensor make_view(
         new_strides,
         impl_->dtype()
     );
+
+    // From: torch/csrc/autograd/VariableTypeUtils.h (as_view)
+    // A view of a view has the same base. A view made under no_grad cannot
+    // be modified in place with grad mode on, and the views of a view keep
+    // the restriction of their parent (propagate_creation_meta).
+    if (is_differentiable_view) {
+        using autograd::CreationMeta;
+        CreationMeta creation_meta = autograd::GradMode::is_enabled()
+            ? CreationMeta::Default : CreationMeta::NoGradMode;
+        if (impl_->is_view()) {
+            if (creation_meta == CreationMeta::Default) {
+                creation_meta = impl_->creation_meta();
+            }
+            impl->set_view_base(impl_->view_base(), creation_meta);
+        } else {
+            impl->set_view_base(self.impl_ptr(), creation_meta);
+        }
+    }
     return Tensor(std::move(impl));
 }
 

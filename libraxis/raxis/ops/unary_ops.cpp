@@ -6,6 +6,8 @@
 
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/tensor_iterator.h>
+#include <raxis/tensor/detail/tensor_impl.h>
+#include <raxis/tensor/detail/storage_impl.h>
 
 
 namespace raxis {
@@ -186,6 +188,9 @@ Tensor& logical_not_(Tensor& self) {
         .add_input(self)
         .build();
     logical_not_stub(iter.device_type(), iter);
+    // Not differentiable, so no autograd wrapper: the in-place write still
+    // makes saved copies of self stale
+    self.unsafe_get_tensor_impl()->storage()->bump_version();
     return self;
 }
 

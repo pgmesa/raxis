@@ -13,6 +13,9 @@ DECLARE_DISPATCH(copy_fn, copy_stub);
 
 RAXIS_API Tensor& copy(const Tensor& a, Tensor& out);
 
+// self.copy_(src) with autograd (CopyBackwards)
+RAXIS_API Tensor& copy_(Tensor& self, const Tensor& src);
+
 RAXIS_API Tensor clone(const Tensor& self, MemoryFormat memory_format = MemoryFormat::Preserve);
 RAXIS_API Tensor to_copy(const Tensor& self, Dtype dtype);
 

@@ -259,6 +259,11 @@ PYBIND11_MODULE(_C, c) {
         .def("retain_grad", &raxis::Tensor::retain_grad)
 
         .def("detach", &raxis::Tensor::detach)
+        .def_property_readonly("_version", &raxis::Tensor::version)
+        .def_property_readonly("_base", [](const raxis::Tensor& self) -> py::object {
+            return self.is_view() ? py::cast(self.base()) : py::none();
+        })
+        .def("_is_view", &raxis::Tensor::is_view)
         .def("_use_count", &raxis::Tensor::use_count)
         // C++ operator<< output (libtorch's format), not the Python repr
         .def("_cpp_str", &raxis::Tensor::to_string)

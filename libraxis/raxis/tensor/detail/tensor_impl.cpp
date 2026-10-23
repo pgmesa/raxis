@@ -123,4 +123,11 @@ void TensorImpl::set_autograd_meta(std::unique_ptr<autograd::AutogradMeta> meta)
     autograd_meta_ = std::move(meta);
 }
 
+void TensorImpl::set_view_base(std::shared_ptr<TensorImpl> base, autograd::CreationMeta creation_meta) {
+    RAXIS_INTERNAL_ASSERT(base && !base->is_view(), "the base of a view cannot be a view");
+    view_base_ = std::move(base);
+    creation_meta_ = creation_meta;
+    view_version_ = storage_->version();
+}
+
 } // namespace raxis

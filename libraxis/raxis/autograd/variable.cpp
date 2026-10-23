@@ -2,6 +2,8 @@
 #include <raxis/autograd/variable.h>
 
 #include <cstdint>
+#include <memory>
+#include <sstream>
 
 #include <raxis/util/exception.h>
 #include <raxis/tensor/tensor.h>
@@ -10,7 +12,11 @@
 #include <raxis/autograd/engine.h>
 #include <raxis/autograd/autograd_meta.h>
 #include <raxis/tensor/detail/tensor_impl.h>
+#include <raxis/tensor/detail/storage_impl.h>
+#include <raxis/autograd/saved_variable.h>
+#include <raxis/autograd/functions/tensor.h>
 
+#include <raxis/ops/copy.h>
 #include <raxis/ops/binary_ops.h>
 #include <raxis/ops/reduce_ops.h>
 
@@ -115,29 +121,149 @@ void set_autograd_meta(Tensor& result, NodePtr grad_fn, uint32_t output_nr) {
 }
 
 
-static Edge make_edge_for(const Tensor& input) {
-    if (!input.requires_grad()) {
+Edge gradient_edge(const Tensor& input) {
+    if (!input.defined()) {
         return Edge{};
     }
-    if (input.grad_fn()) {
-        return Edge{input.grad_fn(), input.output_nr()};
+    if (NodePtr grad_fn = input.grad_fn()) {
+        return Edge{std::move(grad_fn), input.output_nr()};
     }
-    return Edge{grad_accumulator(input), 0};
+    // A leaf of its own: a view made under no_grad requires grad through its
+    // base but has no AccumulateGrad (PyTorch returns no edge for it too)
+    AutogradMeta* meta = input.unsafe_get_tensor_impl()->autograd_meta();
+    if (meta && meta->requires_grad) {
+        return Edge{grad_accumulator(input), 0};
+    }
+    return Edge{};
 }
 
 
 void set_next_edges(const NodePtr& grad_fn, const Tensor& input) {
-    grad_fn->add_next_edge(make_edge_for(input));
+    grad_fn->add_next_edge(gradient_edge(input));
 }
 
 void set_next_edges(const NodePtr& grad_fn, const Tensor& input0, const Tensor& input1) {
-    grad_fn->add_next_edge(make_edge_for(input0));
-    grad_fn->add_next_edge(make_edge_for(input1));
+    grad_fn->add_next_edge(gradient_edge(input0));
+    grad_fn->add_next_edge(gradient_edge(input1));
 }
 
 void set_next_edges(const NodePtr& grad_fn, ArrayRef<Tensor> inputs) {
     for (const auto& input : inputs) {
-        grad_fn->add_next_edge(make_edge_for(input));
+        grad_fn->add_next_edge(gradient_edge(input));
+    }
+}
+
+
+// From: torch/csrc/autograd/variable.cpp (handle_view_on_rebase)
+[[noreturn]] static void view_cannot_be_modified(const Tensor& view, bool indirect) {
+    detail::TensorImpl* impl = view.unsafe_get_tensor_impl();
+    AutogradMeta* meta = impl->autograd_meta();
+    Node* grad_fn = meta ? meta->grad_fn.get() : nullptr;
+    const char* modified = indirect
+        ? "its base or another view of its base has been" : "is being";
+    std::ostringstream msg;
+    if (impl->creation_meta() == CreationMeta::NoGradMode || !grad_fn) {
+        if (grad_fn) {
+            msg << "Output " << meta->output_nr << " of " << grad_fn->forward_op_name()
+                << " is a view of a view which was created in";
+        } else {
+            msg << "A view was created in";
+        }
+        msg << " no_grad mode and " << modified << " modified inplace with grad mode enabled."
+            << " Given that this use case is ambiguous and error-prone, it is forbidden."
+            << " You can clarify your code by moving both the view and the inplace either both"
+            << " inside the no_grad block (if you don't want the inplace to be tracked) or both"
+            << " outside (if you want the inplace to be tracked).";
+    } else {
+        msg << "Output " << meta->output_nr << " of " << grad_fn->forward_op_name() << " is a view and "
+            << modified << " modified inplace. This view is the output of a function that"
+            << " returns multiple views. Such functions do not allow the output views to be"
+            << " modified inplace. You should replace the inplace operation by an out-of-place one.";
+    }
+    RAXIS_CHECK(false, msg.str());
+}
+
+void check_inplace(const Tensor& self, bool requires_grad) {
+    if (!requires_grad) return;
+    detail::TensorImpl* impl = self.unsafe_get_tensor_impl();
+    if (impl->is_view()) {
+        if (impl->creation_meta() != CreationMeta::Default) {
+            view_cannot_be_modified(self, /*indirect=*/false);
+        }
+        RAXIS_CHECK(!(self.requires_grad() && self.base().is_leaf()),
+            "a view of a leaf Variable that requires grad is being used in an in-place operation.");
+    }
+    RAXIS_CHECK(!(self.requires_grad() && self.is_leaf()),
+        "a leaf Variable that requires grad is being used in an in-place operation.");
+}
+
+void save_original_self(Node& grad_fn, const Tensor& self) {
+    Tensor original;
+    for (SavedVariable* saved : grad_fn.saved_variables()) {
+        if (saved->holds(self)) {
+            if (!original.defined()) {
+                original = ops::clone(self);
+            }
+            saved->save(original);
+        }
+    }
+}
+
+void bump_version(const Tensor& self) {
+    self.unsafe_get_tensor_impl()->storage()->bump_version();
+}
+
+void rebase_history(const Tensor& self, NodePtr grad_fn) {
+    detail::TensorImpl* impl = self.unsafe_get_tensor_impl();
+    if (impl->is_view()) {
+        Tensor base = self.base();
+        auto copy_slices = std::make_shared<CopySlices>(base, self, std::move(grad_fn));
+        set_autograd_meta(base, copy_slices);
+        refresh_view_grad_fn(self);
+        return;
+    }
+    Tensor result = self;
+    set_autograd_meta(result, std::move(grad_fn));
+}
+
+void finish_inplace(const Tensor& self, NodePtr grad_fn) {
+    bump_version(self);
+    if (grad_fn) {
+        rebase_history(self, std::move(grad_fn));
+    }
+}
+
+void refresh_view_grad_fn(const Tensor& view) {
+    detail::TensorImpl* impl = view.unsafe_get_tensor_impl();
+    AutogradMeta* meta = impl->autograd_meta();
+    Tensor base = view.base();
+    // Nothing to describe: no history before, and none to take from the base
+    if ((!meta || !meta->grad_fn) && !base.requires_grad()) {
+        return;
+    }
+    if (impl->creation_meta() != CreationMeta::Default) {
+        view_cannot_be_modified(view, /*indirect=*/true);
+    }
+    auto grad_fn = std::make_shared<AsStridedBackward0>(base, view);
+    grad_fn->set_num_inputs(1);
+    set_next_edges(grad_fn, base);
+    // Through the meta: Tensor::set_grad_fn would look at the version again
+    if (!meta) {
+        impl->set_autograd_meta(std::make_unique<AutogradMeta>());
+        meta = impl->autograd_meta();
+    }
+    meta->grad_fn = std::move(grad_fn);
+    meta->output_nr = 0;
+    meta->requires_grad = true;
+    impl->set_view_version(impl->storage()->version());
+}
+
+void mark_multi_output_views(ArrayRef<Tensor> views) {
+    if (!GradMode::is_enabled()) return;
+    for (const Tensor& view : views) {
+        if (view.is_view()) {
+            view.unsafe_get_tensor_impl()->set_creation_meta(CreationMeta::MultiOutputNode);
+        }
     }
 }
 

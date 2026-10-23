@@ -623,51 +623,224 @@ class TestComposedBackward:
 
 
 # ===========================================================================
-# IN-PLACE GUARDS
+# IN-PLACE OPS
 # ===========================================================================
 
-class TestInPlaceGuards:
+class TestInPlace:
+    """In-place ops with autograd: version counters, rebase_history, CopySlices."""
 
-    def test_inplace_on_leaf_requires_grad_errors(self, device):
-        """In-place on a leaf with requires_grad must raise, same as pytorch."""
-        r = raxis.tensor([1.0, 2.0, 3.0], requires_grad=True)
-        t = torch.tensor([1.0, 2.0, 3.0], requires_grad=True)
+    A = randf(4, 3, seed=1) + 0.5
+    B = randf(4, 3, seed=2) + 0.5
 
-        with pytest.raises(RuntimeError):
-            t.add_(1.0)
+    # Each case runs on (lib, a, b) with a and b leaves that require grad
+    CASES = {
+        "mul_ saves self":       lambda lib, a, b: (a * 1).mul_(b),
+        "exp_ saves result":     lambda lib, a, b: (a * 2).exp_() * b,
+        "relu_":                 lambda lib, a, b: (a - 1.2).relu_() * b,
+        "sin_ saves self":       lambda lib, a, b: (a * 1).sin_() * b,
+        "neg_ saves nothing":    lambda lib, a, b: (a * 3).neg_() * b,
+        "scalar ops":            lambda lib, a, b: (a * 1).add_(2).mul_(3).sub_(1).div_(2) * b,
+        "augmented assignment":  lambda lib, a, b: TestInPlace.augmented(a * 1, b),
+        "self as other":         lambda lib, a, b: (a * 1).add_(a * 1),
+        "into a plain tensor":   lambda lib, a, b: lib.zeros(4, 3).add_(a) * b,
+        "on a view":             lambda lib, a, b: TestInPlace.on_view(a * 1, b),
+        "view of a view":        lambda lib, a, b: TestInPlace.view_of_view(a * 1, b),
+        "transposed view":       lambda lib, a, b: TestInPlace.transposed_view(a * 1, b),
+        "stale view":            lambda lib, a, b: TestInPlace.stale_view(a * 1, b),
+        "stale expanded view":   lambda lib, a, b: TestInPlace.stale_expand(a[0] * 1, b),
+        "copy_ into a slice":    lambda lib, a, b: TestInPlace.copy_into_slice(lib.zeros(4, 3), a, b),
+        "setitem basic":         lambda lib, a, b: TestInPlace.setitem(lib.zeros(4, 3), 1, b[1] * 3) * a,
+        "setitem index":         lambda lib, a, b: TestInPlace.setitem(a * 1, lib.tensor([0, 2]), b[:2] * 2),
+        "setitem mask":          lambda lib, a, b: TestInPlace.setitem_mask(a * 1) * b,
+        "fill_ and zero_":       lambda lib, a, b: TestInPlace.fills(a * 1) * b,
+        "clamp_ and masked_fill_": lambda lib, a, b: TestInPlace.clamp_mask(a * 2) * b,
+        "index_add_ scatter_":   lambda lib, a, b: TestInPlace.scatters(lib, a * 1, b),
+    }
 
-        with pytest.raises(RuntimeError):
-            r.add_(1.0)
+    @staticmethod
+    def augmented(x, b):
+        x += b[0]
+        x -= b[1]
+        x *= 2
+        x /= b
+        return x
 
-    def test_inplace_on_non_leaf_errors(self, device):
-        """In-place on a non-leaf tensor that requires grad must raise.
+    @staticmethod
+    def on_view(x, b):
+        x[1:3].mul_(b[1:3])
+        return x
 
-        Stricter than PyTorch, which allows it and tracks modifications with
-        version counters. raxis has no version counters yet.
-        """
-        r = raxis.tensor([1.0, 2.0, 3.0], requires_grad=True)
-        r_out = r * 2.0
+    @staticmethod
+    def view_of_view(x, b):
+        v = x[1:]
+        v[:, 1:].mul_(b[1:, 1:])
+        v.add_(1)
+        return x
 
-        with pytest.raises(RuntimeError):
-            r_out.add_(1.0)
+    @staticmethod
+    def transposed_view(x, b):
+        x.transpose(0, 1)[0].mul_(5)
+        return x * b
 
-    def test_inplace_without_grad_works(self, device):
-        """In-place on a tensor without requires_grad is fine."""
-        r = raxis.tensor([1.0, 2.0, 3.0])
-        r.add_(1.0)
-        check_match(r, torch.tensor([2.0, 3.0, 4.0]), context="inplace no grad")
+    @staticmethod
+    def stale_view(x, b):
+        # v is taken before x changes: its grad_fn must see the new history
+        v = x[0]
+        x.mul_(2)
+        return v * b[0]
 
-    @pytest.mark.parametrize("op", ["neg_", "abs_", "exp_", "sin_", "cos_"])
-    def test_unary_inplace_on_leaf_errors(self, op, device):
-        """Unary in-place on leaf with requires_grad must raise."""
-        r = raxis.tensor([1.0, 2.0, 3.0], requires_grad=True)
-        t = torch.tensor([1.0, 2.0, 3.0], requires_grad=True)
+    @staticmethod
+    def stale_expand(x, b):
+        e = x.expand(4, 3)
+        x.mul_(3)
+        return e * b
 
-        with pytest.raises(RuntimeError):
-            getattr(t, op)()
+    @staticmethod
+    def copy_into_slice(x, a, b):
+        x[:, 1].copy_(a[:, 0])
+        return x * b
 
-        with pytest.raises(RuntimeError):
-            getattr(r, op)()
+    @staticmethod
+    def setitem(x, index, value):
+        x[index] = value
+        return x
+
+    @staticmethod
+    def setitem_mask(x):
+        x[x > 1.0] = 0.0
+        return x
+
+    @staticmethod
+    def fills(x):
+        x[0].fill_(2.0)
+        x[1].zero_()
+        return x
+
+    @staticmethod
+    def clamp_mask(x):
+        x.clamp_(1.2, 2.5)
+        return x.masked_fill_(x > 2.0, 0.5)
+
+    @staticmethod
+    def scatters(lib, x, b):
+        x.index_add_(0, lib.tensor([0, 0]), b[:2])
+        x.scatter_(1, lib.tensor([[0], [1], [2], [0]]), b[:, :1])
+        return x
+
+    @staticmethod
+    def run(lib, fn):
+        a = lib.tensor(TestInPlace.A.tolist(), requires_grad=True)
+        b = lib.tensor(TestInPlace.B.tolist(), requires_grad=True)
+        out = fn(lib, a, b)
+        out.sum().backward()
+        return out, a.grad, b.grad
+
+    @pytest.mark.parametrize("fn", CASES.values(), ids=CASES.keys())
+    def test_matches_torch(self, fn):
+        r_out, r_ga, r_gb = self.run(raxis, fn)
+        t_out, t_ga, t_gb = self.run(torch, fn)
+        check_match(r_out, t_out)
+        for r_g, t_g in [(r_ga, t_ga), (r_gb, t_gb)]:
+            assert (r_g is None) == (t_g is None)
+            if r_g is not None:
+                check_match(r_g, t_g)
+
+    def test_grad_fn_names(self):
+        for lib in (raxis, torch):
+            a = lib.ones(4, 3, requires_grad=True)
+            x = a * 1
+            v = x[1:]
+            v.mul_(2)
+            assert "CopySlices" in str(type(x.grad_fn)) or x.grad_fn.name().endswith("CopySlices")
+            assert v.grad_fn.name() == "AsStridedBackward0"
+            y = a * 1
+            assert y.exp_().grad_fn.name() == "ExpBackward0"
+            assert y.fill_(1).grad_fn.name() == "FillBackward2"
+
+    def test_version_counter(self):
+        for lib in (raxis, torch):
+            x = lib.zeros(3)
+            v = x[1:]
+            assert x._version == 0 and v._is_view() and v._base is not None and x._base is None
+            v.add_(1)
+            x.mul_(2)
+            assert x._version == 2 and v._version == 2
+            assert not x.detach()._is_view() and x.detach()._version == 2
+            x.clone().add_(1)
+            assert x._version == 2
+
+    ERRORS = {
+        "leaf":                 (lambda lib, a: a.add_(1), "a leaf Variable that requires grad is being used in an in-place operation."),
+        "view of leaf":         (lambda lib, a: a[0].add_(1), "a view of a leaf Variable that requires grad"),
+        "saved input changed":  (lambda lib, a: TestInPlace.modify_saved_input(a * 1), "is at version 1; expected version 0 instead"),
+        "saved output changed": (lambda lib, a: a.exp().add_(1), "which is output 0 of Exp, is at version 1"),
+        "unbind output":        (lambda lib, a: (a * 1).unbind(0)[0].mul_(2), "Output 0 of Unbind is a view and is being modified inplace"),
+        "split output changed": (lambda lib, a: TestInPlace.split_then_base(a * 1), "its base or another view of its base has been modified inplace"),
+        "no_grad view":         (lambda lib, a: TestInPlace.no_grad_view(lib, a * 1).mul_(2), "A view was created in no_grad mode"),
+    }
+
+    @staticmethod
+    def modify_saved_input(x):
+        y = x.sin()
+        x.add_(1)
+        return y * x
+
+    @staticmethod
+    def split_then_base(x):
+        first = x.split(2)[0]
+        x.mul_(2)
+        return first
+
+    @staticmethod
+    def no_grad_view(lib, x):
+        with lib.no_grad():
+            return x[0]
+
+    @pytest.mark.parametrize("fn,message", ERRORS.values(), ids=ERRORS.keys())
+    def test_errors(self, fn, message):
+        for lib in (raxis, torch):
+            a = lib.tensor(self.A.tolist(), requires_grad=True)
+            with pytest.raises(RuntimeError, match=message):
+                fn(lib, a).sum().backward()
+
+    def test_self_as_both_inputs_keeps_the_original(self):
+        # x.mul_(x) saves x as self and as other. PyTorch copies only self
+        # and fails at backward; raxis copies both and gets the gradient
+        a = raxis.tensor(self.A.tolist(), requires_grad=True)
+        (a * 1).mul_(a * 1)  # distinct inputs: fine anywhere
+        x = a * 1
+        x.mul_(x).sum().backward()
+        check_match(a.grad, torch.from_numpy(2 * self.A))
+
+    def test_no_grad_inplace_on_leaf_bumps_version(self):
+        for lib in (raxis, torch):
+            w = lib.ones(3, requires_grad=True)
+            y = (w * w).sum()
+            with lib.no_grad():
+                w.sub_(1)  # an optimizer step
+            with pytest.raises(RuntimeError, match="modified by an inplace operation"):
+                y.backward()
+
+    def test_no_grad_view_requires_grad_without_edges(self):
+        for lib in (raxis, torch):
+            a = lib.ones(3, requires_grad=True)
+            x = a * 2
+            with lib.no_grad():
+                v = x[:2]
+            assert v.requires_grad and v.grad_fn is None
+            (v * 3).sum().backward()
+            assert a.grad is None
+
+    def test_inplace_does_not_leak_the_graph(self):
+        x = raxis.rand((4, 5), requires_grad=True)
+        y = x * 2
+        y.exp_()
+        y[1:3].mul_(3)
+        y.relu_()
+        assert y._use_count() == 1
+        base_view = y[0]
+        del base_view
+        assert y._use_count() == 1
 
 
 # ===========================================================================

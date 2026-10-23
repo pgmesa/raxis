@@ -477,7 +477,7 @@ AdvancedIndex make_advanced_index(const Tensor& src, ArrayRef<Tensor> indices) {
         shape.push_back(src.shape()[d]);
         strides.push_back(src.strides()[d]);
     }
-    info.src = make_view(src, src.storage_offset(), shape, strides);
+    info.src = make_view(src, src.storage_offset(), shape, strides, /*is_differentiable_view=*/false);
 
     // Each index as (1, ..., 1, *index_shape, 1, ..., 1)
     for (const Tensor& index : indices) {

@@ -1,5 +1,7 @@
 
 #include <raxis/ops/copy.h>
+#include <raxis/ops/fill.h>
+#include <raxis/ops/distribution_ops.h>
 #include <raxis/ops/cat_ops.h>
 #include <raxis/ops/scalar_ops.h>
 #include <raxis/ops/tensor_compare.h>
@@ -12,7 +14,9 @@
 
 #include <raxis/autograd/grad_mode.h>
 #include <raxis/autograd/variable.h>
+#include <raxis/autograd/functions/common.h>
 #include <raxis/autograd/functions/other_backward.h>
+#include <raxis/autograd/functions/tensor.h>
 
 
 namespace raxis {
@@ -46,6 +50,7 @@ Tensor stack(ArrayRef<Tensor> tensors, int64_t dim) {
 
 std::vector<Tensor> unbind(const Tensor& self, int64_t dim) {
     std::vector<Tensor> results = ops::unbind(self, dim);
+    autograd::mark_multi_output_views(results);
     if (autograd::requires_autograd(self)) {
         auto grad_fn = std::make_shared<autograd::UnbindBackward0>(
             self, dim, static_cast<int64_t>(results.size()));
@@ -62,6 +67,7 @@ std::vector<Tensor> unbind(const Tensor& self, int64_t dim) {
 // One multi-output node for split, split_with_sizes and chunk
 std::vector<Tensor> split_with_sizes(const Tensor& self, IntArrayRef split_sizes, int64_t dim) {
     std::vector<Tensor> results = ops::split_with_sizes(self, split_sizes, dim);
+    autograd::mark_multi_output_views(results);
     if (autograd::requires_autograd(self)) {
         auto grad_fn = std::make_shared<autograd::SplitWithSizesBackward0>(
             self, split_sizes, wrap_dim(dim, self.ndim()));
@@ -259,9 +265,8 @@ Tensor clamp(const Tensor& self, const std::optional<Tensor>& min, const std::op
 }
 
 Tensor& clamp_(Tensor& self, std::optional<Scalar> min, std::optional<Scalar> max) {
-    RAXIS_CHECK(!autograd::requires_autograd(self),
-        "a leaf Variable that requires grad is being used in an in-place operation (clamp_)");
-    return ops::clamp_(self, min, max);
+    return autograd::inplace_op<autograd::ClampBackward1>(self, {self},
+        [&] { ops::clamp_(self, min, max); }, self, min, max);
 }
 
 Tensor clamp_min(const Tensor& self, Scalar min) {
@@ -328,21 +333,21 @@ Tensor scatter_add(const Tensor& self, int64_t dim, const Tensor& index, const T
 }
 
 Tensor& scatter_(Tensor& self, int64_t dim, const Tensor& index, const Tensor& src) {
-    RAXIS_CHECK(!autograd::requires_autograd(self, src),
-        "a leaf Variable that requires grad is being used in an in-place operation (scatter_)");
-    return ops::scatter_(self, dim, index, src);
+    return autograd::inplace_op<autograd::ScatterBackward0>(self, {self, src},
+        [&] { ops::scatter_(self, dim, index, src); },
+        wrap_index_dim(dim, self), index, /*has_src=*/true);
 }
 
 Tensor& scatter_(Tensor& self, int64_t dim, const Tensor& index, Scalar value) {
-    RAXIS_CHECK(!autograd::requires_autograd(self),
-        "a leaf Variable that requires grad is being used in an in-place operation (scatter_)");
-    return ops::scatter_(self, dim, index, value);
+    return autograd::inplace_op<autograd::ScatterBackward0>(self, {self},
+        [&] { ops::scatter_(self, dim, index, value); },
+        wrap_index_dim(dim, self), index, /*has_src=*/false);
 }
 
 Tensor& scatter_add_(Tensor& self, int64_t dim, const Tensor& index, const Tensor& src) {
-    RAXIS_CHECK(!autograd::requires_autograd(self, src),
-        "a leaf Variable that requires grad is being used in an in-place operation (scatter_add_)");
-    return ops::scatter_add_(self, dim, index, src);
+    return autograd::inplace_op<autograd::ScatterAddBackward0>(self, {self, src},
+        [&] { ops::scatter_add_(self, dim, index, src); },
+        wrap_index_dim(dim, self), index);
 }
 
 Tensor index_select(const Tensor& self, int64_t dim, const Tensor& index) {
@@ -370,9 +375,9 @@ Tensor index_add(const Tensor& self, int64_t dim, const Tensor& index, const Ten
 }
 
 Tensor& index_add_(Tensor& self, int64_t dim, const Tensor& index, const Tensor& source) {
-    RAXIS_CHECK(!autograd::requires_autograd(self, source),
-        "a leaf Variable that requires grad is being used in an in-place operation (index_add_)");
-    return ops::index_add_(self, dim, index, source);
+    return autograd::inplace_op<autograd::IndexAddBackward0>(self, {self, source},
+        [&] { ops::index_add_(self, dim, index, source); },
+        wrap_index_dim(dim, self), index, source);
 }
 
 // ============================================================
@@ -402,9 +407,9 @@ Tensor index_put(const Tensor& self, ArrayRef<Tensor> indices, const Tensor& val
 }
 
 Tensor& index_put_(Tensor& self, ArrayRef<Tensor> indices, const Tensor& values, bool accumulate) {
-    RAXIS_CHECK(!autograd::requires_autograd(self, values),
-        "a leaf Variable that requires grad is being used in an in-place operation (index_put_)");
-    return ops::index_put_(self, indices, values, accumulate);
+    return autograd::inplace_op<autograd::IndexPutBackward0>(self, {self, values},
+        [&] { ops::index_put_(self, indices, values, accumulate); },
+        self, indices, values, accumulate);
 }
 
 // Integer output: never differentiable
@@ -424,14 +429,45 @@ Tensor masked_fill(const Tensor& self, const Tensor& mask, Scalar value) {
 }
 
 Tensor& masked_fill_(Tensor& self, const Tensor& mask, Scalar value) {
-    RAXIS_CHECK(!autograd::requires_autograd(self),
-        "a leaf Variable that requires grad is being used in an in-place operation (masked_fill_)");
-    return ops::masked_fill_(self, mask, value);
+    return autograd::inplace_op<autograd::MaskedFillBackward0>(self, {self},
+        [&] { ops::masked_fill_(self, mask, value); }, self, mask);
 }
 
 // ============================================================
 // Copies
 // ============================================================
+
+Tensor& copy_(Tensor& self, const Tensor& src) {
+    return autograd::inplace_op<autograd::CopyBackwards>(self, {self, src},
+        [&] { copy(src, self); }, self, src);
+}
+
+// In-place fills: the old values of self are gone, so its gradient is zero
+// (PyTorch names the nodes after the op)
+Tensor& fill_(Tensor& self, Scalar value) {
+    return autograd::inplace_op<autograd::ZeroBackward0>(self, {self},
+        [&] { ops::fill_(self, value); }, "FillBackward2");
+}
+
+Tensor& zero_(Tensor& self) {
+    return autograd::inplace_op<autograd::ZeroBackward0>(self, {self},
+        [&] { ops::zero_(self); }, "ZeroBackward0");
+}
+
+Tensor& uniform_(Tensor& self, double low, double high) {
+    return autograd::inplace_op<autograd::ZeroBackward0>(self, {self},
+        [&] { ops::uniform_(self, low, high); }, "UniformBackward0");
+}
+
+Tensor& normal_(Tensor& self, double mean, double std) {
+    return autograd::inplace_op<autograd::ZeroBackward0>(self, {self},
+        [&] { ops::normal_(self, mean, std); }, "NormalBackward0");
+}
+
+Tensor& randint_(Tensor& self, int64_t low, int64_t high) {
+    return autograd::inplace_op<autograd::ZeroBackward0>(self, {self},
+        [&] { ops::randint_(self, low, high); }, "RandomBackward0");
+}
 
 Tensor clone(const Tensor& self, MemoryFormat memory_format) {
     Tensor result = ops::clone(self, memory_format);

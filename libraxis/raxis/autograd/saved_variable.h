@@ -35,8 +35,12 @@ public:
 
     void save(const Tensor& tensor, bool is_output = false);
 
-    // Undefined if nothing was saved. Raises if it was saved and released.
+    // Undefined if nothing was saved. Raises if it was saved and released,
+    // or if an in-place op changed it after it was saved.
     const Tensor& unpack() const;
+
+    // Whether this holds `tensor` itself (not a copy or another view of it)
+    bool holds(const Tensor& tensor) const { return !released_ && data_.defined() && data_.is_same(tensor); }
 
     void release();
 
@@ -46,7 +50,12 @@ public:
 
 private:
     Tensor data_;
+    Node* owner_;
     const char* name_;
+    // Version of the memory of data_ when it was saved
+    uint32_t saved_version_ = 0;
+    uint32_t output_nr_ = 0;
+    bool is_output_ = false;
     bool was_saved_ = false;
     bool released_ = false;
 };

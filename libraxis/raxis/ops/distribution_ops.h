@@ -49,4 +49,12 @@ RAXIS_API Tensor& normal_(Tensor& self, double mean = 0.0, double std = 1.0);
 /// Fills tensor with integers drawn from U[low, high).
 RAXIS_API Tensor& randint_(Tensor& self, int64_t low, int64_t high);
 
+namespace ops {
+
+RAXIS_API Tensor& uniform_(Tensor& self, double low = 0.0, double high = 1.0);
+RAXIS_API Tensor& normal_(Tensor& self, double mean = 0.0, double std = 1.0);
+RAXIS_API Tensor& randint_(Tensor& self, int64_t low, int64_t high);
+
+} // namespace ops
+
 } // namespace raxis

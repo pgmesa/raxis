@@ -48,6 +48,9 @@ public:
     Node& operator=(Node&&) = delete;
 
     virtual std::string name() const = 0;
+
+    // The op whose backward this is, for error messages: MulBackward0 -> Mul
+    std::string forward_op_name() const;
     virtual TensorList apply(const TensorList& grads) = 0;
 
     void set_num_inputs(size_t n) { num_inputs_ = n; }
@@ -75,7 +78,7 @@ public:
     // Frees the saved tensors once the node ran in a backward without
     // retain_graph: memory goes down as the backward advances instead of
     // staying at its peak until the graph is dropped.
-    void release_variables();
+    virtual void release_variables();
 
     ArrayRef<SavedVariable*> saved_variables() const { return saved_variables_; }
 

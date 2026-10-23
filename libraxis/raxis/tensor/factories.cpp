@@ -20,6 +20,9 @@
 #include <raxis/tensor/detail/tensor_impl.h>
 #include <raxis/tensor/detail/tensor_data_container.h>
 
+#include <raxis/ops/fill.h>
+#include <raxis/ops/distribution_ops.h>
+
 
 namespace raxis {
 
@@ -139,7 +142,7 @@ Tensor full(IntArrayRef shape, Scalar value, TensorOptions options) {
     }
     Tensor out = empty(shape, options);
     if (out.numel() > 0) {
-        out.fill_(value);
+        ops::fill_(out, value);
     }
     return out;
 }
@@ -149,7 +152,7 @@ Tensor full_like(
 ) {
     Tensor out = empty_like(other, options, memory_format);
     if (out.numel() > 0) {
-        out.fill_(value);
+        ops::fill_(out, value);
     }
     return out;
 }
@@ -157,7 +160,7 @@ Tensor full_like(
 Tensor zeros(IntArrayRef shape, TensorOptions options) {
     Tensor out = empty(shape, options);
     if (out.numel() > 0) {
-        out.zero_();
+        ops::zero_(out);
     }
     return out;
 }
@@ -167,7 +170,7 @@ Tensor zeros_like(
 ) {
     Tensor out = empty_like(other, options, memory_format);
     if (out.numel() > 0) {
-        out.zero_();
+        ops::zero_(out);
     }
     return out;
 }
@@ -193,7 +196,8 @@ Tensor rand(IntArrayRef shape, TensorOptions options) {
         options.dtype().is_floating(),
         "rand requires a floating-point dtype, got ", options.dtype()
     );
-    return empty(shape, options).uniform_(0.0, 1.0);
+    Tensor out = empty(shape, options);
+    return ops::uniform_(out, 0.0, 1.0);
 }
 
 Tensor rand_like(
@@ -204,7 +208,7 @@ Tensor rand_like(
         out.dtype().is_floating(),
         "rand_like requires a floating-point dtype, got ", out.dtype()
     );
-    return out.uniform_(0.0, 1.0);
+    return ops::uniform_(out, 0.0, 1.0);
 }
 
 Tensor randn(IntArrayRef shape, TensorOptions options) {
@@ -215,7 +219,8 @@ Tensor randn(IntArrayRef shape, TensorOptions options) {
         options.dtype().is_floating(),
         "randn requires a floating-point dtype, got ", options.dtype()
     );
-    return empty(shape, options).normal_(0.0, 1.0);
+    Tensor out = empty(shape, options);
+    return ops::normal_(out, 0.0, 1.0);
 }
 
 Tensor randn_like(
@@ -226,7 +231,7 @@ Tensor randn_like(
         out.dtype().is_floating(),
         "randn_like requires a floating-point dtype, got ", out.dtype()
     );
-    return out.normal_(0.0, 1.0);
+    return ops::normal_(out, 0.0, 1.0);
 }
 
 Tensor randint(int64_t low, int64_t high, IntArrayRef shape, TensorOptions options) {
@@ -237,7 +242,8 @@ Tensor randint(int64_t low, int64_t high, IntArrayRef shape, TensorOptions optio
         options.dtype().is_integral(true),
         "randint requires an integral or bool dtype, got ", options.dtype()
     );
-    return empty(shape, options).randint_(low, high);
+    Tensor out = empty(shape, options);
+    return ops::randint_(out, low, high);
 }
 
 Tensor randint_like(
@@ -248,11 +254,12 @@ Tensor randint_like(
         out.dtype().is_integral(true),
         "randint_like requires an integral or bool dtype, got ", out.dtype()
     );
-    return out.randint_(low, high);
+    return ops::randint_(out, low, high);
 }
 
 Tensor scalar_tensor(Scalar s, TensorOptions options) {
-    return empty({}, options).fill_(s);
+    Tensor out = empty({}, options);
+    return ops::fill_(out, s);
 }
 
 Tensor tensor_from_scalars(

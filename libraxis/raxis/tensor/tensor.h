@@ -108,6 +108,7 @@ public:
     detail::TensorImpl* unsafe_get_tensor_impl() const;
     // Non-owning handle for structures that must not keep the tensor alive
     std::weak_ptr<detail::TensorImpl> weak_impl() const { return impl_; }
+    const std::shared_ptr<detail::TensorImpl>& impl_ptr() const { return impl_; }
     long use_count() const noexcept { return impl_.use_count(); }
     bool is_wrapped_number() const;
 
@@ -135,6 +136,15 @@ public:
     bool is_leaf() const;
     
     Tensor detach() const;
+
+    // Version of the memory: every in-place op on this tensor (or on a
+    // tensor sharing its memory) increments it
+    uint32_t version() const;
+
+    // Differentiable views: the tensor whose memory they share (undefined
+    // for a tensor that is not a view)
+    bool is_view() const;
+    Tensor base() const;
     
     void backward(const Tensor& grad = {}, bool retain_graph = false) const;
 

@@ -11,6 +11,7 @@
 
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/factories.h>
+#include <raxis/ops/copy.h>
 
 #include <raxis/util/exception.h>
 
@@ -32,10 +33,13 @@ void fill_contiguous(Tensor& self, int words_per_element, const Fill& fill) {
     }
     Tensor buffer = empty(self.shape(), self.options());
     fill(buffer, seed, offset);
-    self.copy_(buffer);
+    Tensor out = self;
+    copy(buffer, out);
 }
 
 } // namespace
+
+namespace ops {
 
 Tensor& uniform_(Tensor& self, double low, double high) {
     RAXIS_CHECK(
@@ -96,6 +100,8 @@ Tensor& randint_(Tensor& self, int64_t low, int64_t high) {
     });
     return self;
 }
+
+} // namespace ops
 
 
 DEFINE_DISPATCH(uniform_stub);

@@ -5,11 +5,15 @@
 
 namespace raxis {
 
+// A tensor that shares the memory of self with another geometry. A
+// differentiable view records its base (see TensorImpl::view_base); detach()
+// and the views that kernels make for themselves are not differentiable.
 RAXIS_API Tensor make_view(
     const Tensor& self,
     int64_t new_storage_offset,
     IntArrayRef new_shape,
-    IntArrayRef new_strides
+    IntArrayRef new_strides,
+    bool is_differentiable_view = true
 );
 RAXIS_API Tensor alias(const Tensor& self);
 RAXIS_API Tensor unsqueeze(const Tensor& self, int64_t dim);

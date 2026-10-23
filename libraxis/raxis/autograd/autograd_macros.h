@@ -62,23 +62,19 @@
 
 #define RAXIS_AUTOGRAD_UNARY_ALL_SAVE_NONE(op_name, BackwardNode)              \
     RAXIS_AUTOGRAD_UNARY_SAVE_NONE(op_name, BackwardNode)                      \
-    RAXIS_AUTOGRAD_INPLACE_GUARD_UNARY(op_name)
+    RAXIS_AUTOGRAD_INPLACE_UNARY(op_name, BackwardNode)
 
 #define RAXIS_AUTOGRAD_UNARY_ALL_SAVE_SELF(op_name, BackwardNode)              \
     RAXIS_AUTOGRAD_UNARY_SAVE_SELF(op_name, BackwardNode)                      \
-    RAXIS_AUTOGRAD_INPLACE_GUARD_UNARY(op_name)
+    RAXIS_AUTOGRAD_INPLACE_UNARY(op_name, BackwardNode, self)
 
 #define RAXIS_AUTOGRAD_UNARY_ALL_SAVE_RESULT(op_name, BackwardNode)            \
     RAXIS_AUTOGRAD_UNARY_SAVE_RESULT(op_name, BackwardNode)                    \
-    RAXIS_AUTOGRAD_INPLACE_GUARD_UNARY(op_name)
-
-#define RAXIS_AUTOGRAD_UNARY_ALL_SAVE_BOTH(op_name, BackwardNode)              \
-    RAXIS_AUTOGRAD_UNARY_SAVE_BOTH(op_name, BackwardNode)                      \
-    RAXIS_AUTOGRAD_INPLACE_GUARD_UNARY(op_name)
+    RAXIS_AUTOGRAD_INPLACE_UNARY_SAVE_RESULT(op_name, BackwardNode)
 
 #define RAXIS_AUTOGRAD_UNARY_ALL_NOT_IMPLEMENTED(op_name)                      \
     RAXIS_AUTOGRAD_UNARY_NOT_IMPLEMENTED(op_name)                              \
-    RAXIS_AUTOGRAD_INPLACE_GUARD_UNARY(op_name)
+    RAXIS_AUTOGRAD_INPLACE_UNARY(op_name, NotImplementedBackward, #op_name)
 
 #define RAXIS_AUTOGRAD_UNARY_ZERO_GRAD(op_name, grad_name)                     \
     Tensor op_name(const Tensor& self) {                                       \
@@ -92,7 +88,7 @@
         }                                                                      \
         return result;                                                         \
     }                                                                          \
-    RAXIS_AUTOGRAD_INPLACE_GUARD_UNARY(op_name)
+    RAXIS_AUTOGRAD_INPLACE_UNARY(op_name, ZeroBackward0, grad_name)
 
 // ============================================================
 // Binary ops: f(Tensor, Tensor) -> Tensor
@@ -140,38 +136,102 @@
 #define RAXIS_AUTOGRAD_BINARY_ALL(op_name, BackwardNode)                       \
     RAXIS_AUTOGRAD_BINARY(op_name, BackwardNode)                               \
     RAXIS_AUTOGRAD_BINARY_SCALAR(op_name, BackwardNode)                        \
-    RAXIS_AUTOGRAD_INPLACE_GUARD_BINARY_TENSOR(op_name)                        \
-    RAXIS_AUTOGRAD_INPLACE_GUARD_BINARY_SCALAR(op_name)
+    RAXIS_AUTOGRAD_INPLACE_BINARY(op_name, BackwardNode)                       \
+    RAXIS_AUTOGRAD_INPLACE_BINARY_SCALAR(op_name, BackwardNode)
 
 
 // ============================================================
-// In-place ops: guard against autograd misuse
+// In-place ops (the steps are described in autograd/variable.h)
 // ============================================================
 
-// In-place on a leaf tensor with requires_grad is always an error.
-// In-place on a non-leaf tensor in the graph is also an error (for now).
-// This can be relaxed later with version counters.
-
-#define RAXIS_AUTOGRAD_INPLACE_GUARD_UNARY(op_name)                            \
+// The node is built from the inputs before the kernel overwrites self;
+// __VA_ARGS__ are its constructor arguments
+#define RAXIS_AUTOGRAD_INPLACE_UNARY(op_name, BackwardNode, ...)               \
     Tensor& op_name##_(Tensor& self) {                                         \
-        RAXIS_CHECK(!autograd::requires_autograd(self),                        \
-            "a leaf Variable that requires grad is being used in an "          \
-            "in-place operation (", #op_name, "_)");                           \
-        return ops::op_name##_(self);                                          \
+        const bool requires_grad = autograd::requires_autograd(self);          \
+        autograd::check_inplace(self, requires_grad);                          \
+        std::shared_ptr<autograd::BackwardNode> grad_fn;                       \
+        if (requires_grad) {                                                   \
+            grad_fn = std::make_shared<autograd::BackwardNode>(__VA_ARGS__);   \
+            grad_fn->set_num_inputs(1);                                        \
+            autograd::set_next_edges(grad_fn, self);                           \
+            autograd::save_original_self(*grad_fn, self);                      \
+        }                                                                      \
+        ops::op_name##_(self);                                                 \
+        autograd::finish_inplace(self, grad_fn);                               \
+        return self;                                                           \
     }
 
-#define RAXIS_AUTOGRAD_INPLACE_GUARD_BINARY_TENSOR(op_name)                    \
+// The node saves the result: it is built after the kernel, from self at its
+// new version (the edge to the old history is taken before)
+#define RAXIS_AUTOGRAD_INPLACE_UNARY_SAVE_RESULT(op_name, BackwardNode)        \
+    Tensor& op_name##_(Tensor& self) {                                         \
+        const bool requires_grad = autograd::requires_autograd(self);          \
+        autograd::check_inplace(self, requires_grad);                          \
+        autograd::Edge self_edge;                                              \
+        if (requires_grad) {                                                   \
+            self_edge = autograd::gradient_edge(self);                         \
+        }                                                                      \
+        ops::op_name##_(self);                                                 \
+        autograd::bump_version(self);                                          \
+        if (requires_grad) {                                                   \
+            auto grad_fn = std::make_shared<autograd::BackwardNode>(self);     \
+            grad_fn->set_num_inputs(1);                                        \
+            grad_fn->add_next_edge(std::move(self_edge));                      \
+            autograd::rebase_history(self, grad_fn);                           \
+        }                                                                      \
+        return self;                                                           \
+    }
+
+#define RAXIS_AUTOGRAD_INPLACE_BINARY(op_name, BackwardNode)                   \
+    Tensor& op_name##_(Tensor& a, const Tensor& b) {                           \
+        const bool requires_grad = autograd::requires_autograd(a, b);          \
+        autograd::check_inplace(a, requires_grad);                             \
+        std::shared_ptr<autograd::BackwardNode> grad_fn;                       \
+        if (requires_grad) {                                                   \
+            grad_fn = std::make_shared<autograd::BackwardNode>(a, b);          \
+            grad_fn->set_num_inputs(1);                                        \
+            autograd::set_next_edges(grad_fn, a, b);                           \
+            autograd::save_original_self(*grad_fn, a);                         \
+        }                                                                      \
+        ops::op_name##_(a, b);                                                 \
+        autograd::finish_inplace(a, grad_fn);                                  \
+        return a;                                                              \
+    }
+
+#define RAXIS_AUTOGRAD_INPLACE_BINARY_SCALAR(op_name, BackwardNode)            \
+    Tensor& op_name##_(Tensor& a, Scalar s) {                                  \
+        const bool requires_grad = autograd::requires_autograd(a);             \
+        autograd::check_inplace(a, requires_grad);                             \
+        std::shared_ptr<autograd::BackwardNode> grad_fn;                       \
+        if (requires_grad) {                                                   \
+            Tensor b = wrapped_scalar_tensor(s);                               \
+            grad_fn = std::make_shared<autograd::BackwardNode>(a, b);          \
+            grad_fn->set_num_inputs(1);                                        \
+            autograd::set_next_edges(grad_fn, a, b);                           \
+            autograd::save_original_self(*grad_fn, a);                         \
+        }                                                                      \
+        ops::op_name##_(a, s);                                                 \
+        autograd::finish_inplace(a, grad_fn);                                  \
+        return a;                                                              \
+    }
+
+// In-place ops without a derivative: they raise if autograd would have to
+// record them, and otherwise only bump the version
+#define RAXIS_AUTOGRAD_INPLACE_NO_GRAD_BINARY_TENSOR(op_name)                  \
     Tensor& op_name##_(Tensor& a, const Tensor& b) {                           \
         RAXIS_CHECK(!autograd::requires_autograd(a, b),                        \
-            "a leaf Variable that requires grad is being used in an "          \
-            "in-place operation (", #op_name, "_)");                           \
-        return ops::op_name##_(a, b);                                          \
+            "the derivative for '", #op_name, "_' is not implemented");        \
+        ops::op_name##_(a, b);                                                 \
+        autograd::bump_version(a);                                             \
+        return a;                                                              \
     }
 
-#define RAXIS_AUTOGRAD_INPLACE_GUARD_BINARY_SCALAR(op_name)                    \
+#define RAXIS_AUTOGRAD_INPLACE_NO_GRAD_BINARY_SCALAR(op_name)                  \
     Tensor& op_name##_(Tensor& a, Scalar s) {                                  \
         RAXIS_CHECK(!autograd::requires_autograd(a),                           \
-            "a leaf Variable that requires grad is being used in an "          \
-            "in-place operation (", #op_name, "_)");                           \
-        return ops::op_name##_(a, s);                                          \
+            "the derivative for '", #op_name, "_' is not implemented");        \
+        ops::op_name##_(a, s);                                                 \
+        autograd::bump_version(a);                                             \
+        return a;                                                              \
     }
