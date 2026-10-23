@@ -90,7 +90,13 @@ TensorList AccumulateGrad::apply(const TensorList& grads) {
         return {};
     }
 
-    if (Tensor variable_grad = variable_.grad(); variable_grad.defined()) {
+    if (GradMode::is_enabled()) {
+        // create_graph: .grad is the recorded sum, a function of the inputs
+        // that can be differentiated again (never stolen nor in place)
+        Tensor variable_grad = variable_.grad();
+        variable_.set_grad(variable_grad.defined() ? variable_grad + grad
+                                                   : clone_obey_contract(grad, variable_));
+    } else if (Tensor variable_grad = variable_.grad(); variable_grad.defined()) {
         // In place, as PyTorch: .grad keeps its memory (and its layout)
         // across backward passes, and references to it see the sum
         variable_grad.add_(grad);
@@ -281,7 +287,9 @@ void save_original_self(Node& grad_fn, const Tensor& self) {
     for (SavedVariable* saved : grad_fn.saved_variables()) {
         if (saved->holds(self)) {
             if (!original.defined()) {
-                original = ops::clone(self);
+                // Recorded: with create_graph the saved values are
+                // differentiated too, through self's old history
+                original = ::raxis::clone(self);
             }
             saved->save(original);
         }

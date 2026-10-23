@@ -37,7 +37,7 @@ public:
 
     // Undefined if nothing was saved. Raises if it was saved and released,
     // or if an in-place op changed it after it was saved.
-    const Tensor& unpack() const;
+    Tensor unpack() const;
 
     // Whether this holds `tensor` itself (not a copy or another view of it)
     bool holds(const Tensor& tensor) const { return !released_ && data_.defined() && data_.is_same(tensor); }

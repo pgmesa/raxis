@@ -23,6 +23,8 @@ DECLARE_DISPATCH(softmax_backward_fn, log_softmax_backward_stub);
 
 RAXIS_API Tensor softmax(const Tensor& self, int64_t dim);
 RAXIS_API Tensor log_softmax(const Tensor& self, int64_t dim);
+RAXIS_API Tensor softmax_backward_data(const Tensor& grad, const Tensor& output, int64_t dim);
+RAXIS_API Tensor log_softmax_backward_data(const Tensor& grad, const Tensor& output, int64_t dim);
 
 namespace ops {
 

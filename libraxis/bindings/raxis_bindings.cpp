@@ -333,11 +333,15 @@ PYBIND11_MODULE(_C, c) {
         })
 
         .def("backward",
-            [](const raxis::Tensor& self, std::optional<raxis::Tensor> gradient, bool retain_graph) {
-                self.backward(gradient.value_or(raxis::Tensor{}), retain_graph);
+            [](const raxis::Tensor& self, std::optional<raxis::Tensor> gradient,
+               std::optional<bool> retain_graph, bool create_graph) {
+                if (create_graph) raxis::python::warn_backward_create_graph();
+                raxis::autograd::backward({self}, {gradient.value_or(raxis::Tensor{})},
+                                          retain_graph, create_graph);
             },
             py::arg("gradient") = py::none(),
-            py::arg("retain_graph") = false)
+            py::arg("retain_graph") = py::none(),
+            py::arg("create_graph") = false)
 
 
         .def("__getitem__", [](const raxis::Tensor& self, py::object idx) {
@@ -1574,6 +1578,27 @@ PYBIND11_MODULE(_C, c) {
         return raxis::index_put(input, raxis::python::optional_tensor_list(indices), values, accumulate);
     }, py::arg("input"), py::arg("indices"), py::arg("values"), py::arg("accumulate") = false);
     c.def("masked_fill", &raxis::masked_fill, py::arg("input"), py::arg("mask"), py::arg("value"));
+    // raxis.autograd.backward / grad (raxis/autograd/__init__.py)
+    c.def("_autograd_backward", [](const std::vector<raxis::Tensor>& tensors,
+                                   const std::vector<std::optional<raxis::Tensor>>& grad_tensors,
+                                   std::optional<bool> retain_graph, bool create_graph) {
+        if (create_graph) raxis::python::warn_backward_create_graph();
+        raxis::autograd::backward(tensors, raxis::python::optional_tensor_list(grad_tensors),
+                                  retain_graph, create_graph);
+    });
+    c.def("_autograd_grad", [](const std::vector<raxis::Tensor>& outputs,
+                               const std::vector<raxis::Tensor>& inputs,
+                               const std::vector<std::optional<raxis::Tensor>>& grad_outputs,
+                               std::optional<bool> retain_graph, bool create_graph, bool allow_unused) {
+        raxis::autograd::TensorList grads = raxis::autograd::grad(
+            outputs, inputs, raxis::python::optional_tensor_list(grad_outputs),
+            retain_graph, create_graph, allow_unused);
+        py::tuple result(grads.size());
+        for (size_t i = 0; i < grads.size(); i++) {
+            result[i] = grads[i].defined() ? py::cast(grads[i]) : py::none();
+        }
+        return result;
+    });
     c.def("nonzero", [](const raxis::Tensor& input) {
         return raxis::nonzero(input);
     }, py::arg("input"));

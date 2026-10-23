@@ -1,7 +1,11 @@
 #include <raxis/autograd/engine.h>
 
 #include <algorithm>
+#include <memory>
+#include <optional>
+#include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -33,11 +37,12 @@ bool can_accumulate_inplace(const Tensor& t) {
 // Sums the gradients that reach the same input of a node. In place when
 // possible: a parameter used by k ops gets k - 1 additions without
 // allocating k - 1 temporaries.
+// With create_graph the sum must be recorded: never in place.
 void accumulate(TensorList& buffer, size_t pos, Tensor&& grad) {
     Tensor& old = buffer[pos];
     if (!old.defined()) {
         old = std::move(grad);
-    } else if (can_accumulate_inplace(old)) {
+    } else if (!GradMode::is_enabled() && can_accumulate_inplace(old)) {
         old.add_(grad);
     } else {
         old = old + grad;
@@ -113,58 +118,143 @@ std::unordered_map<Node*, int> compute_dependencies(Node* root) {
     return dependencies;
 }
 
-} // namespace
+// From: torch/csrc/autograd/engine.cpp (GraphTask::init_to_execute)
+// For autograd.grad: the nodes that must run are those with a path to a
+// node whose gradient is captured. Post-order DFS with an explicit stack:
+// a node is needed if one of its children is needed or captured.
+std::unordered_set<Node*> nodes_to_execute(Node* root, const std::unordered_set<Node*>& captured) {
+    std::unordered_set<Node*> needed;
+    std::unordered_set<Node*> visited{root};
+    // (node, index of the next edge to look at)
+    std::vector<std::pair<Node*, size_t>> stack{{root, 0}};
+    while (!stack.empty()) {
+        auto& [node, next_edge] = stack.back();
+        const EdgeList& edges = node->next_edges();
+        if (next_edge < edges.size()) {
+            Node* child = edges[next_edge++].node.get();
+            if (child && visited.insert(child).second) {
+                stack.emplace_back(child, 0);
+            }
+            continue;
+        }
+        for (const Edge& edge : edges) {
+            Node* child = edge.node.get();
+            if (child && (needed.count(child) || captured.count(child))) {
+                needed.insert(node);
+                break;
+            }
+        }
+        stack.pop_back();
+    }
+    return needed;
+}
 
+// From: torch/csrc/autograd/functions/basic_ops.h (GraphRoot)
+// The root of a backward from several tensors: it hands each its gradient
+class GraphRoot : public Node {
+public:
+    GraphRoot(EdgeList roots, TensorList grads) : grads_(std::move(grads)) {
+        for (Edge& edge : roots) {
+            add_next_edge(std::move(edge));
+        }
+    }
+    std::string name() const override { return "GraphRoot"; }
+    TensorList apply(const TensorList&) override { return grads_; }
+
+private:
+    TensorList grads_;
+};
+
+// From: torch/csrc/autograd/autograd.cpp (_make_grads)
+TensorList make_grads(ArrayRef<Tensor> outputs, ArrayRef<Tensor> grad_outputs) {
+    RAXIS_CHECK(grad_outputs.empty() || grad_outputs.size() == outputs.size(),
+        "got ", outputs.size(), " tensors and ", grad_outputs.size(), " gradients");
+    TensorList grads;
+    for (size_t i = 0; i < outputs.size(); i++) {
+        const Tensor& output = outputs[i];
+        const Tensor grad = grad_outputs.empty() ? Tensor() : grad_outputs[i];
+        if (grad.defined()) {
+            RAXIS_CHECK(grad.shape() == output.shape(),
+                "Mismatch in shape: grad_output[", i, "] has a shape of ", grad.shape(),
+                " and output[", i, "] has a shape of ", output.shape(), ".");
+            grads.push_back(grad);
+            continue;
+        }
+        RAXIS_CHECK(output.numel() == 1, "grad can be implicitly created only for scalar outputs");
+        RAXIS_CHECK(output.dtype().is_floating(),
+            "grad can be computed only for real scalar outputs but got ", output.dtype());
+        grads.push_back(ones_like(output, {}, MemoryFormat::Contiguous));
+    }
+    return grads;
+}
 
 // From: torch/csrc/autograd/engine.cpp (Engine::execute, evaluate_function)
+//
 // Single-threaded version of PyTorch's engine. Instead of building a full
 // topological order first, each node waits in `not_ready` with its input
 // buffer until its dependency count drops to 0, and then moves to the ready
 // queue. Gradients are only kept for the nodes between the "frontier" and
 // the root, and buffers are freed as soon as their node runs.
-void run_backward(const Tensor& tensor, const Tensor& grad, bool retain_graph) {
-    RAXIS_CHECK(tensor.defined(),
-        "Tensor passed to backward is not defined");
-    RAXIS_CHECK(tensor.requires_grad(),
-        "Tensor does not require grad and does not have a grad_fn");
+//
+// With captures (autograd.grad), the gradient that reaches each captured
+// edge is returned, and only the nodes on a path to a captured edge run: a
+// leaf's AccumulateGrad is captured, not run, so .grad is left alone.
+TensorList execute(EdgeList roots, TensorList grads, bool keep_graph, bool create_graph,
+                   const EdgeList& captures) {
+    // The backward of the backward is recorded only with create_graph
+    GradModeGuard grad_mode(create_graph);
 
-    Tensor grad_output = grad;
-    if (!grad.defined()) {
-        RAXIS_CHECK(tensor.numel() == 1,
-            "grad can be implicitly created only for scalar outputs");
-        grad_output = ones_like(tensor);
+    // A single root gets its gradient directly in its input buffer
+    NodePtr root;
+    TensorList root_inputs;
+    if (roots.size() == 1) {
+        root = roots[0].node;
+        root_inputs.resize(root->num_inputs());
+        root_inputs[roots[0].input_nr] = std::move(grads[0]);
+    } else {
+        root = std::make_shared<GraphRoot>(std::move(roots), std::move(grads));
     }
 
-    RAXIS_CHECK(grad_output.shape() == tensor.shape(),
-        "Shape mismatch between grad and tensor");
-
-    NoGradGuard guard;
-
-    // Backward on a leaf: the graph is just its AccumulateGrad
-    if (!tensor.grad_fn()) {
-        // Moved in, so that an implicit ones_like can be stolen as .grad
-        TensorList inputs(1);
-        inputs[0] = std::move(grad_output);
-        call_function(*grad_accumulator(tensor), inputs);
-        return;
+    std::unordered_map<Node*, std::vector<std::pair<uint32_t, size_t>>> capture_slots;
+    std::unordered_set<Node*> captured_nodes;
+    for (size_t i = 0; i < captures.size(); i++) {
+        if (captures[i].node) {
+            capture_slots[captures[i].node.get()].emplace_back(captures[i].input_nr, i);
+            captured_nodes.insert(captures[i].node.get());
+        }
     }
+    const bool has_captures = !captures.empty();
+    const std::unordered_set<Node*> needed = has_captures
+        ? nodes_to_execute(root.get(), captured_nodes) : std::unordered_set<Node*>();
+    TensorList captured(captures.size());
 
-    NodePtr root = tensor.grad_fn();
     std::unordered_map<Node*, int> dependencies = compute_dependencies(root.get());
     std::unordered_map<Node*, TensorList> not_ready;
     ReadyQueue ready;
-
-    TensorList root_inputs(root->num_inputs());
-    root_inputs[tensor.output_nr()] = std::move(grad_output);
     ready.push({root, std::move(root_inputs)});
 
     while (!ready.empty()) {
         NodeTask task = ready.pop();
         Node& node = *task.node;
 
+        if (has_captures) {
+            const bool is_needed = needed.count(&node) > 0;
+            // The hooks of the captured tensor still run (call_function
+            // runs them for a node that is needed)
+            if (!is_needed) {
+                node.call_tensor_pre_hooks(task.inputs);
+            }
+            if (auto it = capture_slots.find(&node); it != capture_slots.end()) {
+                for (auto [input_nr, index] : it->second) {
+                    captured[index] = task.inputs[input_nr];
+                }
+            }
+            if (!is_needed) continue;
+        }
+
         TensorList outputs = call_function(node, task.inputs);
 
-        if (!retain_graph) {
+        if (!keep_graph) {
             node.release_variables();
         }
 
@@ -177,6 +267,7 @@ void run_backward(const Tensor& tensor, const Tensor& grad, bool retain_graph) {
             const Edge& edge = edges[i];
             if (!edge.is_valid()) continue;
             Node* next = edge.node.get();
+            if (has_captures && !needed.count(next) && !captured_nodes.count(next)) continue;
 
             // Undefined gradients still count as arrived: the node runs with
             // an undefined slot (an output of a multi-output op not used)
@@ -195,6 +286,55 @@ void run_backward(const Tensor& tensor, const Tensor& grad, bool retain_graph) {
             }
         }
     }
+    return captured;
+}
+
+EdgeList root_edges(ArrayRef<Tensor> tensors) {
+    EdgeList roots;
+    for (size_t i = 0; i < tensors.size(); i++) {
+        RAXIS_CHECK(tensors[i].defined(), "element ", i, " of tensors is not defined");
+        Edge edge = gradient_edge(tensors[i]);
+        RAXIS_CHECK(edge.is_valid(),
+            "element ", i, " of tensors does not require grad and does not have a grad_fn");
+        roots.push_back(std::move(edge));
+    }
+    return roots;
+}
+
+} // namespace
+
+
+void backward(ArrayRef<Tensor> tensors, ArrayRef<Tensor> grad_tensors,
+              std::optional<bool> retain_graph, bool create_graph) {
+    TensorList grads = make_grads(tensors, grad_tensors);
+    execute(root_edges(tensors), std::move(grads), retain_graph.value_or(create_graph), create_graph, {});
+}
+
+TensorList grad(ArrayRef<Tensor> outputs, ArrayRef<Tensor> inputs, ArrayRef<Tensor> grad_outputs,
+                std::optional<bool> retain_graph, bool create_graph, bool allow_unused) {
+    TensorList grads = make_grads(outputs, grad_outputs);
+    EdgeList captures;
+    for (size_t i = 0; i < inputs.size(); i++) {
+        RAXIS_CHECK(inputs[i].requires_grad(),
+            "One of the differentiated Tensors does not require grad");
+        captures.push_back(gradient_edge(inputs[i]));
+    }
+    TensorList result = execute(root_edges(outputs), std::move(grads),
+                                retain_graph.value_or(create_graph), create_graph, captures);
+    if (!allow_unused) {
+        for (const Tensor& g : result) {
+            RAXIS_CHECK(g.defined(),
+                "One of the differentiated Tensors appears to not have been used in the graph. "
+                "Set allow_unused=True if this is the desired behavior.");
+        }
+    }
+    return result;
+}
+
+void run_backward(const Tensor& tensor, const Tensor& grad, bool retain_graph, bool create_graph) {
+    RAXIS_CHECK(tensor.defined(), "Tensor passed to backward is not defined");
+    RAXIS_CHECK(tensor.requires_grad(), "element 0 of tensors does not require grad and does not have a grad_fn");
+    backward({tensor}, {grad}, retain_graph || create_graph, create_graph);
 }
 
 } // namespace raxis::autograd

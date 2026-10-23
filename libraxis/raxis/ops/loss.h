@@ -39,6 +39,11 @@ RAXIS_API Tensor binary_cross_entropy(const Tensor& self, const Tensor& target, 
 RAXIS_API Tensor binary_cross_entropy_with_logits(
     const Tensor& self, const Tensor& target, Reduction reduction = Reduction::Mean);
 
+// The backward kernel, differentiable in grad (NllLossBackwardBackward0)
+RAXIS_API Tensor nll_loss_backward(
+    const Tensor& grad, const Tensor& self, const Tensor& target, const Tensor& weight,
+    Reduction reduction, int64_t ignore_index, double total_weight);
+
 namespace ops {
 
 struct NllLossResult {

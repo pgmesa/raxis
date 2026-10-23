@@ -142,9 +142,9 @@ TensorList WhereBackward0::apply(const TensorList& grads) {
     const Tensor& grad = grads[0];
     Tensor grad_self, grad_other;
     if (self_requires_grad_)
-        grad_self = unbroadcast(ops::where(condition, grad, 0), self_shape_);
+        grad_self = unbroadcast(where(condition, grad, 0), self_shape_);
     if (other_requires_grad_)
-        grad_other = unbroadcast(ops::where(condition, 0, grad), other_shape_);
+        grad_other = unbroadcast(where(condition, 0, grad), other_shape_);
     return {grad_self, grad_other};
 }
 
@@ -182,28 +182,28 @@ TensorList ClampBackward0::apply(const TensorList& grads) {
         if (needs_grad_[0]) {
             const Tensor tie = self.eq(min).logical_or(self.eq(max)).logical_and(min_lt_max);
             const Tensor inactive = self.lt(min).logical_or(self.gt(max));
-            grad_self = ops::where(inactive, 0, ops::where(tie, half, grad));
+            grad_self = where(inactive, 0, where(tie, half, grad));
         }
         if (needs_grad_[1]) {
             const Tensor active = min_lt_max.logical_and(self.le(min))
                 .logical_or(min_eq_max.logical_and(self.lt(min)));
-            grad_min = ops::where(active.logical_not(), 0, ops::where(self.eq(min), half, grad));
+            grad_min = where(active.logical_not(), 0, where(self.eq(min), half, grad));
         }
         if (needs_grad_[2]) {
             const Tensor active = max.lt(min)
                 .logical_or(min_lt_max.logical_and(self.ge(max)))
                 .logical_or(min_eq_max.logical_and(self.gt(max)));
             const Tensor tie = self.eq(max).logical_and(min_lt_max);
-            grad_max = ops::where(active.logical_not(), 0, ops::where(tie, half, grad));
+            grad_max = where(active.logical_not(), 0, where(tie, half, grad));
         }
     } else if (min.defined()) {
-        const Tensor split = ops::where(self.eq(min), half, grad);
-        if (needs_grad_[0]) grad_self = ops::where(self.lt(min), 0, split);
-        if (needs_grad_[1]) grad_min = ops::where(self.gt(min), 0, split);
+        const Tensor split = where(self.eq(min), half, grad);
+        if (needs_grad_[0]) grad_self = where(self.lt(min), 0, split);
+        if (needs_grad_[1]) grad_min = where(self.gt(min), 0, split);
     } else {
-        const Tensor split = ops::where(self.eq(max), half, grad);
-        if (needs_grad_[0]) grad_self = ops::where(self.gt(max), 0, split);
-        if (needs_grad_[2]) grad_max = ops::where(self.lt(max), 0, split);
+        const Tensor split = where(self.eq(max), half, grad);
+        if (needs_grad_[0]) grad_self = where(self.gt(max), 0, split);
+        if (needs_grad_[2]) grad_max = where(self.lt(max), 0, split);
     }
 
     if (grad_self.defined()) grad_self = unbroadcast(grad_self, shapes_[0]);
@@ -228,11 +228,11 @@ TensorList ClampBackward1::apply(const TensorList& grads) {
     const Tensor& self = self_.unpack();
     const Tensor& grad = grads[0];
     if (min_ && max_) {
-        return {ops::where(self.gt(*min_).logical_and(self.lt(*max_)), grad, 0)};
+        return {where(self.gt(*min_).logical_and(self.lt(*max_)), grad, 0)};
     } else if (min_) {
-        return {ops::where(self.gt(*min_), grad, 0)};
+        return {where(self.gt(*min_), grad, 0)};
     } else if (max_) {
-        return {ops::where(self.lt(*max_), grad, 0)};
+        return {where(self.lt(*max_), grad, 0)};
     }
     return {grad};
 }
@@ -254,7 +254,7 @@ std::string GatherBackward0::name() const { return "GatherBackward0"; }
 // Elements read more than once accumulate their gradients
 TensorList GatherBackward0::apply(const TensorList& grads) {
     Tensor grad_self = zeros(self_shape_, grads[0].options());
-    return {ops::scatter_add_(grad_self, dim_, index_.unpack(), grads[0])};
+    return {scatter_add_(grad_self, dim_, index_.unpack(), grads[0])};
 }
 
 
@@ -271,11 +271,11 @@ std::string ScatterBackward0::name() const { return "ScatterBackward0"; }
 TensorList ScatterBackward0::apply(const TensorList& grads) {
     const Tensor& index = index_.unpack();
     const Tensor& grad = grads[0];
-    Tensor grad_self = ops::scatter(grad, dim_, index, 0);
+    Tensor grad_self = scatter(grad, dim_, index, 0);
     if (!has_src_) {
         return {grad_self};
     }
-    return {grad_self, ops::gather(grad, dim_, index)};
+    return {grad_self, gather(grad, dim_, index)};
 }
 
 
@@ -289,7 +289,7 @@ std::string ScatterAddBackward0::name() const { return "ScatterAddBackward0"; }
 
 TensorList ScatterAddBackward0::apply(const TensorList& grads) {
     const Tensor& grad = grads[0];
-    return {grad, ops::gather(grad, dim_, index_.unpack())};
+    return {grad, gather(grad, dim_, index_.unpack())};
 }
 
 
@@ -305,7 +305,7 @@ std::string IndexSelectBackward0::name() const { return "IndexSelectBackward0"; 
 // lookup of a repeated token)
 TensorList IndexSelectBackward0::apply(const TensorList& grads) {
     Tensor grad_self = zeros(self_shape_, grads[0].options());
-    return {ops::index_add_(grad_self, dim_, index_.unpack(), grads[0])};
+    return {index_add_(grad_self, dim_, index_.unpack(), grads[0])};
 }
 
 
@@ -319,7 +319,7 @@ std::string IndexAddBackward0::name() const { return "IndexAddBackward0"; }
 
 TensorList IndexAddBackward0::apply(const TensorList& grads) {
     const Tensor& grad = grads[0];
-    Tensor grad_source = ops::index_select(grad, dim_, index_.unpack());
+    Tensor grad_source = index_select(grad, dim_, index_.unpack());
     // A 0-d source was added as a single element
     if (source_shape_.empty()) {
         grad_source = grad_source.reshape({});
@@ -339,7 +339,7 @@ std::string IndexBackward0::name() const { return "IndexBackward0"; }
 // From: torch/csrc/autograd/FunctionsManual.cpp (index_backward)
 TensorList IndexBackward0::apply(const TensorList& grads) {
     Tensor grad_self = zeros(self_shape_, grads[0].options());
-    ops::index_put_(grad_self, indices_.unpack(), grads[0], /*accumulate=*/true);
+    index_put_(grad_self, indices_.unpack(), grads[0], /*accumulate=*/true);
     return {grad_self};
 }
 
@@ -366,10 +366,10 @@ TensorList IndexPutBackward0::apply(const TensorList& grads) {
     if (needs_grad_[0]) {
         grad_self = accumulate_
             ? grad
-            : ops::index_put(grad, indices, zeros(values_shape_, grad.options()));
+            : index_put(grad, indices, zeros(values_shape_, grad.options()));
     }
     if (needs_grad_[1]) {
-        grad_values = unbroadcast(ops::index(grad, indices), values_shape_);
+        grad_values = unbroadcast(index(grad, indices), values_shape_);
     }
     return {grad_self, grad_values};
 }
@@ -384,7 +384,7 @@ MaskedFillBackward0::MaskedFillBackward0(const Tensor& self, const Tensor& mask)
 std::string MaskedFillBackward0::name() const { return "MaskedFillBackward0"; }
 
 TensorList MaskedFillBackward0::apply(const TensorList& grads) {
-    return {unbroadcast(ops::masked_fill(grads[0], mask_.unpack(), 0), self_shape_)};
+    return {unbroadcast(masked_fill(grads[0], mask_.unpack(), 0), self_shape_)};
 }
 
 // ============================================================

@@ -336,4 +336,19 @@ inline py::object wrap_function_outputs(
     return is_tuple ? py::object(results) : py::object(results[0]);
 }
 
+// From: torch/csrc/autograd/engine.cpp (Engine::execute)
+// backward(create_graph=True) leaves .grad of each leaf with a graph that
+// ends in the leaf's AccumulateGrad, which holds the leaf: a cycle that is
+// only broken by setting .grad to None
+inline void warn_backward_create_graph() {
+    if (PyErr_WarnEx(PyExc_UserWarning,
+            "Using backward() with create_graph=True will create a reference cycle between the "
+            "parameter and its gradient which can cause a memory leak. We recommend using "
+            "autograd.grad when creating the graph to avoid this. If you have to use this "
+            "function, make sure to reset the .grad fields of your parameters to None after use "
+            "to break the cycle and avoid the leak.", 1) < 0) {
+        throw py::error_already_set();
+    }
+}
+
 } // namespace raxis::python

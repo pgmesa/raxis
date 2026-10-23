@@ -238,4 +238,16 @@ private:
     int64_t dim_;
 };
 
+// reversed_cumsum is only used by CumsumBackward0: this is its backward,
+// for create_graph
+class RAXIS_API ReversedCumsumBackward0 : public Node {
+public:
+    explicit ReversedCumsumBackward0(int64_t dim);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    int64_t dim_;
+};
+
 } // namespace raxis::autograd

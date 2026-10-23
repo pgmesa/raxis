@@ -183,6 +183,10 @@ RAXIS_API Tensor cumsum(
     std::optional<Dtype> dtype = std::nullopt
 );
 
+// The cumulative sum from the end along dim, as flip(cumsum(flip(x))) but
+// in one pass (the backward of cumsum)
+RAXIS_API Tensor reversed_cumsum(const Tensor& self, int64_t dim);
+
 /// Whether all / any elements over dim (all dims if empty) are nonzero.
 /// The result is bool, or uint8 for uint8 input (as PyTorch, for
 /// compatibility with the time before the bool dtype).
@@ -311,6 +315,10 @@ RAXIS_API Tensor cumsum(
     int64_t dim,
     std::optional<Dtype> dtype = std::nullopt
 );
+
+// The cumulative sum from the end along dim, as flip(cumsum(flip(x))) but
+// in one pass (the backward of cumsum)
+RAXIS_API Tensor reversed_cumsum(const Tensor& self, int64_t dim);
 
 /// Cumulative sum from the end of dim: self.flip(dim).cumsum(dim).flip(dim)
 /// in one pass, without the two flipped copies (the backward of cumsum).

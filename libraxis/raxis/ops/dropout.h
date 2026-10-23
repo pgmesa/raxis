@@ -29,6 +29,7 @@ DECLARE_DISPATCH(dropout_backward_fn, dropout_backward_stub);
 // so the expected value is unchanged. Identity when !train or p == 0.
 // Differentiable through NativeDropoutBackward0.
 RAXIS_API Tensor dropout(const Tensor& input, double p, bool train);
+RAXIS_API Tensor native_dropout_backward(const Tensor& grad, const Tensor& mask, double scale);
 
 namespace ops {
 

@@ -30,7 +30,7 @@ std::string AbsBackward0::name() const { return "AbsBackward0"; }
 
 // d|x|/dx = sign(x), with 0 at x = 0 (subgradient), as in torch
 TensorList AbsBackward0::apply(const TensorList& grads) {
-    return {grads[0] * ops::sign(self_.unpack())};
+    return {grads[0] * sign(self_.unpack())};
 }
 
 

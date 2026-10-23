@@ -18,6 +18,9 @@ DECLARE_DISPATCH(threshold_backward_fn, threshold_backward_stub);
 
 RAXIS_DECLARE_UNARY_ARITHMETIC(relu)
 
+// Differentiable through ThresholdBackwardBackward0 (double backward of relu)
+RAXIS_API Tensor threshold_backward(const Tensor& grad, const Tensor& self, Scalar threshold);
+
 namespace ops {
 
 // Gradient of relu-like ops: grad where self > threshold, 0 elsewhere.

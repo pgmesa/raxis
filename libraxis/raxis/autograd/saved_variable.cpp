@@ -7,6 +7,8 @@
 
 #include <raxis/util/exception.h>
 #include <raxis/autograd/graph.h>
+#include <raxis/autograd/grad_mode.h>
+#include <raxis/autograd/variable.h>
 
 
 namespace raxis::autograd {
@@ -36,7 +38,7 @@ void SavedVariable::save(const Tensor& tensor, bool is_output) {
 // From: torch/csrc/autograd/saved_variable.cpp (SavedVariable::unpack)
 // The backward formula needs the values the tensor had when it was saved:
 // if an in-place op wrote its memory since, the gradient would be wrong.
-const Tensor& SavedVariable::unpack() const {
+Tensor SavedVariable::unpack() const {
     RAXIS_CHECK(!released_, ERR_BACKWARD_TWICE);
     if (data_.defined() && data_.version() != saved_version_) {
         // An output is saved without its grad_fn (it would own this node):
@@ -53,6 +55,16 @@ const Tensor& SavedVariable::unpack() const {
         message << " is at version " << data_.version() << "; expected version "
                 << saved_version_ << " instead.";
         RAXIS_CHECK(false, message.str());
+    }
+    // From: torch/csrc/autograd/saved_variable.cpp (unpack with saved_for)
+    // With create_graph the backward formula is recorded, and it must see
+    // the output with its history. The node that saved it is its grad_fn:
+    // a new alias gets it for the duration of the backward (data_ itself
+    // must not hold it, or the node would own itself).
+    if (is_output_ && data_.defined() && GradMode::is_enabled()) {
+        Tensor output = data_.detach();
+        set_autograd_meta(output, owner_->shared_from_this(), output_nr_);
+        return output;
     }
     return data_;
 }

@@ -5,6 +5,7 @@
 #include <raxis/ops/copy.h>
 #include <raxis/tensor/factories.h>
 #include <raxis/tensor/tensor_shape.h>
+#include <raxis/autograd/grad_mode.h>
 #include <raxis/autograd/variable.h>
 
 
@@ -12,11 +13,18 @@ namespace raxis::autograd {
 
 namespace {
 
-// The elements of `geometry` within a buffer laid out as `base`
+// The elements of `geometry` within a buffer laid out as `base`, as
+// PyTorch's as_strided. With create_graph it is recorded: writing it goes
+// to the history of buffer (CopySlices), and reading it takes its slice of
+// the gradient of buffer (AsStridedBackward0).
 Tensor view_in(const Tensor& buffer, const TensorGeometry& base, const TensorGeometry& geometry,
                IntArrayRef shape) {
-    return make_view(buffer, buffer.storage_offset() + geometry.storage_offset - base.storage_offset,
-                     shape, geometry.strides, /*is_differentiable_view=*/false);
+    Tensor view = make_view(buffer, buffer.storage_offset() + geometry.storage_offset - base.storage_offset,
+                            shape, geometry.strides);
+    if (GradMode::is_enabled() && buffer.requires_grad()) {
+        refresh_view_grad_fn(view);
+    }
+    return view;
 }
 
 } // namespace
@@ -69,7 +77,7 @@ TensorList CopySlices::apply(const TensorList& grads) {
     // The base's gradient, laid out as the base so the view's geometry
     // finds its slice in it
     Tensor result = empty_strided(base_.shape, base_.strides, grad.options());
-    copy(grad, result);
+    result.copy_(grad);
     Tensor grad_slice = view_in(result, base_, view_, view_.shape);
 
     // fn may save its gradient input, and grad_slice is written below
@@ -78,7 +86,7 @@ TensorList CopySlices::apply(const TensorList& grads) {
         if (!res[i].defined()) continue;
         if (i == 0) {
             // The slice now holds the gradient through the op
-            copy(res[0], grad_slice);
+            grad_slice.copy_(res[0]);
             grad_inputs[0] = std::move(result);
         } else {
             grad_inputs[i] = std::move(res[i]);
@@ -123,7 +131,7 @@ TensorList AsStridedBackward0::apply(const TensorList& grads) {
     Tensor result = empty_strided(base_.shape, base_.strides, grad.options());
     result.zero_();
     Tensor slot = view_in(result, base_, view_, slot_shape);
-    copy(grad, slot);
+    slot.copy_(grad);
     return {result};
 }
 

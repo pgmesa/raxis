@@ -146,7 +146,10 @@ public:
     bool is_view() const;
     Tensor base() const;
     
-    void backward(const Tensor& grad = {}, bool retain_graph = false) const;
+    // retain_graph keeps the saved tensors for another backward;
+    // create_graph records the backward, so the gradients can be
+    // differentiated again (it implies retain_graph)
+    void backward(const Tensor& grad = {}, bool retain_graph = false, bool create_graph = false) const;
 
     // ===================== View operations ======================
     Tensor alias() const;

@@ -46,6 +46,13 @@ RAXIS_API Tensor batch_norm(
     const Tensor& running_mean, const Tensor& running_var,
     bool training, double momentum, double eps);
 
+// No double backward yet: recorded as NotImplementedBackward
+RAXIS_API std::tuple<Tensor, Tensor, Tensor> native_batch_norm_backward(
+    const Tensor& grad_output, const Tensor& input, const Tensor& weight,
+    const Tensor& running_mean, const Tensor& running_var,
+    const Tensor& save_mean, const Tensor& save_invstd,
+    bool training, double eps, std::array<bool, 3> output_mask);
+
 namespace ops {
 
 // Returns (output, save_mean, save_invstd); the last two are empty when not

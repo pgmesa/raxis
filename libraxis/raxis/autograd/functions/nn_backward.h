@@ -1,5 +1,9 @@
 #pragma once
 
+#include <array>
+#include <optional>
+
+#include <raxis/core/scalar.h>
 #include <raxis/autograd/graph.h>
 #include <raxis/autograd/saved_variable.h>
 #include <raxis/ops/dropout.h>
@@ -157,6 +161,114 @@ public:
 private:
     SavedVariable result1_{this, "result1"};
     double scale_;
+};
+
+
+// ============================================================
+// Double backward: the backward ops above as differentiable ops
+// ============================================================
+//
+// The backward of ReLU, softmax, ... runs a fused kernel (threshold_backward,
+// softmax_backward_data, ...). With create_graph that kernel is recorded
+// like any op, so it needs its own backward node (its entry in PyTorch's
+// derivatives.yaml). Kernels without one get NotImplementedBackward: the
+// error is raised if the second backward reaches them.
+
+class RAXIS_API ThresholdBackwardBackward0 : public Node {
+public:
+    ThresholdBackwardBackward0(const Tensor& grad_output, const Tensor& self, Scalar threshold);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    SavedVariable self_{this, "self"};
+    Scalar threshold_;
+    std::array<bool, 2> needs_grad_;
+};
+
+
+class RAXIS_API SoftmaxBackwardDataBackward0 : public Node {
+public:
+    SoftmaxBackwardDataBackward0(const Tensor& grad_output, const Tensor& output, int64_t dim);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    SavedVariable grad_output_{this, "grad_output"};
+    SavedVariable output_{this, "output"};
+    int64_t dim_;
+    std::array<bool, 2> needs_grad_;
+};
+
+
+class RAXIS_API LogSoftmaxBackwardDataBackward0 : public Node {
+public:
+    LogSoftmaxBackwardDataBackward0(const Tensor& grad_output, const Tensor& output, int64_t dim);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    SavedVariable grad_output_{this, "grad_output"};
+    SavedVariable output_{this, "output"};
+    int64_t dim_;
+    std::array<bool, 2> needs_grad_;
+};
+
+
+class RAXIS_API NativeDropoutBackwardBackward0 : public Node {
+public:
+    NativeDropoutBackwardBackward0(const Tensor& mask, double scale);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    SavedVariable mask_{this, "mask"};
+    double scale_;
+};
+
+
+class RAXIS_API NllLossBackwardBackward0 : public Node {
+public:
+    NllLossBackwardBackward0(const Tensor& self, const Tensor& target, const Tensor& weight,
+                             Reduction reduction, int64_t ignore_index);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    SavedVariable target_{this, "target"};
+    SavedVariable weight_{this, "weight"};
+    Reduction reduction_;
+    int64_t ignore_index_;
+    bool self_requires_grad_;
+};
+
+
+class RAXIS_API MaxPool2DWithIndicesBackwardBackward0 : public Node {
+public:
+    explicit MaxPool2DWithIndicesBackwardBackward0(const Tensor& indices);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    SavedVariable indices_{this, "indices"};
+};
+
+
+class RAXIS_API AvgPool2DBackwardBackward0 : public Node {
+public:
+    AvgPool2DBackwardBackward0(IntArrayRef kernel_size, IntArrayRef stride, IntArrayRef padding,
+                               bool ceil_mode, bool count_include_pad,
+                               std::optional<int64_t> divisor_override);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    SmallVector<int64_t, 2> kernel_size_;
+    SmallVector<int64_t, 2> stride_;
+    SmallVector<int64_t, 2> padding_;
+    bool ceil_mode_;
+    bool count_include_pad_;
+    std::optional<int64_t> divisor_override_;
 };
 
 } // namespace raxis::autograd

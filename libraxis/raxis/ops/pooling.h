@@ -53,6 +53,12 @@ RAXIS_API Tensor avg_pool2d(
     const Tensor& input, IntArrayRef kernel_size, IntArrayRef stride = {},
     IntArrayRef padding = {0}, bool ceil_mode = false, bool count_include_pad = true,
     std::optional<int64_t> divisor_override = std::nullopt);
+RAXIS_API Tensor max_pool2d_with_indices_backward(
+    const Tensor& grad_output, IntArrayRef input_shape, const Tensor& indices);
+RAXIS_API Tensor avg_pool2d_backward(
+    const Tensor& grad_output, IntArrayRef input_shape, IntArrayRef kernel_size,
+    IntArrayRef stride, IntArrayRef padding, bool ceil_mode, bool count_include_pad,
+    std::optional<int64_t> divisor_override);
 
 namespace ops {
 

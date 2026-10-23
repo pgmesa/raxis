@@ -301,8 +301,8 @@ Tensor Tensor::detach() const {
     return make_view(*this, storage_offset(), shape(), strides(), /*is_differentiable_view=*/false);
 }
 
-void Tensor::backward(const Tensor& grad, bool retain_graph) const {
-    autograd::run_backward(*this, grad, retain_graph);
+void Tensor::backward(const Tensor& grad, bool retain_graph, bool create_graph) const {
+    autograd::run_backward(*this, grad, retain_graph, create_graph);
 }
 
 // ===================== View operations ======================

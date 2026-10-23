@@ -9,6 +9,7 @@
 #include <raxis/tensor/shape_utils.h>
 
 #include <raxis/autograd/autograd_macros.h>
+#include <raxis/autograd/functions/common.h>
 #include <raxis/autograd/functions/nn_backward.h>
 
 
@@ -167,6 +168,146 @@ Tensor dropout(const Tensor& input, double p, bool train) {
         autograd::set_autograd_meta(result, grad_fn);
     }
     return result;
+}
+
+
+// ============================================================
+// Backward kernels (recorded with create_graph)
+// ============================================================
+
+Tensor threshold_backward(const Tensor& grad, const Tensor& self, Scalar threshold) {
+    Tensor result = ops::threshold_backward(grad, self, threshold);
+    if (autograd::requires_autograd(grad, self)) {
+        auto grad_fn = std::make_shared<autograd::ThresholdBackwardBackward0>(grad, self, threshold);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, grad, self);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor softmax_backward_data(const Tensor& grad, const Tensor& output, int64_t dim) {
+    Tensor result = ops::softmax_backward_data(grad, output, dim);
+    if (autograd::requires_autograd(grad, output)) {
+        auto grad_fn = std::make_shared<autograd::SoftmaxBackwardDataBackward0>(grad, output, dim);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, grad, output);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor log_softmax_backward_data(const Tensor& grad, const Tensor& output, int64_t dim) {
+    Tensor result = ops::log_softmax_backward_data(grad, output, dim);
+    if (autograd::requires_autograd(grad, output)) {
+        auto grad_fn = std::make_shared<autograd::LogSoftmaxBackwardDataBackward0>(grad, output, dim);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, grad, output);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor native_dropout_backward(const Tensor& grad, const Tensor& mask, double scale) {
+    Tensor result = ops::native_dropout_backward(grad, mask, scale);
+    if (autograd::requires_autograd(grad)) {
+        auto grad_fn = std::make_shared<autograd::NativeDropoutBackwardBackward0>(mask, scale);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, grad);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor nll_loss_backward(
+    const Tensor& grad, const Tensor& self, const Tensor& target, const Tensor& weight,
+    Reduction reduction, int64_t ignore_index, double total_weight
+) {
+    Tensor result = ops::nll_loss_backward(grad, self, target, weight, reduction, ignore_index, total_weight);
+    if (autograd::requires_autograd(grad, self)) {
+        auto grad_fn = std::make_shared<autograd::NllLossBackwardBackward0>(
+            self, target, weight, reduction, ignore_index);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, grad, self);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor max_pool2d_with_indices_backward(
+    const Tensor& grad_output, IntArrayRef input_shape, const Tensor& indices
+) {
+    Tensor result = ops::max_pool2d_with_indices_backward(grad_output, input_shape, indices);
+    if (autograd::requires_autograd(grad_output)) {
+        auto grad_fn = std::make_shared<autograd::MaxPool2DWithIndicesBackwardBackward0>(indices);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, grad_output);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor avg_pool2d_backward(
+    const Tensor& grad_output, IntArrayRef input_shape, IntArrayRef kernel_size,
+    IntArrayRef stride, IntArrayRef padding, bool ceil_mode, bool count_include_pad,
+    std::optional<int64_t> divisor_override
+) {
+    Tensor result = ops::avg_pool2d_backward(grad_output, input_shape, kernel_size, stride, padding,
+                                             ceil_mode, count_include_pad, divisor_override);
+    if (autograd::requires_autograd(grad_output)) {
+        auto grad_fn = std::make_shared<autograd::AvgPool2DBackwardBackward0>(
+            kernel_size, stride, padding, ceil_mode, count_include_pad, divisor_override);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, grad_output);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+// The outputs of a backward kernel without a double backward: a second
+// backward through them raises, instead of treating them as constants
+static void set_not_implemented(std::initializer_list<Tensor*> outputs, ArrayRef<Tensor> inputs,
+                                const char* op_name) {
+    auto grad_fn = std::make_shared<autograd::NotImplementedBackward>(op_name);
+    grad_fn->set_num_inputs(outputs.size());
+    autograd::set_next_edges(grad_fn, inputs);
+    uint32_t output_nr = 0;
+    for (Tensor* output : outputs) {
+        if (output->defined()) {
+            autograd::set_autograd_meta(*output, grad_fn, output_nr);
+        }
+        output_nr++;
+    }
+}
+
+std::tuple<Tensor, Tensor, Tensor> convolution_backward(
+    const Tensor& grad_output, const Tensor& input, const Tensor& weight,
+    IntArrayRef stride, IntArrayRef padding, IntArrayRef dilation, int64_t groups,
+    std::array<bool, 3> output_mask
+) {
+    auto [grad_input, grad_weight, grad_bias] = ops::convolution_backward(
+        grad_output, input, weight, stride, padding, dilation, groups, output_mask);
+    if (autograd::requires_autograd({grad_output, input, weight})) {
+        set_not_implemented({&grad_input, &grad_weight, &grad_bias}, {grad_output, input, weight},
+                            "convolution_backward");
+    }
+    return {grad_input, grad_weight, grad_bias};
+}
+
+std::tuple<Tensor, Tensor, Tensor> native_batch_norm_backward(
+    const Tensor& grad_output, const Tensor& input, const Tensor& weight,
+    const Tensor& running_mean, const Tensor& running_var,
+    const Tensor& save_mean, const Tensor& save_invstd,
+    bool training, double eps, std::array<bool, 3> output_mask
+) {
+    auto [grad_input, grad_weight, grad_bias] = ops::native_batch_norm_backward(
+        grad_output, input, weight, running_mean, running_var, save_mean, save_invstd,
+        training, eps, output_mask);
+    if (autograd::requires_autograd({grad_output, input, weight})) {
+        set_not_implemented({&grad_input, &grad_weight, &grad_bias}, {grad_output, input, weight},
+                            "native_batch_norm_backward");
+    }
+    return {grad_input, grad_weight, grad_bias};
 }
 
 } // namespace raxis

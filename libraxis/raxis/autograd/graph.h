@@ -36,7 +36,7 @@ struct RAXIS_API Edge {
 // Thread-local counter that orders nodes by creation time
 RAXIS_API uint64_t next_sequence_nr();
 
-class RAXIS_API Node {
+class RAXIS_API Node : public std::enable_shared_from_this<Node> {
 public:
     Node() : sequence_nr_(next_sequence_nr()) {}
     explicit Node(uint64_t sequence_nr) : sequence_nr_(sequence_nr) {}

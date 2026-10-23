@@ -1223,6 +1223,206 @@ class TestFunction:
 
 
 # ===========================================================================
+# HIGHER-ORDER GRADIENTS (create_graph, autograd.grad)
+# ===========================================================================
+
+F_ = raxis.nn.functional
+
+# (name, input shape, op). Inputs are positive, and away from 0 and 1 so
+# that log, sqrt, acos, ... are defined
+RECORDED_OPS = [
+    ("neg", (3, 4), lambda x: -x),
+    ("abs", (3, 4), lambda x: x.abs()),
+    ("exp", (3, 4), lambda x: x.exp()),
+    ("log", (3, 4), lambda x: x.log()),
+    ("sqrt", (3, 4), lambda x: x.sqrt()),
+    ("sin", (3, 4), lambda x: x.sin()),
+    ("tanh", (3, 4), lambda x: x.tanh()),
+    ("sigmoid", (3, 4), lambda x: x.sigmoid()),
+    ("relu", (3, 4), lambda x: (x - 0.5).relu()),
+    ("reciprocal", (3, 4), lambda x: x.reciprocal()),
+    ("asin", (3, 4), lambda x: (x * 0.5).asin()),
+    ("pow scalar", (3, 4), lambda x: x ** 3),
+    ("pow tensor", (3, 4), lambda x: x ** x),
+    ("add", (3, 4), lambda x: x + x * 2),
+    ("sub", (3, 4), lambda x: x - x * 2),
+    ("mul", (3, 4), lambda x: x * x),
+    ("div", (3, 4), lambda x: x / (x + 1)),
+    ("maximum", (3, 4), lambda x: raxis.maximum(x, x * 0.5 + 0.2)),
+    ("matmul", (3, 4), lambda x: x.matmul(x.transpose(0, 1))),
+    ("bmm", (2, 3, 3), lambda x: x.bmm(x)),
+    ("sum dim", (3, 4), lambda x: x.sum(1)),
+    ("mean", (3, 4), lambda x: x.mean(0)),
+    ("var", (3, 4), lambda x: x.var(1)),
+    ("std", (3, 4), lambda x: x.std(0)),
+    ("max dim", (3, 4), lambda x: x.max(1)[0]),
+    ("max", (3, 4), lambda x: x.max()),
+    ("cumsum", (3, 4), lambda x: x.cumsum(1)),
+    ("view", (3, 4), lambda x: x.view(4, 3)),
+    ("transpose", (3, 4), lambda x: x.transpose(0, 1)),
+    ("expand", (3, 1), lambda x: x.expand(3, 4)),
+    ("select slice", (3, 4), lambda x: x[1, 1:3]),
+    ("cat", (3, 4), lambda x: raxis.cat([x, x * 2], 0)),
+    ("stack", (3, 4), lambda x: raxis.stack([x, x * 2], 0)),
+    ("unbind", (3, 4), lambda x: x.unbind(0)[1]),
+    ("split", (3, 4), lambda x: x.split(2, 1)[1]),
+    ("where", (3, 4), lambda x: raxis.where(x > 0.7, x, x * 3)),
+    ("clamp", (3, 4), lambda x: x.clamp(0.3, 0.8)),
+    ("gather", (3, 4), lambda x: x.gather(1, raxis.tensor([[0, 0], [1, 3], [2, 2]]))),
+    ("scatter", (3, 4), lambda x: x.scatter(1, raxis.tensor([[0], [1], [2]]), x[:, :1] * 2)),
+    ("index_select", (3, 4), lambda x: x.index_select(0, raxis.tensor([2, 0, 2]))),
+    ("index_add", (3, 4), lambda x: x.index_add(0, raxis.tensor([1, 1]), x[:2] * 2)),
+    ("advanced index", (3, 4), lambda x: x[raxis.tensor([0, 2, 0]), 1:]),
+    ("masked_fill", (3, 4), lambda x: x.masked_fill(x > 0.7, 0.0)),
+    ("index_put", (3, 4), lambda x: x.index_put((raxis.tensor([0, 0]),), x[1] * 3, accumulate=True)),
+    ("inplace on view", (3, 4), lambda x: TestCreateGraph.inplace_on_view(x)),
+    ("softmax", (3, 4), lambda x: x.softmax(1)),
+    ("log_softmax", (3, 4), lambda x: x.log_softmax(1)),
+    ("nll_loss", (3, 4), lambda x: F_.nll_loss(x.log_softmax(1), raxis.tensor([0, 3, 1]))),
+    ("cross_entropy", (3, 4), lambda x: F_.cross_entropy(x, raxis.tensor([0, 3, 1]))),
+    ("mse_loss", (3, 4), lambda x: F_.mse_loss(x, raxis.ones(3, 4))),
+    ("bce", (3, 4), lambda x: F_.binary_cross_entropy(x.sigmoid(), raxis.ones(3, 4) * 0.5)),
+    ("max_pool2d", (1, 1, 4, 4), lambda x: F_.max_pool2d(x, 2)),
+    ("avg_pool2d", (1, 1, 4, 4), lambda x: F_.avg_pool2d(x, 2)),
+    ("dropout", (3, 4), lambda x: F_.dropout(x, 0.5, True)),
+    ("custom Function", (3, 4), lambda x: TestCreateGraph.Cube.apply(x)),
+]
+
+
+class TestCreateGraph:
+
+    class Cube(raxis.autograd.Function):
+        @staticmethod
+        def forward(ctx, x):
+            ctx.save_for_backward(x)
+            return x ** 3
+
+        @staticmethod
+        def backward(ctx, grad):
+            x, = ctx.saved_tensors
+            return 3 * grad * x ** 2
+
+    @staticmethod
+    def inplace_on_view(x):
+        y = x * 1
+        y[1:].mul_(x[1:])
+        return y
+
+    @pytest.mark.parametrize("shape,op", [(s, op) for _, s, op in RECORDED_OPS],
+                             ids=[name for name, _, _ in RECORDED_OPS])
+    def test_backward_formula_is_recorded(self, shape, op):
+        """With create_graph the gradient of (op(x) * w).sum() is J^T w: it
+        depends on w for every op, so it must require grad. A backward formula
+        that called a kernel without recording it would return a constant
+        (a silent zero second derivative)."""
+        x = raxis.tensor(randf(*shape, seed=1, lo=0.2, hi=0.9).tolist(), requires_grad=True)
+        out = op(x)
+        w = raxis.tensor(randf(*out.shape, seed=2).tolist(), requires_grad=True)
+        g, = raxis.autograd.grad((out * w).sum(), x, create_graph=True)
+        assert g.requires_grad and g.grad_fn is not None
+
+    HEADS = {
+        "sum sq":          lambda lib, y: (y * y).sum(),
+        "softmax":         lambda lib, y: (y.softmax(1) * lib.tensor([[1.0, 2.0, 3.0]])).sum(),
+        "log_softmax nll": lambda lib, y: lib.nn.functional.nll_loss(y.log_softmax(1), lib.tensor([0, 2, 1, 1, 0])),
+        "cross_entropy":   lambda lib, y: lib.nn.functional.cross_entropy(y, lib.tensor([0, 2, 1, 1, 0])),
+        "mse":             lambda lib, y: lib.nn.functional.mse_loss(y, lib.ones(5, 3)),
+    }
+    ACTIVATIONS = {
+        "tanh":    lambda z: z.tanh(),
+        "relu":    lambda z: z.relu(),
+        "sigmoid": lambda z: z.sigmoid(),
+    }
+
+    @staticmethod
+    def hessian_vector_product(lib, act, head):
+        rng = np.random.default_rng(0)
+        x = lib.tensor(rng.standard_normal((5, 4)).astype(np.float32).tolist())
+        w1 = lib.tensor((rng.standard_normal((4, 6)) * 0.5).astype(np.float32).tolist(), requires_grad=True)
+        w2 = lib.tensor((rng.standard_normal((6, 3)) * 0.5).astype(np.float32).tolist(), requires_grad=True)
+        v = lib.tensor(rng.standard_normal((4, 6)).astype(np.float32).tolist())
+        loss = head(lib, act(x.matmul(w1)).matmul(w2))
+        g1, = lib.autograd.grad(loss, w1, create_graph=True)
+        hv1, hv2 = lib.autograd.grad((g1 * v).sum(), (w1, w2))
+        return g1, hv1, hv2
+
+    @pytest.mark.parametrize("act", ACTIVATIONS.keys())
+    @pytest.mark.parametrize("head", HEADS.keys())
+    def test_hessian_vector_product(self, act, head):
+        r = self.hessian_vector_product(raxis, self.ACTIVATIONS[act], self.HEADS[head])
+        t = self.hessian_vector_product(torch, self.ACTIVATIONS[act], self.HEADS[head])
+        for r_g, t_g in zip(r, t):
+            check_match(r_g, t_g, atol=1e-4, rtol=1e-3)
+
+    @staticmethod
+    def scenarios(lib):
+        out = {}
+        x = lib.tensor([1.0, 2.0, 3.0], requires_grad=True)
+        g, = lib.autograd.grad((x ** 3).sum(), x, create_graph=True)
+        gg, = lib.autograd.grad(g.sum(), x)
+        out["third power"] = (g.tolist(), gg.tolist())
+
+        # backward(create_graph=True) leaves a differentiable .grad
+        y = lib.tensor([1.0, 2.0], requires_grad=True)
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # the reference cycle warning
+            (y.sin() * y).sum().backward(create_graph=True)
+        grad_y = y.grad
+        out[".grad requires grad"] = grad_y.requires_grad
+        y.grad = None
+        grad_y.sum().backward()
+        out["second derivative"] = [round(v, 5) for v in y.grad.tolist()]
+
+        a = lib.tensor([1.0, 2.0], requires_grad=True)
+        b = lib.tensor([3.0, 4.0], requires_grad=True)
+        ga, gb = lib.autograd.grad((a * a).sum(), (a, b), allow_unused=True)
+        out["unused"] = (ga.tolist(), gb, a.grad)
+        out["materialize"] = lib.autograd.grad((a * a).sum(), (a, b), materialize_grads=True)[1].tolist()
+        h = a * 3
+        out["intermediate"] = lib.autograd.grad((h * h).sum(), h)[0].tolist()
+        u, v = a * 2, a * a
+        out["several outputs"] = lib.autograd.grad(
+            (u, v), a, grad_outputs=(lib.tensor([1.0, 1.0]), lib.tensor([2.0, 3.0])))[0].tolist()
+
+        # gradient penalty
+        w = lib.tensor([[0.5, -1.0], [2.0, 0.3]], requires_grad=True)
+        inp = lib.tensor([[1.0, 2.0]], requires_grad=True)
+        gi, = lib.autograd.grad(inp.matmul(w).tanh().sum(), inp, create_graph=True)
+        (((gi * gi).sum() - 1) ** 2).backward()
+        out["gradient penalty"] = np.round(np.asarray(w.grad.tolist()), 5).tolist()
+        return out
+
+    def test_scenarios_match_torch(self):
+        assert self.scenarios(raxis) == self.scenarios(torch)
+
+    def test_errors(self):
+        for lib in (raxis, torch):
+            a = lib.tensor([1.0, 2.0], requires_grad=True)
+            b = lib.tensor([3.0, 4.0], requires_grad=True)
+            with pytest.raises(RuntimeError, match="appears to not have been used in the graph"):
+                lib.autograd.grad((a * a).sum(), (a, b))
+            with pytest.raises(RuntimeError, match="does not require grad"):
+                lib.autograd.grad((a * a).sum(), lib.tensor([1.0]))
+            with pytest.raises(RuntimeError, match="Mismatch in shape"):
+                lib.autograd.grad(a * a, a, grad_outputs=lib.ones(3))
+
+    def test_double_backward_not_implemented_raises(self):
+        x = raxis.rand((1, 1, 5, 5), requires_grad=True)
+        w = raxis.rand((1, 1, 3, 3), requires_grad=True)
+        g, = raxis.autograd.grad(raxis.conv2d(x, w).sum(), w, create_graph=True)
+        assert g.requires_grad
+        with pytest.raises(RuntimeError, match="derivative for 'convolution_backward' is not implemented"):
+            raxis.autograd.grad(g.sum(), x)
+
+    def test_grad_does_not_touch_dot_grad(self):
+        w = raxis.tensor([1.0, 2.0], requires_grad=True)
+        other = raxis.tensor([1.0], requires_grad=True)
+        raxis.autograd.grad((w * w).sum() + other.sum(), w)
+        assert w.grad is None and other.grad is None
+
+
+# ===========================================================================
 # NO_GRAD / ENABLE_GRAD
 # ===========================================================================
 

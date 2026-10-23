@@ -241,7 +241,7 @@ std::string StdBackward0::name() const { return "StdBackward0"; }
 // std = sqrt(var): d std = d var / (2 std), and 0 where std is 0
 TensorList StdBackward0::apply(const TensorList& grads) {
     Tensor result = result_.unpack();
-    Tensor grad_var = ops::where(result.eq(0.0), 0, grads[0] / (result * 2.0));
+    Tensor grad_var = where(result.eq(0.0), 0, grads[0] / (result * 2.0));
     return {var_backward(grad_var, self_.unpack(), dim_, correction_, keepdim_)};
 }
 
@@ -264,7 +264,7 @@ TensorList MaxBackward0::apply(const TensorList& grads) {
         indices = indices.unsqueeze(dim_);
     }
     Tensor grad_self = zeros(self_shape_, grad.options());
-    return {ops::scatter_(grad_self, dim_, indices, grad)};
+    return {scatter_(grad_self, dim_, indices, grad)};
 }
 
 MaxBackward1::MaxBackward1(const Tensor& self, const Tensor& result) {
@@ -376,7 +376,17 @@ TensorList CumsumBackward0::apply(const TensorList& grads) {
     if (grad.numel() <= 1 || grad.ndim() == 0 || grad.shape()[wrap_dim(dim_, grad.ndim())] == 1) {
         return {grad};
     }
-    return {ops::reversed_cumsum(grad, dim_)};
+    return {reversed_cumsum(grad, dim_)};
+}
+
+
+ReversedCumsumBackward0::ReversedCumsumBackward0(int64_t dim) : dim_(dim) {}
+
+std::string ReversedCumsumBackward0::name() const { return "ReversedCumsumBackward0"; }
+
+// The transpose of a sum from the end is a sum from the start
+TensorList ReversedCumsumBackward0::apply(const TensorList& grads) {
+    return {cumsum(grads[0], dim_)};
 }
 
 } // namespace raxis::autograd

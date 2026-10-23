@@ -57,6 +57,12 @@ RAXIS_API Tensor conv2d(
     IntArrayRef stride = {1}, IntArrayRef padding = {0}, IntArrayRef dilation = {1},
     int64_t groups = 1);
 
+// No double backward yet: recorded as NotImplementedBackward
+RAXIS_API std::tuple<Tensor, Tensor, Tensor> convolution_backward(
+    const Tensor& grad_output, const Tensor& input, const Tensor& weight,
+    IntArrayRef stride, IntArrayRef padding, IntArrayRef dilation, int64_t groups,
+    std::array<bool, 3> output_mask);
+
 namespace ops {
 
 // From: aten/src/ATen/native/Convolution.cpp (_convolution, Slow2d backend)
