@@ -23,6 +23,7 @@
 #include "casters.h"
 #include "numpy_utils.h"
 #include "python_tensor_factory.h"
+#include "python_indexing.h"
 
 
 namespace py = pybind11;
@@ -844,6 +845,29 @@ PYBIND11_MODULE(_C, c) {
         .def("index_add_", [](raxis::Tensor& self, int64_t dim, const raxis::Tensor& index, const raxis::Tensor& source) -> raxis::Tensor& {
             return raxis::index_add_(self, dim, index, source);
         }, py::arg("dim"), py::arg("index"), py::arg("source"))
+        .def("index_put", [](const raxis::Tensor& self, const std::vector<std::optional<raxis::Tensor>>& indices,
+               const raxis::Tensor& values, bool accumulate) {
+            return raxis::index_put(self, raxis::python::optional_tensor_list(indices), values, accumulate);
+        }, py::arg("indices"), py::arg("values"), py::arg("accumulate") = false)
+        .def("index_put_", [](raxis::Tensor& self, const std::vector<std::optional<raxis::Tensor>>& indices,
+               const raxis::Tensor& values, bool accumulate) -> raxis::Tensor& {
+            return raxis::index_put_(self, raxis::python::optional_tensor_list(indices), values, accumulate);
+        }, py::arg("indices"), py::arg("values"), py::arg("accumulate") = false)
+        .def("masked_fill", &raxis::masked_fill, py::arg("mask"), py::arg("value"))
+        .def("masked_fill_", [](raxis::Tensor& self, const raxis::Tensor& mask, raxis::Scalar value) -> raxis::Tensor& {
+            return raxis::masked_fill_(self, mask, value);
+        }, py::arg("mask"), py::arg("value"))
+        .def("nonzero", [](const raxis::Tensor& self, bool as_tuple) -> py::object {
+            if (!as_tuple) return py::cast(raxis::nonzero(self));
+            // One index tensor per dim, ready for x[...]; a 0-d tensor counts as 1-d
+            raxis::Tensor input = self.ndim() == 0 ? self.reshape({1}) : self;
+            raxis::Tensor result = raxis::nonzero(input);
+            py::tuple columns(input.ndim());
+            for (int64_t j = 0; j < input.ndim(); j++) {
+                columns[j] = result.select(1, j);
+            }
+            return columns;
+        }, py::kw_only(), py::arg("as_tuple") = false)
         .def("var", [](const raxis::Tensor& self, std::optional<raxis::VecOrInt> dim, std::optional<bool> unbiased,
                bool keepdim, std::optional<double> correction) {
             // unbiased (bool) is the older spelling of correction 1 / 0
@@ -1481,6 +1505,14 @@ PYBIND11_MODULE(_C, c) {
     c.def("scatter_add", &raxis::scatter_add, py::arg("input"), py::arg("dim"), py::arg("index"), py::arg("src"));
     c.def("index_select", &raxis::index_select, py::arg("input"), py::arg("dim"), py::arg("index"));
     c.def("index_add", &raxis::index_add, py::arg("input"), py::arg("dim"), py::arg("index"), py::arg("source"));
+    c.def("index_put", [](const raxis::Tensor& input, const std::vector<std::optional<raxis::Tensor>>& indices,
+           const raxis::Tensor& values, bool accumulate) {
+        return raxis::index_put(input, raxis::python::optional_tensor_list(indices), values, accumulate);
+    }, py::arg("input"), py::arg("indices"), py::arg("values"), py::arg("accumulate") = false);
+    c.def("masked_fill", &raxis::masked_fill, py::arg("input"), py::arg("mask"), py::arg("value"));
+    c.def("nonzero", [](const raxis::Tensor& input) {
+        return raxis::nonzero(input);
+    }, py::arg("input"));
     c.def("var", [](const raxis::Tensor& input, std::optional<raxis::VecOrInt> dim, std::optional<bool> unbiased,
                bool keepdim, std::optional<double> correction) {
             // unbiased (bool) is the older spelling of correction 1 / 0

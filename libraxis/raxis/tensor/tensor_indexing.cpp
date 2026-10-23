@@ -2,12 +2,15 @@
 #include <raxis/tensor/tensor_indexing.h>
 
 #include <ostream>
+#include <utility>
 #include <vector>
 
 #include <raxis/tensor/tensor.h>
+#include <raxis/tensor/factories.h>
 #include <raxis/core/scalar.h>
 #include <raxis/util/exception.h>
 #include <raxis/util/array_ref.h>
+#include <raxis/ops/tensor_advanced_indexing.h>
 
 
 namespace raxis::indexing {
@@ -65,138 +68,241 @@ std::ostream& operator<<(std::ostream& os, const TensorIndex& idx) {
 
 namespace {
 
-/// Count how many dimensions the indices actually consume.
+bool is_mask(const Tensor& t) {
+    return t.dtype() == dtypes::Bool || t.dtype() == dtypes::Uint8;
+}
+
+// From: aten/src/ATen/TensorIndexing.h (count_specified_dimensions)
+// Dims of self the indices consume: all but None, Ellipsis and bools, and a
+// mask consumes as many dims as it has
 int64_t count_specified_dims(ArrayRef<TensorIndex> indices) {
     int64_t count = 0;
     for (const auto& idx : indices) {
-        switch (idx.type()) {
-            case TensorIndexType::Integer:
-            case TensorIndexType::Slice:
-                ++count;
-                break;
-            case TensorIndexType::Boolean:
-            case TensorIndexType::Tensor:
-                RAXIS_INTERNAL_ASSERT(false,
-                    "count_specified_dims: advanced indexing not yet handled correctly");
-            default:
-                break;
+        if (idx.is_tensor()) {
+            count += is_mask(idx.tensor()) ? idx.tensor().ndim() : 1;
+        } else if (!idx.is_none() && !idx.is_ellipsis() && !idx.is_boolean()) {
+            count++;
         }
     }
     return count;
 }
 
-/// Check if any index requires advanced (copy-based) indexing.
-bool needs_advanced_indexing(ArrayRef<TensorIndex> indices) {
-    for (const auto& idx : indices) {
-        if (idx.is_tensor() || idx.is_boolean()) {
-            return true;
-        }
-    }
-    return false;
+// From: aten/src/ATen/TensorIndexing.h (applySelect)
+Tensor apply_select(const Tensor& self, int64_t dim, int64_t index, int64_t real_dim) {
+    RAXIS_CHECK_INDEX(self.ndim() > 0,
+        "invalid index of a 0-dim tensor. Use `tensor.item()` in Python or "
+        "`tensor.item<T>()` in C++ to convert a 0-dim tensor to a number");
+    const int64_t size = self.shape()[dim];
+    RAXIS_CHECK_INDEX(index >= -size && index < size,
+        "index ", index, " is out of bounds for dimension ", real_dim, " with size ", size);
+    return self.select(dim, index);
 }
 
+// From: aten/src/ATen/TensorIndexing.h (applySlice)
+// A slice over the whole dim returns self, unless the caller needs a new
+// tensor (x[:] must not be x itself)
+Tensor apply_slice(const Tensor& self, int64_t dim, const Slice& slice, bool disable_slice_optimization) {
+    const int64_t size = self.shape()[dim];
+    const auto [start, stop, step] = slice.resolve(size);
+    if (!disable_slice_optimization && start == 0 && stop == size && step == 1) {
+        return self;
+    }
+    return self.slice(dim, start, stop, step);
+}
+
+// From: aten/src/ATen/TensorIndexing.h (boolToIndexingTensor)
+// A bool index adds a dim of size 1, then indexes it with [0] when true
+// (keeps it) or with [] when false (empties it)
+Tensor bool_to_indexing_tensor(const Tensor& self, bool value) {
+    TensorOptions options = self.options().dtype(dtypes::Int64);
+    return value ? zeros({1}, options) : empty({0}, options);
+}
+
+// From: aten/src/ATen/TensorIndexing.h (recordTensorIndex)
+// out_indices[d] holds the index of dim d of the sliced tensor. Dims kept
+// whole get an undefined tensor, but only once a tensor index was seen:
+// trailing ones are dropped anyway.
+void record_tensor_index(const Tensor& tensor, std::vector<Tensor>& out_indices, int64_t& dim) {
+    if (out_indices.empty()) {
+        out_indices.resize(dim + 1);
+        out_indices[dim] = tensor;
+    } else {
+        out_indices.push_back(tensor);
+    }
+    dim += is_mask(tensor) ? tensor.ndim() : 1;
+}
+
+// From: aten/src/ATen/TensorIndexing.h (handleDimInMultiDimIndexing)
+// Applies one index of x[i0, i1, ...]: basic indices narrow the view, tensor
+// indices are recorded for the advanced indexing step. `dim` is the dim of
+// the current view the next index applies to, real_dim its position in the
+// index expression (for error messages).
+Tensor handle_dim(
+    const Tensor& prev, const Tensor& original, const TensorIndex& index,
+    int64_t& dim, int64_t specified_dims, int64_t real_dim,
+    std::vector<Tensor>& out_indices, bool disable_slice_optimization
+) {
+    if (index.is_integer()) {
+        return apply_select(prev, dim, index.integer(), real_dim);
+    }
+    if (index.is_slice()) {
+        Tensor result = apply_slice(prev, dim, index.slice(), disable_slice_optimization);
+        dim++;
+        if (!out_indices.empty()) out_indices.emplace_back();
+        return result;
+    }
+    if (index.is_ellipsis()) {
+        const int64_t ellipsis_ndims = original.ndim() - specified_dims;
+        dim += ellipsis_ndims;
+        if (!out_indices.empty()) out_indices.resize(out_indices.size() + ellipsis_ndims);
+        return prev;
+    }
+    if (index.is_none()) {
+        Tensor result = prev.unsqueeze(dim);
+        dim++;
+        if (!out_indices.empty()) out_indices.emplace_back();
+        return result;
+    }
+    if (index.is_boolean()) {
+        Tensor result = prev.unsqueeze(dim);
+        record_tensor_index(bool_to_indexing_tensor(result, index.boolean()), out_indices, dim);
+        return result;
+    }
+    RAXIS_INTERNAL_ASSERT(index.is_tensor(), "Invalid TensorIndex type");
+    const Tensor& tensor = index.tensor();
+    // A 0-d integer tensor is an integer, a 0-d bool tensor a bool
+    if (tensor.ndim() == 0 && tensor.dtype().is_integral(/*include_bool=*/true)) {
+        if (!is_mask(tensor)) {
+            return apply_select(prev, dim, tensor.item().to<int64_t>(), real_dim);
+        }
+        Tensor result = prev.unsqueeze(dim);
+        record_tensor_index(bool_to_indexing_tensor(result, tensor.item().to<bool>()), out_indices, dim);
+        return result;
+    }
+    record_tensor_index(tensor, out_indices, dim);
+    return prev;
+}
+
+// From: aten/src/ATen/TensorIndexing.h (applySlicing)
+Tensor apply_slicing(
+    const Tensor& self, ArrayRef<TensorIndex> indices,
+    std::vector<Tensor>& out_indices, bool disable_slice_optimization
+) {
+    int64_t num_ellipsis = 0;
+    for (const auto& idx : indices) {
+        num_ellipsis += idx.is_ellipsis();
+    }
+    RAXIS_CHECK_INDEX(num_ellipsis <= 1, "an index can only have a single ellipsis ('...')");
+
+    const int64_t specified_dims = count_specified_dims(indices);
+    RAXIS_CHECK_INDEX(specified_dims <= self.ndim(),
+        "too many indices for tensor of dimension ", self.ndim());
+
+    Tensor result = self;
+    int64_t dim = 0;
+    for (size_t i = 0; i < indices.size(); i++) {
+        result = handle_dim(result, self, indices[i], dim, specified_dims,
+                            static_cast<int64_t>(i), out_indices, disable_slice_optimization);
+    }
+    return result;
+}
+
+std::vector<Tensor> drop_trailing_undefined(std::vector<Tensor> indices) {
+    while (!indices.empty() && !indices.back().defined()) {
+        indices.pop_back();
+    }
+    return indices;
+}
+
+// From: aten/src/ATen/TensorIndexing.h (slicePrefix1sSize)
+// NumPy strips the leading size-1 dims of the value: x[0:2] = v with v of
+// shape (1, 1, 2) works
+DimVector strip_leading_ones(IntArrayRef shape) {
+    size_t first = 0;
+    while (first < shape.size() && shape[first] == 1) {
+        first++;
+    }
+    return DimVector(shape.begin() + first, shape.end());
+}
+
+// From: aten/src/ATen/TensorIndexing.h (copy_to)
+void copy_to(const Tensor& dst, const Tensor& src) {
+    if (dst.shape() == src.shape()) {
+        dst.copy_(src);
+    } else if (src.ndim() == 0) {
+        dst.fill_(src.item());
+    } else {
+        dst.copy_(src.view(strip_leading_ones(src.shape())).expand(dst.shape()));
+    }
+}
 
 } // anonymous namespace
 
 
 Tensor get_item(const Tensor& self, ArrayRef<TensorIndex> indices) {
     RAXIS_CHECK(self.defined(), "Cannot index an undefined tensor");
-    RAXIS_CHECK(!indices.empty(), "Empty index list is not valid");
 
-    if (needs_advanced_indexing(indices)) {
-        RAXIS_CHECK(false,
-            "Advanced indexing (bool/tensor indices) is not yet implemented. "
-            "Only integer, slice, None, and Ellipsis are currently supported.");
-    }
-
-    // Validate and expand Ellipsis
-    int64_t num_ellipsis = 0;
-    int64_t ellipsis_pos = -1;
-    for (size_t i = 0; i < indices.size(); ++i) {
-        if (indices[i].is_ellipsis()) {
-            ++num_ellipsis;
-            ellipsis_pos = static_cast<int64_t>(i);
-        }
-    }
-    RAXIS_CHECK(num_ellipsis <= 1,
-        "Only one Ellipsis ('...') is allowed in an index expression");
-
-    const int64_t specified = count_specified_dims(indices);
-    RAXIS_CHECK(specified <= self.ndim(),
-        "Too many indices for tensor of dimension ", self.ndim(),
-        " (got ", specified, " index dimensions)");
-
-    // Expand Ellipsis into full-dim slices
-    SmallVector<TensorIndex, 5> expanded_buf;
-    if (num_ellipsis == 1) {
-        int64_t expand_count = self.ndim() - specified;
-
-        expanded_buf.reserve(indices.size() - 1 + expand_count);
-
-        for (size_t i = 0; i < indices.size(); ++i) {
-            if (static_cast<int64_t>(i) == ellipsis_pos) {
-                for (int64_t j = 0; j < expand_count; ++j) {
-                    expanded_buf.push_back(Slice{});   // full dimension
-                }
-            } else {
-                expanded_buf.push_back(indices[i]);
-            }
-        }
-    } 
-    const auto& expanded = (num_ellipsis == 1) ? expanded_buf : indices;
-
-    // Walk through expanded indices and build the view
-    Tensor result = self;
-    int64_t dim = 0;
-
-    for (const auto& idx : expanded) {
-        if (idx.is_integer()) {
-            // select removes the dimension, so dim stays the same
-            // for the next index (the dims above shift down).
-            result = result.select(dim, idx.integer());
-        } else if (idx.is_slice()) {
-            const auto [start, stop, step] = \
-                idx.slice().resolve(result.shape()[dim]);
-            // Skip the slice call if it's a no-op
-            // (selects the entire dimension with step 1).
-            bool is_full_slice = (start == 0)
-                && (stop >= result.shape()[dim])
-                && (step == 1);
-
-            if (!is_full_slice) {
-                result = result.slice(dim, start, stop, step);
-            }
-            ++dim;
-        } else if (idx.is_none()) {
-            result = result.unsqueeze(dim);
-            ++dim;
-        } else if (idx.is_ellipsis()) {
-            // Should have been expanded above, but if it somehow
-            // appears here, it's a no-op.
-        } else {
-            RAXIS_INTERNAL_ASSERT(false,
-                "Unhandled TensorIndex Type in apply_indexing");
+    // A single basic index skips the bookkeeping. x[:] and x[...] still
+    // return a new tensor (an alias), as in PyTorch and NumPy.
+    if (indices.size() == 1) {
+        const TensorIndex& index = indices[0];
+        if (index.is_integer()) {
+            return apply_select(self, 0, index.integer(), 0);
+        } else if (index.is_slice()) {
+            return apply_slice(self, 0, index.slice(), /*disable_slice_optimization=*/true);
+        } else if (index.is_none()) {
+            return self.unsqueeze(0);
+        } else if (index.is_ellipsis()) {
+            return self.alias();
+        } else if (index.is_boolean()) {
+            Tensor result = self.unsqueeze(0);
+            return ::raxis::index(result, {bool_to_indexing_tensor(result, index.boolean())});
         }
     }
 
-    // If result is the exact same TensorImpl (e.g. all indices were
-    // full slices or a lone Ellipsis), return an alias to guarantee
-    // we always return a distinct Tensor object (PyTorch/numpy semantics).
-    if (result.is_same(self)) {
-        return self.alias();
+    std::vector<Tensor> tensor_indices;
+    Tensor sliced = apply_slicing(self, indices, tensor_indices, /*disable_slice_optimization=*/false);
+    if (tensor_indices.empty()) {
+        return sliced.is_same(self) ? self.alias() : sliced;
     }
-
-    return result;
+    return ::raxis::index(sliced, drop_trailing_undefined(std::move(tensor_indices)));
 }
 
 void set_item(const Tensor& self, ArrayRef<TensorIndex> indices, const Tensor& value) {
-    Tensor view = get_item(self, indices);
-    view.copy_(value);
+    RAXIS_CHECK(self.defined(), "Cannot index an undefined tensor");
+
+    if (indices.size() == 1) {
+        const TensorIndex& index = indices[0];
+        if (index.is_boolean() && !index.boolean()) {
+            return;
+        } else if (index.is_ellipsis()) {
+            copy_to(self, value);
+            return;
+        } else if (index.is_none() || index.is_boolean()) {
+            copy_to(self.unsqueeze(0), value);
+            return;
+        } else if (index.is_integer()) {
+            copy_to(apply_select(self, 0, index.integer(), 0), value);
+            return;
+        } else if (index.is_slice()) {
+            copy_to(apply_slice(self, 0, index.slice(), /*disable_slice_optimization=*/false), value);
+            return;
+        }
+    }
+
+    std::vector<Tensor> tensor_indices;
+    Tensor sliced = apply_slicing(self, indices, tensor_indices, /*disable_slice_optimization=*/false);
+    if (tensor_indices.empty()) {
+        copy_to(sliced, value);
+        return;
+    }
+    DimVector value_shape = strip_leading_ones(value.shape());
+    Tensor values = value.shape() == IntArrayRef(value_shape) ? value : value.view(value_shape);
+    ::raxis::index_put_(sliced, drop_trailing_undefined(std::move(tensor_indices)), values);
 }
 
 void set_item(const Tensor& self, ArrayRef<TensorIndex> indices, Scalar value) {
-    Tensor view = get_item(self, indices);
-    view.fill_(value);
+    set_item(self, indices, scalar_tensor(value, self.options()));
 }
 
 

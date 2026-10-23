@@ -376,6 +376,60 @@ Tensor& index_add_(Tensor& self, int64_t dim, const Tensor& index, const Tensor&
 }
 
 // ============================================================
+// Advanced indexing
+// ============================================================
+
+Tensor index(const Tensor& self, ArrayRef<Tensor> indices) {
+    Tensor result = ops::index(self, indices);
+    if (autograd::requires_autograd(self)) {
+        auto grad_fn = std::make_shared<autograd::IndexBackward0>(self, indices);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor index_put(const Tensor& self, ArrayRef<Tensor> indices, const Tensor& values, bool accumulate) {
+    Tensor result = ops::index_put(self, indices, values, accumulate);
+    if (autograd::requires_autograd(self, values)) {
+        auto grad_fn = std::make_shared<autograd::IndexPutBackward0>(self, indices, values, accumulate);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self, values);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor& index_put_(Tensor& self, ArrayRef<Tensor> indices, const Tensor& values, bool accumulate) {
+    RAXIS_CHECK(!autograd::requires_autograd(self, values),
+        "a leaf Variable that requires grad is being used in an in-place operation (index_put_)");
+    return ops::index_put_(self, indices, values, accumulate);
+}
+
+// Integer output: never differentiable
+Tensor nonzero(const Tensor& self) {
+    return ops::nonzero(self);
+}
+
+Tensor masked_fill(const Tensor& self, const Tensor& mask, Scalar value) {
+    Tensor result = ops::masked_fill(self, mask, value);
+    if (autograd::requires_autograd(self)) {
+        auto grad_fn = std::make_shared<autograd::MaskedFillBackward0>(self, mask);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor& masked_fill_(Tensor& self, const Tensor& mask, Scalar value) {
+    RAXIS_CHECK(!autograd::requires_autograd(self),
+        "a leaf Variable that requires grad is being used in an in-place operation (masked_fill_)");
+    return ops::masked_fill_(self, mask, value);
+}
+
+// ============================================================
 // Copies
 // ============================================================
 

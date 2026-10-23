@@ -327,6 +327,66 @@ TensorList IndexAddBackward0::apply(const TensorList& grads) {
     return {grad, grad_source};
 }
 
+
+IndexBackward0::IndexBackward0(const Tensor& self, ArrayRef<Tensor> indices)
+    : self_shape_(self.shape())
+{
+    indices_.save(indices);
+}
+
+std::string IndexBackward0::name() const { return "IndexBackward0"; }
+
+// From: torch/csrc/autograd/FunctionsManual.cpp (index_backward)
+TensorList IndexBackward0::apply(const TensorList& grads) {
+    Tensor grad_self = zeros(self_shape_, grads[0].options());
+    ops::index_put_(grad_self, indices_.unpack(), grads[0], /*accumulate=*/true);
+    return {grad_self};
+}
+
+
+IndexPutBackward0::IndexPutBackward0(
+    const Tensor& self, ArrayRef<Tensor> indices, const Tensor& values, bool accumulate
+)
+    : values_shape_(values.shape()),
+      accumulate_(accumulate),
+      needs_grad_{self.requires_grad(), values.requires_grad()}
+{
+    indices_.save(indices);
+}
+
+std::string IndexPutBackward0::name() const { return "IndexPutBackward0"; }
+
+// From: tools/autograd/derivatives.yaml (index_put)
+// Without accumulate, the positions written by values took nothing from
+// self, so their gradient for self is zero
+TensorList IndexPutBackward0::apply(const TensorList& grads) {
+    const Tensor& grad = grads[0];
+    const std::vector<Tensor> indices = indices_.unpack();
+    Tensor grad_self, grad_values;
+    if (needs_grad_[0]) {
+        grad_self = accumulate_
+            ? grad
+            : ops::index_put(grad, indices, zeros(values_shape_, grad.options()));
+    }
+    if (needs_grad_[1]) {
+        grad_values = unbroadcast(ops::index(grad, indices), values_shape_);
+    }
+    return {grad_self, grad_values};
+}
+
+
+MaskedFillBackward0::MaskedFillBackward0(const Tensor& self, const Tensor& mask)
+    : self_shape_(self.shape())
+{
+    mask_.save(mask);
+}
+
+std::string MaskedFillBackward0::name() const { return "MaskedFillBackward0"; }
+
+TensorList MaskedFillBackward0::apply(const TensorList& grads) {
+    return {unbroadcast(ops::masked_fill(grads[0], mask_.unpack(), 0), self_shape_)};
+}
+
 // ============================================================
 // Shape ops
 // ============================================================

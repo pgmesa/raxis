@@ -1,7 +1,11 @@
 #pragma once
 
+#include <memory>
+#include <vector>
+
 #include <raxis/export.h>
 #include <raxis/tensor/tensor.h>
+#include <raxis/util/array_ref.h>
 
 
 namespace raxis::autograd {
@@ -45,6 +49,28 @@ private:
     const char* name_;
     bool was_saved_ = false;
     bool released_ = false;
+};
+
+// A list of saved inputs, such as the index tensors of x[i, j]: one
+// SavedVariable per tensor, all registered with the node under the same
+// name (PyTorch: std::vector<SavedVariable> indices_). Undefined tensors
+// (dims without an index) are kept as such.
+class RAXIS_API SavedVariableList {
+public:
+    SavedVariableList(Node* owner, const char* name) : owner_(owner), name_(name) {}
+
+    SavedVariableList(const SavedVariableList&) = delete;
+    SavedVariableList& operator=(const SavedVariableList&) = delete;
+
+    void save(ArrayRef<Tensor> tensors);
+
+    std::vector<Tensor> unpack() const;
+
+private:
+    Node* owner_;
+    const char* name_;
+    // unique_ptr: the node holds their addresses
+    std::vector<std::unique_ptr<SavedVariable>> items_;
 };
 
 } // namespace raxis::autograd

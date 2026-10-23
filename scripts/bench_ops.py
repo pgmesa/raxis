@@ -112,6 +112,28 @@ def print_row_skip(name, shape_str, t_ms):
     print(f"  {name:<24s} {shape_str:>28s}  {dim('N/A'):>20s}  {t_ms:11.3f}  {'--':>11s}  {'--':>8s}  {color_status('SKIP')}")
 
 
+_ROW_INDEX = {}
+
+
+def row_index(t):
+    """Random rows (with repeats) of t, the same for raxis and torch."""
+    lib = raxis if isinstance(t, raxis.Tensor) else torch
+    key = (lib.__name__, t.shape[0])
+    if key not in _ROW_INDEX:
+        idx = np.random.RandomState(0).randint(0, t.shape[0], t.shape[0] // 2).astype(np.int64)
+        _ROW_INDEX[key] = lib.from_numpy(idx)
+    return _ROW_INDEX[key]
+
+
+def row_values(t):
+    """Values for t[row_index(t)] = v (a new tensor: they must not overlap t)."""
+    lib = raxis if isinstance(t, raxis.Tensor) else torch
+    key = (lib.__name__, "values", tuple(t.shape), str(t.dtype))
+    if key not in _ROW_INDEX:
+        _ROW_INDEX[key] = t[: t.shape[0] // 2].clone()
+    return _ROW_INDEX[key]
+
+
 def format_shape(*shapes):
     if len(shapes) == 1:
         return str(shapes[0])
@@ -720,6 +742,23 @@ def run_forward_benchmarks(runner):
         lambda r: raxis.dropout(r, 0.5, True),
         lambda t: torch.dropout(t, 0.5, True)),
     ])
+
+    # The masks include the comparison that builds them, in both libraries
+    _run_section(runner, "Advanced indexing", [
+        ("index rows", ALL, S2D, lambda r: r[row_index(r)], lambda t: t[row_index(t)]),
+        ("index cols", ALL, S2D, lambda r: r[:, row_index(r)], lambda t: t[:, row_index(t)]),
+        ("index points", ALL, S2D,
+        lambda r: r[row_index(r), row_index(r)], lambda t: t[row_index(t), row_index(t)]),
+        ("index mask", FLOAT, S2D, lambda r: r[r > 0.5], lambda t: t[t > 0.5]),
+        ("nonzero", FLOAT, S2D, lambda r: (r > 0.5).nonzero(), lambda t: (t > 0.5).nonzero()),
+        ("masked_fill", FLOAT, S2D, lambda r: r.masked_fill(r > 0.5, 0), lambda t: t.masked_fill(t > 0.5, 0)),
+        ("index_put rows", ALL, S2D,
+        lambda r: r.index_put_((row_index(r),), row_values(r)),
+        lambda t: t.index_put_((row_index(t),), row_values(t))),
+        ("index_put acc", FLOAT, S2D,
+        lambda r: r.index_put_((row_index(r),), row_values(r), accumulate=True),
+        lambda t: t.index_put_((row_index(t),), row_values(t), accumulate=True)),
+    ])
                 
             
 def run_backward_benchmarks(runner):
@@ -841,6 +880,22 @@ def run_backward_benchmarks(runner):
                 has_any = True
             runner.bench_backward(name, shapes, fn)
  
+    # -- Advanced indexing backward --
+    INDEX_BWD = [
+        ("index rows bwd", FLOAT, S2D, lambda t: t[row_index(t)]),
+        ("index mask bwd", FLOAT, S2D, lambda t: t[t.detach() > 0.5]),
+    ]
+
+    has_any = False
+    for name, cat, shapes, fn in INDEX_BWD:
+        if not dtype_allowed(runner.dtype_str, cat):
+            continue
+        if runner._should_run(name):
+            if not has_any:
+                print_header("Backward: Advanced indexing")
+                has_any = True
+            runner.bench_backward(name, shapes, fn)
+
     # -- Composed backward --
     COMPOSED_BWD = [
         ("chain (a*b+c).sum() bwd", FLOAT, S2D, lambda t: (t * t + t).sum()),

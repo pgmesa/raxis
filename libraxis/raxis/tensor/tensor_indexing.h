@@ -4,18 +4,13 @@
 #include <optional>
 #include <ostream>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include <raxis/export.h>
+#include <raxis/core/scalar.h>
+#include <raxis/tensor/tensor.h>
 #include <raxis/util/array_ref.h>
-
-
-namespace raxis {
-
-class Scalar;
-class Tensor;
-
-} // namespace raxis
 
 
 namespace raxis::indexing {
@@ -100,6 +95,9 @@ struct RAXIS_API TensorIndex {
     TensorIndex(Slice s)
         : type_(TensorIndexType::Slice), slice_(s) {}
 
+    TensorIndex(Tensor tensor)
+        : type_(TensorIndexType::Tensor), tensor_(std::move(tensor)) {}
+
     TensorIndexType type() const { return type_; }
 
     bool is_none() const {
@@ -138,15 +136,24 @@ struct RAXIS_API TensorIndex {
         return boolean_;
     }
 
+    const Tensor& tensor() const {
+        return tensor_;
+    }
+
 private:
     TensorIndexType type_;
     int64_t integer_ = 0;
     bool boolean_ = false;
     Slice slice_;
+    Tensor tensor_;
 };
 
 std::ostream& operator<<(std::ostream& os, const TensorIndex& idx);
 
+// From: aten/src/ATen/TensorIndexing.h
+// Integers, slices, None and Ellipsis give a view of self. Tensor indices
+// (and bools) make it advanced indexing, a copy: the basic indices are
+// applied first as views, then ops::index takes the tensor indices.
 RAXIS_API Tensor get_item(const Tensor& self, ArrayRef<TensorIndex> indices);
 
 RAXIS_API void set_item(const Tensor& self, ArrayRef<TensorIndex> indices, const Tensor& value);

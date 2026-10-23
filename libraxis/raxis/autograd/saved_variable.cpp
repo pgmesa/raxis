@@ -1,5 +1,8 @@
 #include <raxis/autograd/saved_variable.h>
 
+#include <memory>
+#include <vector>
+
 #include <raxis/util/exception.h>
 #include <raxis/autograd/graph.h>
 
@@ -33,6 +36,24 @@ void SavedVariable::release() {
         data_ = Tensor();
         released_ = true;
     }
+}
+
+
+void SavedVariableList::save(ArrayRef<Tensor> tensors) {
+    items_.reserve(tensors.size());
+    for (const Tensor& tensor : tensors) {
+        items_.push_back(std::make_unique<SavedVariable>(owner_, name_));
+        items_.back()->save(tensor);
+    }
+}
+
+std::vector<Tensor> SavedVariableList::unpack() const {
+    std::vector<Tensor> tensors;
+    tensors.reserve(items_.size());
+    for (const auto& item : items_) {
+        tensors.push_back(item->unpack());
+    }
+    return tensors;
 }
 
 } // namespace raxis::autograd

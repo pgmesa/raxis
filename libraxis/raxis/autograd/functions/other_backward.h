@@ -164,6 +164,43 @@ private:
     DimVector source_shape_;
 };
 
+// Advanced indexing x[indices]: the gradient goes back to the positions it
+// was read from, adding up where an index repeats
+class RAXIS_API IndexBackward0 : public Node {
+public:
+    IndexBackward0(const Tensor& self, ArrayRef<Tensor> indices);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    DimVector self_shape_;
+    SavedVariableList indices_{this, "indices"};
+};
+
+class RAXIS_API IndexPutBackward0 : public Node {
+public:
+    IndexPutBackward0(const Tensor& self, ArrayRef<Tensor> indices, const Tensor& values, bool accumulate);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    SavedVariableList indices_{this, "indices"};
+    DimVector values_shape_;
+    bool accumulate_;
+    std::array<bool, 2> needs_grad_;
+};
+
+class RAXIS_API MaskedFillBackward0 : public Node {
+public:
+    MaskedFillBackward0(const Tensor& self, const Tensor& mask);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    DimVector self_shape_;
+    SavedVariable mask_{this, "mask"};
+};
+
 // ============================================================
 // Shape ops
 // ============================================================

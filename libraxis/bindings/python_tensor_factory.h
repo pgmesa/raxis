@@ -14,7 +14,6 @@
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/tensor_options.h>
 #include <raxis/tensor/factories.h>
-#include <raxis/tensor/tensor_indexing.h>
 
 
 namespace py = pybind11;
@@ -180,48 +179,6 @@ inline Tensor tensor_from_python(
     return tensor_from_scalars(flat, shape, options);
 }
 
-
-std::vector<indexing::TensorIndex> py_index_to_tensor_indices(py::handle idx) {
-    std::vector<indexing::TensorIndex> result;
-    
-    auto convert_one = [&](py::handle obj) {
-        if (obj.is_none()) {
-            result.emplace_back(indexing::None);
-        } else if (py::isinstance<py::ellipsis>(obj)) {
-            result.emplace_back(indexing::Ellipsis);
-        } else if (py::isinstance<py::bool_>(obj)) {
-            result.emplace_back(obj.cast<bool>());
-        } else if (py::isinstance<py::int_>(obj)) {
-            result.emplace_back(obj.cast<int64_t>());
-        } else if (py::isinstance<py::slice>(obj)) {
-            auto s = obj.cast<py::slice>();
-            auto extract_opt = [](py::handle h) -> std::optional<int64_t> {
-                if (h.is_none()) return std::nullopt;
-                return h.cast<int64_t>();
-            };
-
-            py::object start, stop, step;
-            start = s.attr("start");
-            stop = s.attr("stop");  
-            step = s.attr("step");
-
-            result.emplace_back(indexing::Slice(
-                extract_opt(start), extract_opt(stop), extract_opt(step)
-            ));
-        } else {
-            throw py::type_error("unsupported index type");
-        }
-    };
-    
-    if (py::isinstance<py::tuple>(idx)) {
-        for (auto item : idx.cast<py::tuple>()) {
-            convert_one(item);
-        }
-    } else {
-        convert_one(idx);
-    }
-    return result;
-}
 
 inline py::object scalar_to_pyobject(Scalar s, Dtype dtype) {
     if (dtype.is_floating()) return py::cast(s.to<double>());
