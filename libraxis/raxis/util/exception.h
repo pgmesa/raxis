@@ -54,6 +54,19 @@ inline std::string format_message(Args&&... args) {
 } // namespace raxis::detail
 
 
+namespace raxis {
+
+// From: c10/util/Exception.h (IndexError)
+// An index out of range: Python sees an IndexError, which also ends the
+// sequence protocol (iterating a tensor through __getitem__)
+class IndexError : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+
+} // namespace raxis
+
+
 // ============================================================
 // Public Macros
 // ============================================================
@@ -67,6 +80,15 @@ inline std::string format_message(Args&&... args) {
     do {                                                                      \
         if (!(cond)) [[unlikely]] {                                           \
             throw std::runtime_error(                                         \
+                ::raxis::detail::format_message(__VA_ARGS__));                \
+        }                                                                     \
+    } while (0)
+
+// Like RAXIS_CHECK, raising raxis::IndexError (TORCH_CHECK_INDEX)
+#define RAXIS_CHECK_INDEX(cond, ...)                                          \
+    do {                                                                      \
+        if (!(cond)) [[unlikely]] {                                           \
+            throw ::raxis::IndexError(                                        \
                 ::raxis::detail::format_message(__VA_ARGS__));                \
         }                                                                     \
     } while (0)

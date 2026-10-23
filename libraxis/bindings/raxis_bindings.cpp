@@ -51,6 +51,8 @@ PYBIND11_MODULE(_C, c) {
         } catch (const py::builtin_exception& e) {
             // py::type_error, py::index_error, ...: keep their Python type
             e.set_error();
+        } catch (const raxis::IndexError& e) {
+            PyErr_SetString(PyExc_IndexError, e.what());
         } catch (const std::exception& e) {
             PyErr_SetString(PyExc_RuntimeError, e.what());
         }

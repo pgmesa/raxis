@@ -175,7 +175,7 @@ def test_index_select_backward(shape, dim, index):
 
 def test_index_select_out_of_range():
     r = raxis.zeros((3, 2))
-    with pytest.raises(RuntimeError, match="out of range"):
+    with pytest.raises(IndexError, match="out of range"):
         r.index_select(0, raxis.tensor([3]))
 
 

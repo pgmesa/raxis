@@ -36,7 +36,11 @@ Tensor select(const Tensor& self, int64_t dim, int64_t index) {
     RAXIS_CHECK(n > 0, "select() cannot be applied to a 0-d tensor");
 
     dim = wrap_dim(dim, n);
-    index = wrap_index(index, self.shape()[dim]);
+    const int64_t size = self.shape()[dim];
+    RAXIS_CHECK_INDEX(index >= -size && index < size,
+        "select(): index ", index, " out of range for tensor of size ",
+        self.shape(), " at dimension ", dim);
+    if (index < 0) index += size;
 
     const auto& old_shape = self.shape();
     const auto& old_strides = self.strides();

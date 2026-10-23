@@ -173,7 +173,7 @@ Tensor index_select(const Tensor& self, int64_t dim, const Tensor& index) {
 
     int64_t self_dim_size = ensure_nonempty_size(self, dim);
     auto check = [self_dim_size](int64_t i) {
-        RAXIS_CHECK(i >= 0 && i < self_dim_size, "index out of range in self");
+        RAXIS_CHECK_INDEX(i >= 0 && i < self_dim_size, "index out of range in self");
     };
 
     if (self.ndim() == 0) {
