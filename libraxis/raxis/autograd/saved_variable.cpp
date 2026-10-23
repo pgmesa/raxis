@@ -73,6 +73,11 @@ void SavedVariableList::save(ArrayRef<Tensor> tensors) {
     }
 }
 
+void SavedVariableList::add(const Tensor& tensor, bool is_output) {
+    items_.push_back(std::make_unique<SavedVariable>(owner_, name_));
+    items_.back()->save(tensor, is_output);
+}
+
 std::vector<Tensor> SavedVariableList::unpack() const {
     std::vector<Tensor> tensors;
     tensors.reserve(items_.size());

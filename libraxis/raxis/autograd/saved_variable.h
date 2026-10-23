@@ -72,6 +72,7 @@ public:
     SavedVariableList& operator=(const SavedVariableList&) = delete;
 
     void save(ArrayRef<Tensor> tensors);
+    void add(const Tensor& tensor, bool is_output);
 
     std::vector<Tensor> unpack() const;
 

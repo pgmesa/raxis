@@ -24,6 +24,7 @@
 #include "numpy_utils.h"
 #include "python_tensor_factory.h"
 #include "python_indexing.h"
+#include "python_function.h"
 
 
 namespace py = pybind11;
@@ -43,6 +44,10 @@ PYBIND11_MODULE(_C, c) {
             "Sets the number of threads used for intraop parallelism on CPU.");
 
     c.def("is_grad_enabled", &raxis::autograd::GradMode::is_enabled);
+    // Function.apply (raxis/autograd/function.py): the history of the outputs
+    c.def("_wrap_function_outputs", &raxis::python::wrap_function_outputs,
+          py::arg("ctx"), py::arg("backward"), py::arg("name"), py::arg("inputs"),
+          py::arg("outputs"), py::arg("is_executable"));
     c.def("set_grad_enabled", &raxis::autograd::GradMode::set_enabled, py::arg("enabled"));
 
     // Exceptions

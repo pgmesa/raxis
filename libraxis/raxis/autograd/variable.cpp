@@ -229,24 +229,35 @@ void set_next_edges(const NodePtr& grad_fn, ArrayRef<Tensor> inputs) {
     Node* grad_fn = meta ? meta->grad_fn.get() : nullptr;
     const char* modified = indirect
         ? "its base or another view of its base has been" : "is being";
+    const CreationMeta creation_meta = impl->creation_meta();
     std::ostringstream msg;
-    if (impl->creation_meta() == CreationMeta::NoGradMode || !grad_fn) {
+    if (creation_meta == CreationMeta::NoGradMode || !grad_fn) {
         if (grad_fn) {
             msg << "Output " << meta->output_nr << " of " << grad_fn->forward_op_name()
                 << " is a view of a view which was created in";
         } else {
             msg << "A view was created in";
         }
-        msg << " no_grad mode and " << modified << " modified inplace with grad mode enabled."
-            << " Given that this use case is ambiguous and error-prone, it is forbidden."
+        msg << " no_grad mode and " << modified << " modified inplace with grad mode enabled.";
+    } else {
+        msg << "Output " << meta->output_nr << " of " << grad_fn->forward_op_name() << " is a view and "
+            << modified << " modified inplace.";
+    }
+    if (creation_meta == CreationMeta::MultiOutputNode) {
+        msg << " This view is the output of a function that returns multiple views. Such functions"
+            << " do not allow the output views to be modified inplace. You should replace the"
+            << " inplace operation by an out-of-place one.";
+    } else if (creation_meta == CreationMeta::NoGradMode) {
+        msg << " Given that this use case is ambiguous and error-prone, it is forbidden."
             << " You can clarify your code by moving both the view and the inplace either both"
             << " inside the no_grad block (if you don't want the inplace to be tracked) or both"
             << " outside (if you want the inplace to be tracked).";
     } else {
-        msg << "Output " << meta->output_nr << " of " << grad_fn->forward_op_name() << " is a view and "
-            << modified << " modified inplace. This view is the output of a function that"
-            << " returns multiple views. Such functions do not allow the output views to be"
-            << " modified inplace. You should replace the inplace operation by an out-of-place one.";
+        msg << " This view was created inside a custom Function (or because an input was returned"
+            << " as-is) and the autograd logic to handle view+inplace would override the custom"
+            << " backward associated with the custom Function, leading to incorrect gradients."
+            << " This behavior is forbidden. You can fix this by cloning the output of the custom"
+            << " Function.";
     }
     RAXIS_CHECK(false, msg.str());
 }
@@ -281,9 +292,10 @@ void bump_version(const Tensor& self) {
     self.unsafe_get_tensor_impl()->storage()->bump_version();
 }
 
-void rebase_history(const Tensor& self, NodePtr grad_fn) {
+void rebase_history(const Tensor& self, NodePtr grad_fn, uint32_t output_nr) {
     detail::TensorImpl* impl = self.unsafe_get_tensor_impl();
     if (impl->is_view()) {
+        RAXIS_INTERNAL_ASSERT(output_nr == 0, "an in-place op on a view must have a single output");
         Tensor base = self.base();
         NodePtr old_fn = base.grad_fn();
         auto copy_slices = std::make_shared<CopySlices>(base, self, std::move(grad_fn));
@@ -294,7 +306,7 @@ void rebase_history(const Tensor& self, NodePtr grad_fn) {
     }
     Tensor result = self;
     update_hooks_on_new_grad_fn(result, result.grad_fn(), grad_fn);
-    set_autograd_meta(result, std::move(grad_fn));
+    set_autograd_meta(result, std::move(grad_fn), output_nr);
 }
 
 void finish_inplace(const Tensor& self, NodePtr grad_fn) {

@@ -973,6 +973,256 @@ class TestHooks:
 
 
 # ===========================================================================
+# CUSTOM FUNCTIONS (autograd.Function)
+# ===========================================================================
+
+def _custom_functions(lib):
+    """The same custom Functions written for raxis and for torch."""
+    F = lib.autograd.Function
+
+    class Exp(F):
+        @staticmethod
+        def forward(ctx, x):
+            y = x.exp()
+            ctx.save_for_backward(y)
+            return y
+
+        @staticmethod
+        def backward(ctx, grad):
+            y, = ctx.saved_tensors
+            return grad * y
+
+    class MulConst(F):
+        @staticmethod
+        def forward(ctx, x, k):
+            ctx.k = k
+            return x * k
+
+        @staticmethod
+        def backward(ctx, grad):
+            return grad * ctx.k, None
+
+    class WithIndices(F):
+        @staticmethod
+        def forward(ctx, x):
+            idx = (x > 1).to(lib.int64)
+            ctx.mark_non_differentiable(idx)
+            return x * 2, idx
+
+        @staticmethod
+        def backward(ctx, grad, grad_idx):
+            return grad * 2
+
+    class TripleInPlace(F):
+        @staticmethod
+        def forward(ctx, x):
+            x.mul_(3)
+            ctx.mark_dirty(x)
+            return x
+
+        @staticmethod
+        def backward(ctx, grad):
+            return grad * 3
+
+    class Identity(F):
+        @staticmethod
+        def forward(ctx, x):
+            return x
+
+        @staticmethod
+        def backward(ctx, grad):
+            return grad * 5
+
+    class MulSetup(F):
+        @staticmethod
+        def forward(x, y):
+            return x * y
+
+        @staticmethod
+        def setup_context(ctx, inputs, output):
+            ctx.save_for_backward(*inputs)
+
+        @staticmethod
+        def backward(ctx, grad):
+            x, y = ctx.saved_tensors
+            return grad * y, grad * x
+
+    class SumToScalar(F):
+        @staticmethod
+        def forward(ctx, x):
+            return x.sum()
+
+        @staticmethod
+        def backward(ctx, grad):
+            # A broadcast gradient: reduced back to the input shape
+            return grad * lib.ones(4, 3)
+
+    class Once(F):
+        @staticmethod
+        def forward(ctx, x):
+            return x * 2
+
+        @staticmethod
+        @lib.autograd.function.once_differentiable
+        def backward(ctx, grad):
+            assert not lib.is_grad_enabled()
+            return grad * 2
+
+    return dict(Exp=Exp, MulConst=MulConst, WithIndices=WithIndices, TripleInPlace=TripleInPlace,
+                Identity=Identity, MulSetup=MulSetup, SumToScalar=SumToScalar, Once=Once)
+
+
+class TestFunction:
+
+    A = randf(4, 3, seed=3) + 0.5
+    CASES = {
+        "saves output":        lambda fns, lib, a, b: fns["Exp"].apply(a) * b,
+        "non-tensor input":    lambda fns, lib, a, b: fns["MulConst"].apply(a, 2.5) * b,
+        "non-differentiable":  lambda fns, lib, a, b: fns["WithIndices"].apply(a)[0] * b,
+        "mark_dirty":          lambda fns, lib, a, b: fns["TripleInPlace"].apply(a * 1) * b,
+        "input returned":      lambda fns, lib, a, b: fns["Identity"].apply(a) * b,
+        "setup_context":       lambda fns, lib, a, b: fns["MulSetup"].apply(a, b),
+        "broadcast gradient":  lambda fns, lib, a, b: fns["SumToScalar"].apply(a[0] * b[0]),
+        "once_differentiable": lambda fns, lib, a, b: fns["Once"].apply(a) * b,
+        "chained":             lambda fns, lib, a, b: fns["Exp"].apply(fns["MulConst"].apply(a, 0.5)) * b,
+    }
+
+    @staticmethod
+    def run(lib, fn):
+        a = lib.tensor(TestFunction.A.tolist(), requires_grad=True)
+        b = lib.tensor((TestFunction.A * 2).tolist(), requires_grad=True)
+        out = fn(_custom_functions(lib), lib, a, b)
+        out.sum().backward()
+        return out, a.grad, b.grad
+
+    @pytest.mark.parametrize("fn", CASES.values(), ids=CASES.keys())
+    def test_matches_torch(self, fn):
+        r_out, r_ga, r_gb = self.run(raxis, fn)
+        t_out, t_ga, t_gb = self.run(torch, fn)
+        check_match(r_out, t_out)
+        for r_g, t_g in [(r_ga, t_ga), (r_gb, t_gb)]:
+            assert (r_g is None) == (t_g is None)
+            if r_g is not None:
+                check_match(r_g, t_g)
+
+    def test_graph_node(self):
+        fns = _custom_functions(raxis)
+        a = raxis.tensor(self.A.tolist(), requires_grad=True)
+        y = fns["Exp"].apply(a)
+        assert y.grad_fn.name() == "ExpBackward"
+        assert y.grad_fn.next_functions[0][0].name() == "AccumulateGrad"
+        y2, idx = fns["WithIndices"].apply(a)
+        assert y2.requires_grad and not idx.requires_grad
+        assert fns["Exp"].apply(raxis.tensor([1.0])).grad_fn is None
+        assert fns["TripleInPlace"].apply(a * 1)._version == 2  # mul_ and mark_dirty
+
+    def test_needs_input_grad_and_materialize(self):
+        seen = []
+
+        class TwoOutputs(raxis.autograd.Function):
+            @staticmethod
+            def forward(ctx, x, y, k):
+                seen.append(ctx.needs_input_grad)
+                ctx.set_materialize_grads(False)
+                return x * k, y * k
+
+            @staticmethod
+            def backward(ctx, grad_x, grad_y):
+                seen.append((grad_x is None, grad_y is None))
+                return grad_x, grad_y, None
+
+        a = raxis.tensor([1.0, 2.0], requires_grad=True)
+        u, _ = TwoOutputs.apply(a, raxis.tensor([3.0, 4.0]), 2)
+        u.sum().backward()
+        assert seen == [(True, False, False), (False, True)]
+
+    ERRORS = {
+        "wrong count":       ("WrongCount", "returned an incorrect number of gradients \\(expected 2, got 1\\)"),
+        "grad for an int":   ("GradForInt", "returned a gradient different than None at position 2"),
+        "inplace on output": ("InPlaceOnOutput", "This view was created inside a custom Function"),
+        "saved modified":    ("SavedModified", "modified by an inplace operation"),
+        "dirty not output":  ("DirtyNotReturned", "marked as dirty during the forward method were not returned"),
+    }
+
+    @staticmethod
+    def error_case(lib, name, a):
+        fns = _custom_functions(lib)
+        F = lib.autograd.Function
+
+        class WrongCount(F):
+            @staticmethod
+            def forward(ctx, x, y):
+                return x + y
+
+            @staticmethod
+            def backward(ctx, grad):
+                return grad
+
+        class GradForInt(F):
+            @staticmethod
+            def forward(ctx, x, k):
+                return x * k
+
+            @staticmethod
+            def backward(ctx, grad):
+                return grad, grad
+
+        class DirtyNotReturned(F):
+            @staticmethod
+            def forward(ctx, x):
+                x.add_(1)
+                ctx.mark_dirty(x)
+                return x * 2
+
+            @staticmethod
+            def backward(ctx, grad):
+                return grad
+
+        if name == "WrongCount":
+            return WrongCount.apply(a, a * 1).sum().backward()
+        if name == "GradForInt":
+            return GradForInt.apply(a, 2).sum().backward()
+        if name == "InPlaceOnOutput":
+            return fns["Identity"].apply(a * 1).add_(1)
+        if name == "SavedModified":
+            y = fns["Exp"].apply(a * 1)
+            y.add_(1)
+            return y.sum().backward()
+        if name == "DirtyNotReturned":
+            return DirtyNotReturned.apply(a * 1)
+
+    @pytest.mark.parametrize("name,message", ERRORS.values(), ids=ERRORS.keys())
+    def test_errors(self, name, message):
+        for lib in (raxis, torch):
+            a = lib.tensor(self.A.tolist(), requires_grad=True)
+            with pytest.raises(RuntimeError, match=message):
+                self.error_case(lib, name, a)
+
+    def test_ctx_and_graph_are_freed(self):
+        import weakref
+        ctxs = []
+
+        class Square(raxis.autograd.Function):
+            @staticmethod
+            def forward(ctx, x):
+                ctxs.append(weakref.ref(ctx))
+                ctx.save_for_backward(x)
+                return x * x
+
+            @staticmethod
+            def backward(ctx, grad):
+                x, = ctx.saved_tensors
+                return 2 * grad * x
+
+        a = raxis.tensor([1.0, 2.0], requires_grad=True)
+        y = Square.apply(a)
+        assert y._use_count() == 1
+        assert ctxs[0]() is not None
+        del y
+        assert ctxs[0]() is None
+
+
+# ===========================================================================
 # NO_GRAD / ENABLE_GRAD
 # ===========================================================================
 

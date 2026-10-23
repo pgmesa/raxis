@@ -21,6 +21,9 @@ enum class CreationMeta : uint8_t {
     // One of the views of unbind / split / chunk: CopySlices can only
     // replace the backward of a single view
     MultiOutputNode,
+    // Returned by a Python autograd.Function: CopySlices would replace its
+    // custom backward
+    InCustomFunction,
 };
 
 struct AutogradMeta {

@@ -125,7 +125,7 @@ RAXIS_API void bump_version(const Tensor& self);
 // grad_fn becomes the history of self. If self is a view, the op wrote a
 // part of its base: the base gets a CopySlices node, and the view reads its
 // gradient from the base's.
-RAXIS_API void rebase_history(const Tensor& self, NodePtr grad_fn);
+RAXIS_API void rebase_history(const Tensor& self, NodePtr grad_fn, uint32_t output_nr = 0);
 
 // Bumps the version of self and, if grad_fn is set, rebases its history
 RAXIS_API void finish_inplace(const Tensor& self, NodePtr grad_fn);
