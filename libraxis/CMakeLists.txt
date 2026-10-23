@@ -153,6 +153,8 @@ endif()
 # Parallelization
 option(RAXIS_USE_PARALLEL "Enable intra-op parallelism" ON)
 option(RAXIS_USE_OPENMP "Prefer OpenMP over native thread pool" ON)
+# Read by RaxisConfig.cmake.in: consumers must find OpenMP before linking
+set(RAXIS_LINKS_OPENMP_TARGET OFF)
 
 if(RAXIS_USE_PARALLEL)
     if(RAXIS_BLAS_FOUND AND RAXIS_BLAS_INFO MATCHES "Intel MKL")
@@ -170,6 +172,7 @@ if(RAXIS_USE_PARALLEL)
         if(OpenMP_CXX_FOUND)
             target_compile_definitions(raxis PUBLIC RAXIS_PARALLEL_OPENMP=1)
             target_link_libraries(raxis PUBLIC OpenMP::OpenMP_CXX)
+            set(RAXIS_LINKS_OPENMP_TARGET ON)
             set(RAXIS_PARALLEL_INFO "OpenMP ${OpenMP_CXX_VERSION}")
         else()
             message(WARNING "OpenMP requested but not found, falling back to native")
