@@ -276,7 +276,7 @@ void Tensor::retain_grad() const {
     auto& meta = ensure_autograd_meta(impl_.get());
     meta.retains_grad = true;
     if (meta.grad_fn) {
-        meta.grad_fn->set_retained_tensor(*this);
+        meta.grad_fn->set_retained_tensor(meta.output_nr, *this);
     }
 }
 

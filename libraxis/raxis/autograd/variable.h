@@ -36,6 +36,8 @@ public:
     explicit AccumulateGrad(const Tensor& variable);
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
+    // The hooks registered on the leaf
+    void call_tensor_pre_hooks(TensorList& grads) override;
 
     const Tensor& variable() const { return variable_; }
 
@@ -46,6 +48,16 @@ private:
 
 // The AccumulateGrad node of a leaf that requires grad, created on first use
 RAXIS_API NodePtr grad_accumulator(const Tensor& leaf);
+
+
+// From: torch/_tensor.py (Tensor.register_hook)
+// hook(grad) runs when the gradient of self is computed, and may return a
+// new gradient (an undefined tensor keeps it)
+RAXIS_API RemovableHandle register_hook(const Tensor& self, TensorHook hook);
+
+// From: torch/_tensor.py (Tensor.register_post_accumulate_grad_hook)
+// hook(self) runs on a leaf after its .grad was updated
+RAXIS_API RemovableHandle register_post_accumulate_grad_hook(const Tensor& self, PostAccumulateGradHook hook);
 
 
 // Wire the autograd graph for an output tensor.

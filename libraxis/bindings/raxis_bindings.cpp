@@ -123,6 +123,30 @@ PYBIND11_MODULE(_C, c) {
     using raxis::autograd::Node;
     using raxis::autograd::NodePtr;
     using raxis::autograd::SavedVariable;
+    using raxis::autograd::TensorList;
+    using raxis::autograd::RemovableHandle;
+
+    // Gradients as Python sees them in node hooks: a tuple, None for undefined
+    auto to_tuple = [](const TensorList& tensors) {
+        py::tuple out(tensors.size());
+        for (size_t i = 0; i < tensors.size(); ++i) {
+            out[i] = tensors[i].defined() ? py::cast(tensors[i]) : py::none();
+        }
+        return out;
+    };
+    auto from_sequence = [](const py::object& seq) {
+        TensorList out;
+        for (py::handle item : py::reinterpret_borrow<py::sequence>(seq)) {
+            out.push_back(item.is_none() ? raxis::Tensor() : item.cast<raxis::Tensor>());
+        }
+        return out;
+    };
+
+    py::class_<RemovableHandle>(c, "RemovableHandle")
+        .def("remove", &RemovableHandle::remove)
+        .def("__enter__", [](RemovableHandle& self) -> RemovableHandle& { return self; },
+             py::return_value_policy::reference)
+        .def("__exit__", [](RemovableHandle& self, py::args) { self.remove(); });
 
     // Same introspection API as torch.autograd.graph.Node
     py::class_<Node, NodePtr>(c, "Node")
@@ -140,6 +164,24 @@ PYBIND11_MODULE(_C, c) {
             return out;
         })
         .def("_sequence_nr", &Node::sequence_nr)
+        // hook(grad_inputs, grad_outputs) -> new grad_inputs or None
+        .def("register_hook", [to_tuple, from_sequence](Node& self, py::function hook) {
+            return self.register_hook([hook, to_tuple, from_sequence](
+                    const TensorList& grad_inputs, const TensorList& grad_outputs) -> std::optional<TensorList> {
+                py::object result = hook(to_tuple(grad_inputs), to_tuple(grad_outputs));
+                if (result.is_none()) return std::nullopt;
+                return from_sequence(result);
+            });
+        }, py::arg("fn"))
+        // hook(grad_outputs) -> new grad_outputs or None
+        .def("register_prehook", [to_tuple, from_sequence](Node& self, py::function hook) {
+            return self.register_prehook([hook, to_tuple, from_sequence](
+                    const TensorList& grad_outputs) -> std::optional<TensorList> {
+                py::object result = hook(to_tuple(grad_outputs));
+                if (result.is_none()) return std::nullopt;
+                return from_sequence(result);
+            });
+        }, py::arg("fn"))
         // (name, tensor, released) per saved tensor; tensor is None once released
         .def("_saved_variables", [](const Node& self) {
             py::list out;
@@ -260,6 +302,18 @@ PYBIND11_MODULE(_C, c) {
 
         .def("detach", &raxis::Tensor::detach)
         .def_property_readonly("_version", &raxis::Tensor::version)
+        // hook(grad) -> new grad or None
+        .def("register_hook", [](const raxis::Tensor& self, py::function hook) {
+            return raxis::autograd::register_hook(self, [hook](const raxis::Tensor& grad) {
+                py::object result = hook(grad);
+                return result.is_none() ? raxis::Tensor() : result.cast<raxis::Tensor>();
+            });
+        }, py::arg("hook"))
+        // hook(tensor) after .grad of the leaf was updated
+        .def("register_post_accumulate_grad_hook", [](const raxis::Tensor& self, py::function hook) {
+            return raxis::autograd::register_post_accumulate_grad_hook(self,
+                [hook](const raxis::Tensor& tensor) { hook(tensor); });
+        }, py::arg("hook"))
         .def_property_readonly("_base", [](const raxis::Tensor& self) -> py::object {
             return self.is_view() ? py::cast(self.base()) : py::none();
         })

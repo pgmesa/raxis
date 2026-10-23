@@ -844,6 +844,135 @@ class TestInPlace:
 
 
 # ===========================================================================
+# HOOKS
+# ===========================================================================
+
+def _values(t):
+    return None if t is None else np.asarray(t.detach().tolist(), dtype=np.float64).ravel().round(4).tolist()
+
+
+class TestHooks:
+    """Tensor hooks, node hooks and post-accumulate-grad hooks, against torch."""
+
+    @staticmethod
+    def leaf_hook(lib):
+        a = lib.tensor([1.0, 2.0, 3.0], requires_grad=True)
+        seen = []
+        a.register_hook(lambda grad: seen.append(_values(grad)))
+        handle = a.register_hook(lambda grad: grad * 2)
+        (a * 3).sum().backward()
+        handle.remove()
+        (a * 3).sum().backward()
+        return seen, _values(a.grad)
+
+    @staticmethod
+    def non_leaf_hook(lib):
+        a = lib.tensor([1.0, 2.0, 3.0], requires_grad=True)
+        x = a * 2
+        x.register_hook(lambda grad: grad + 1)
+        x.retain_grad()
+        (x * x).sum().backward()
+        return _values(a.grad), _values(x.grad)
+
+    @staticmethod
+    def retain_grad_sees_hooked_grad(lib):
+        a = lib.tensor([1.0, 2.0], requires_grad=True)
+        x = a * 1
+        x.retain_grad()
+        x.register_hook(lambda grad: grad * 10)
+        x.sum().backward()
+        return _values(x.grad), _values(a.grad)
+
+    @staticmethod
+    def retain_grad_of_second_output(lib):
+        a = lib.tensor([[1.0, 2.0], [3.0, 4.0]], requires_grad=True)
+        u, v = a.unbind(0)
+        v.retain_grad()
+        (u * 2 + v * 3).sum().backward()
+        return _values(v.grad), _values(a.grad)
+
+    @staticmethod
+    def node_hooks(lib):
+        a = lib.tensor([1.0, 2.0], requires_grad=True)
+        b = lib.tensor([3.0, 4.0], requires_grad=True)
+        y = a * b
+        calls = []
+
+        def post(grad_inputs, grad_outputs):
+            calls.append(("post", len(grad_inputs), len(grad_outputs),
+                          _values(grad_inputs[0]), _values(grad_outputs[0])))
+            return (grad_inputs[0] * 2, None)  # b gets no gradient
+
+        def pre(grad_outputs):
+            calls.append(("pre", _values(grad_outputs[0])))
+            return (grad_outputs[0] + 1,)
+
+        y.grad_fn.register_hook(post)
+        y.grad_fn.register_prehook(pre)
+        y.sum().backward()
+        return calls, _values(a.grad), _values(b.grad)
+
+    @staticmethod
+    def post_accumulate_grad(lib):
+        a = lib.tensor([1.0, 2.0], requires_grad=True)
+        seen = []
+        a.register_post_accumulate_grad_hook(lambda t: seen.append(_values(t.grad)))
+        (a * 2).sum().backward()
+        (a * 3).sum().backward()
+        return seen
+
+    @staticmethod
+    def hooks_and_inplace(lib):
+        # The first hook belongs to the old x: it sees the gradient of x
+        # before mul_, the second one the gradient of the new x
+        a = lib.tensor([1.0, 2.0], requires_grad=True)
+        x = a * 1
+        x.register_hook(lambda grad: grad * 100)
+        x.mul_(2)
+        x.register_hook(lambda grad: grad + 1)
+        x.sum().backward()
+        return _values(a.grad)
+
+    @staticmethod
+    def handle_as_context_manager(lib):
+        a = lib.tensor([1.0], requires_grad=True)
+        with a.register_hook(lambda grad: grad * 5):
+            (a * 1).sum().backward()
+        (a * 1).sum().backward()
+        return _values(a.grad)
+
+    CASES = [leaf_hook, non_leaf_hook, retain_grad_sees_hooked_grad, retain_grad_of_second_output,
+             node_hooks, post_accumulate_grad, hooks_and_inplace, handle_as_context_manager]
+
+    @pytest.mark.parametrize("case", CASES, ids=[c.__name__ for c in CASES])
+    def test_matches_torch(self, case):
+        assert case(raxis) == case(torch)
+
+    def test_errors(self):
+        for lib in (raxis, torch):
+            with pytest.raises(RuntimeError, match="cannot register a hook on a tensor that doesn't require gradient"):
+                lib.tensor([1.0]).register_hook(lambda grad: grad)
+            non_leaf = lib.tensor([1.0], requires_grad=True) * 2
+            with pytest.raises(RuntimeError, match="post accumulate grad hooks cannot be registered on non-leaf tensors"):
+                non_leaf.register_post_accumulate_grad_hook(lambda t: None)
+
+    def test_hook_returning_wrong_count_raises(self):
+        a = raxis.tensor([1.0], requires_grad=True)
+        y = a * 2
+        y.grad_fn.register_hook(lambda grad_inputs, grad_outputs: (None, None, None))
+        with pytest.raises(RuntimeError, match="incorrect number of values"):
+            y.sum().backward()
+
+    def test_removed_handle_does_not_keep_tensor_alive(self):
+        a = raxis.tensor([1.0], requires_grad=True)
+        x = a * 2
+        handle = x.register_hook(lambda grad: grad)
+        assert x._use_count() == 1
+        del x
+        handle.remove()  # the list is gone: nothing to do
+
+
+# ===========================================================================
 # NO_GRAD / ENABLE_GRAD
 # ===========================================================================
 

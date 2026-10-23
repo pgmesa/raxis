@@ -49,6 +49,20 @@ struct NodeTask {
     TensorList inputs;
 };
 
+// From: torch/csrc/autograd/engine.cpp (call_function)
+// The node with its hooks. The inputs are cleared before returning: a node
+// that returns its incoming gradient as is (add, a view) must not see it
+// shared when the next node accumulates into it.
+TensorList call_function(Node& node, TensorList& inputs) {
+    node.call_tensor_pre_hooks(inputs);
+    node.call_retain_grad(inputs);
+    node.call_pre_hooks(inputs);
+    TensorList outputs = node.apply(inputs);
+    node.call_post_hooks(outputs, inputs);
+    inputs.clear();
+    return outputs;
+}
+
 // From: torch/csrc/autograd/engine.h (ReadyQueue)
 // Max-heap on sequence_nr. A heap over a vector instead of a
 // std::priority_queue, whose top() is const and would force copying the
@@ -131,7 +145,7 @@ void run_backward(const Tensor& tensor, const Tensor& grad, bool retain_graph) {
         // Moved in, so that an implicit ones_like can be stolen as .grad
         TensorList inputs(1);
         inputs[0] = std::move(grad_output);
-        grad_accumulator(tensor)->apply(inputs);
+        call_function(*grad_accumulator(tensor), inputs);
         return;
     }
 
@@ -148,22 +162,7 @@ void run_backward(const Tensor& tensor, const Tensor& grad, bool retain_graph) {
         NodeTask task = ready.pop();
         Node& node = *task.node;
 
-        TensorList outputs = node.apply(task.inputs);
-
-        // Retain grad: save the incoming gradient on the tensor if it is still alive
-        if (Tensor t = node.retained_tensor(); t.defined()) {
-            const Tensor& incoming = task.inputs[0];
-            if (incoming.defined()) {
-                if (t.grad().defined()) {
-                    t.set_grad(t.grad() + incoming);
-                } else {
-                    t.set_grad(incoming);
-                }
-            }
-        }
-        // Free the inputs before passing the outputs on: a node that returns
-        // its incoming gradient as is (add, a view) must not see it shared
-        task.inputs.clear();
+        TensorList outputs = call_function(node, task.inputs);
 
         if (!retain_graph) {
             node.release_variables();

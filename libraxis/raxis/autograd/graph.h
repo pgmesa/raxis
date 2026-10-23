@@ -10,6 +10,7 @@
 #include <raxis/util/array_ref.h>
 #include <raxis/util/small_vector.h>
 #include <raxis/tensor/tensor.h>
+#include <raxis/autograd/hooks.h>
 
 
 namespace raxis::autograd {
@@ -20,7 +21,6 @@ class SavedVariable;
 
 using NodePtr = std::shared_ptr<Node>;
 using EdgeList = std::vector<Edge>;
-using TensorList = std::vector<Tensor>;
 
 struct RAXIS_API Edge {
     Edge() : node(nullptr), input_nr(0) {}
@@ -68,11 +68,28 @@ public:
     // reverse as closely as the dependencies allow.
     uint64_t sequence_nr() const { return sequence_nr_; }
 
-    // The retained tensor is an output of this node and owns it through its
-    // grad_fn, so it is held weakly to avoid a reference cycle. Returns an
-    // undefined tensor if it was already freed.
-    void set_retained_tensor(const Tensor& t) { retained_tensor_ = t.weak_impl(); }
-    Tensor retained_tensor() const { return Tensor(retained_tensor_.lock()); }
+    // -- Hooks --
+    // From: torch/csrc/autograd/function.h
+    // The engine runs them around apply, in this order: the hooks of the
+    // tensors whose gradients arrive here, retain_grad, pre hooks, apply,
+    // post hooks (call_function in engine.cpp).
+    RemovableHandle register_prehook(FunctionPreHook hook);
+    RemovableHandle register_hook(FunctionPostHook hook);
+
+    // The hooks of the tensor that is output `output_nr` of the op. The list
+    // is shared with the tensor: a hook removed there is removed here.
+    void add_tensor_hooks(uint32_t output_nr, std::shared_ptr<HookList<TensorHook>> hooks);
+
+    // retain_grad on output `output_nr`. The tensor owns this node through
+    // its grad_fn, so it is held weakly to avoid a reference cycle.
+    void set_retained_tensor(uint32_t output_nr, const Tensor& t);
+    void clear_retained_tensor(uint32_t output_nr);
+
+    // Each takes the gradients the node receives (grads) and may replace them
+    virtual void call_tensor_pre_hooks(TensorList& grads);
+    void call_retain_grad(const TensorList& grads);
+    void call_pre_hooks(TensorList& grads);
+    void call_post_hooks(TensorList& grad_inputs, const TensorList& grads);
 
     // From: torch/csrc/autograd/function.h (release_variables)
     // Frees the saved tensors once the node ran in a backward without
@@ -89,7 +106,11 @@ private:
     uint64_t sequence_nr_;
     EdgeList next_edges_;
     size_t num_inputs_ = 0;
-    std::weak_ptr<detail::TensorImpl> retained_tensor_;
+    // Allocated on first use: most nodes never get a hook
+    std::vector<std::pair<uint32_t, std::shared_ptr<HookList<TensorHook>>>> tensor_hooks_;
+    std::vector<std::pair<uint32_t, std::weak_ptr<detail::TensorImpl>>> retained_tensors_;
+    std::shared_ptr<HookList<FunctionPreHook>> pre_hooks_;
+    std::shared_ptr<HookList<FunctionPostHook>> post_hooks_;
     // Members of the derived node: valid while the node is alive
     SmallVector<SavedVariable*, 2> saved_variables_;
 };

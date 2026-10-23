@@ -3,6 +3,7 @@
 #include <memory>
 
 #include <raxis/tensor/tensor.h>
+#include <raxis/autograd/hooks.h>
 
 
 namespace raxis::autograd {
@@ -31,6 +32,11 @@ struct AutogradMeta {
     // Weak because the node owns the leaf (and so this meta).
     std::weak_ptr<autograd::Node> grad_accumulator;
     uint32_t output_nr = 0;
+    // Tensor::register_hook. Shared with the grad_fn (or the AccumulateGrad
+    // of a leaf) that runs them; a new list after an in-place op, so new
+    // hooks see the gradient of the new values.
+    std::shared_ptr<HookList<TensorHook>> tensor_hooks;
+    std::shared_ptr<HookList<PostAccumulateGradHook>> post_accumulate_grad_hooks;
 
     bool is_leaf() const { return !grad_fn; }
 };

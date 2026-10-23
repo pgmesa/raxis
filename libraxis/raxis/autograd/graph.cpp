@@ -1,10 +1,15 @@
 #include <raxis/autograd/graph.h>
 
+#include <atomic>
 #include <cctype>
 #include <cstdint>
+#include <memory>
+#include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include <raxis/util/exception.h>
 #include <raxis/autograd/saved_variable.h>
 
 
@@ -28,6 +33,83 @@ std::string Node::forward_op_name() const {
         if (!std::isdigit(static_cast<unsigned char>(c))) return n;
     }
     return n.substr(0, pos) + (suffix == "0" ? "" : suffix);
+}
+
+uint64_t next_hook_id() {
+    static std::atomic<uint64_t> id{0};
+    return id++;
+}
+
+RemovableHandle Node::register_prehook(FunctionPreHook hook) {
+    if (!pre_hooks_) pre_hooks_ = std::make_shared<HookList<FunctionPreHook>>();
+    return RemovableHandle(pre_hooks_, pre_hooks_->add(std::move(hook)));
+}
+
+RemovableHandle Node::register_hook(FunctionPostHook hook) {
+    if (!post_hooks_) post_hooks_ = std::make_shared<HookList<FunctionPostHook>>();
+    return RemovableHandle(post_hooks_, post_hooks_->add(std::move(hook)));
+}
+
+void Node::add_tensor_hooks(uint32_t output_nr, std::shared_ptr<HookList<TensorHook>> hooks) {
+    tensor_hooks_.emplace_back(output_nr, std::move(hooks));
+}
+
+void Node::set_retained_tensor(uint32_t output_nr, const Tensor& t) {
+    clear_retained_tensor(output_nr);
+    retained_tensors_.emplace_back(output_nr, t.weak_impl());
+}
+
+void Node::clear_retained_tensor(uint32_t output_nr) {
+    std::erase_if(retained_tensors_, [output_nr](const auto& entry) { return entry.first == output_nr; });
+}
+
+// From: torch/csrc/autograd/python_hook.cpp (PyFunctionTensorPreHook)
+void Node::call_tensor_pre_hooks(TensorList& grads) {
+    for (const auto& [output_nr, hooks] : tensor_hooks_) {
+        for (const TensorHook& hook : hooks->hooks()) {
+            if (!grads[output_nr].defined()) break;
+            if (Tensor result = hook(grads[output_nr]); result.defined()) {
+                grads[output_nr] = std::move(result);
+            }
+        }
+    }
+}
+
+// From: torch/csrc/autograd/variable.cpp (VariableHooks::retain_grad)
+// The gradient after the tensor hooks; added to .grad over several backwards
+void Node::call_retain_grad(const TensorList& grads) {
+    for (const auto& [output_nr, weak] : retained_tensors_) {
+        Tensor t(weak.lock());
+        const Tensor& grad = grads[output_nr];
+        if (!t.defined() || !grad.defined()) continue;
+        t.set_grad(t.grad().defined() ? t.grad() + grad : grad);
+    }
+}
+
+static void check_hook_result(const Node& node, const char* kind, const TensorList& result, size_t expected) {
+    RAXIS_CHECK(result.size() == expected,
+        "hook '", kind, "' on ", node.name(), " has returned an incorrect number of values (got ",
+        result.size(), ", but expected ", expected, ")");
+}
+
+void Node::call_pre_hooks(TensorList& grads) {
+    if (!pre_hooks_) return;
+    for (const FunctionPreHook& hook : pre_hooks_->hooks()) {
+        if (std::optional<TensorList> result = hook(grads)) {
+            check_hook_result(*this, "prehook", *result, grads.size());
+            grads = std::move(*result);
+        }
+    }
+}
+
+void Node::call_post_hooks(TensorList& grad_inputs, const TensorList& grads) {
+    if (!post_hooks_) return;
+    for (const FunctionPostHook& hook : post_hooks_->hooks()) {
+        if (std::optional<TensorList> result = hook(grad_inputs, grads)) {
+            check_hook_result(*this, "hook", *result, grad_inputs.size());
+            grad_inputs = std::move(*result);
+        }
+    }
 }
 
 void Node::release_variables() {

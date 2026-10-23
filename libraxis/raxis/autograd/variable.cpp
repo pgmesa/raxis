@@ -71,10 +71,24 @@ static Tensor clone_obey_contract(const Tensor& grad, const Tensor& variable) {
     return out;
 }
 
+void AccumulateGrad::call_tensor_pre_hooks(TensorList& grads) {
+    AutogradMeta* meta = variable_.unsafe_get_tensor_impl()->autograd_meta();
+    if (!meta || !meta->tensor_hooks) return;
+    for (const TensorHook& hook : meta->tensor_hooks->hooks()) {
+        if (!grads[0].defined()) break;
+        if (Tensor result = hook(grads[0]); result.defined()) {
+            grads[0] = std::move(result);
+        }
+    }
+}
+
 // From: torch/csrc/autograd/functions/accumulate_grad.h (accumulateGrad)
 TensorList AccumulateGrad::apply(const TensorList& grads) {
     const Tensor& grad = grads[0];
-    RAXIS_CHECK(grad.defined(), "AccumulateGrad received undefined gradient");
+    // No gradient arrived (an unused output, or a hook that dropped it)
+    if (!grad.defined()) {
+        return {};
+    }
 
     if (Tensor variable_grad = variable_.grad(); variable_grad.defined()) {
         // In place, as PyTorch: .grad keeps its memory (and its layout)
@@ -92,6 +106,12 @@ TensorList AccumulateGrad::apply(const TensorList& grads) {
         variable_.set_grad(can_steal ? grad : clone_obey_contract(grad, variable_));
     }
 
+    AutogradMeta* meta = variable_.unsafe_get_tensor_impl()->autograd_meta();
+    if (meta->post_accumulate_grad_hooks) {
+        for (const PostAccumulateGradHook& hook : meta->post_accumulate_grad_hooks->hooks()) {
+            hook(variable_);
+        }
+    }
     return {};
 }
 
@@ -113,6 +133,54 @@ NodePtr grad_accumulator(const Tensor& leaf) {
     return acc;
 }
 
+
+static AutogradMeta& materialize_autograd_meta(const Tensor& self) {
+    detail::TensorImpl* impl = self.unsafe_get_tensor_impl();
+    if (!impl->autograd_meta()) {
+        impl->set_autograd_meta(std::make_unique<AutogradMeta>());
+    }
+    return *impl->autograd_meta();
+}
+
+RemovableHandle register_hook(const Tensor& self, TensorHook hook) {
+    RAXIS_CHECK(self.requires_grad(),
+        "cannot register a hook on a tensor that doesn't require gradient");
+    AutogradMeta& meta = materialize_autograd_meta(self);
+    if (!meta.tensor_hooks) {
+        meta.tensor_hooks = std::make_shared<HookList<TensorHook>>();
+        if (NodePtr grad_fn = self.grad_fn()) {
+            grad_fn->add_tensor_hooks(self.output_nr(), meta.tensor_hooks);
+        }
+    }
+    return RemovableHandle(meta.tensor_hooks, meta.tensor_hooks->add(std::move(hook)));
+}
+
+RemovableHandle register_post_accumulate_grad_hook(const Tensor& self, PostAccumulateGradHook hook) {
+    RAXIS_CHECK(self.requires_grad(),
+        "cannot register a hook on a tensor that doesn't require gradient");
+    RAXIS_CHECK(self.is_leaf(),
+        "post accumulate grad hooks cannot be registered on non-leaf tensors");
+    AutogradMeta& meta = materialize_autograd_meta(self);
+    if (!meta.post_accumulate_grad_hooks) {
+        meta.post_accumulate_grad_hooks = std::make_shared<HookList<PostAccumulateGradHook>>();
+    }
+    auto& hooks = meta.post_accumulate_grad_hooks;
+    return RemovableHandle(hooks, hooks->add(std::move(hook)));
+}
+
+// From: torch/csrc/autograd/variable.cpp (update_tensor_hooks_on_new_gradfn)
+// After an in-place op the tensor has a new grad_fn. Its hooks stay on the
+// old one (they were registered for the gradient of the old values) and new
+// hooks start a new list; retain_grad follows the tensor.
+static void update_hooks_on_new_grad_fn(const Tensor& self, const NodePtr& old_fn, const NodePtr& new_fn) {
+    AutogradMeta* meta = self.unsafe_get_tensor_impl()->autograd_meta();
+    if (!meta) return;
+    meta->tensor_hooks = nullptr;
+    if (meta->retains_grad && old_fn) {
+        old_fn->clear_retained_tensor(meta->output_nr);
+        new_fn->set_retained_tensor(0, self);
+    }
+}
 
 void set_autograd_meta(Tensor& result, NodePtr grad_fn, uint32_t output_nr) {
     result.set_requires_grad(true);
@@ -217,12 +285,15 @@ void rebase_history(const Tensor& self, NodePtr grad_fn) {
     detail::TensorImpl* impl = self.unsafe_get_tensor_impl();
     if (impl->is_view()) {
         Tensor base = self.base();
+        NodePtr old_fn = base.grad_fn();
         auto copy_slices = std::make_shared<CopySlices>(base, self, std::move(grad_fn));
+        update_hooks_on_new_grad_fn(base, old_fn, copy_slices);
         set_autograd_meta(base, copy_slices);
         refresh_view_grad_fn(self);
         return;
     }
     Tensor result = self;
+    update_hooks_on_new_grad_fn(result, result.grad_fn(), grad_fn);
     set_autograd_meta(result, std::move(grad_fn));
 }
 
@@ -252,6 +323,7 @@ void refresh_view_grad_fn(const Tensor& view) {
         impl->set_autograd_meta(std::make_unique<AutogradMeta>());
         meta = impl->autograd_meta();
     }
+    update_hooks_on_new_grad_fn(view, meta->grad_fn, grad_fn);
     meta->grad_fn = std::move(grad_fn);
     meta->output_nr = 0;
     meta->requires_grad = true;
