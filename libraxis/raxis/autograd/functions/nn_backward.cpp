@@ -151,6 +151,35 @@ TensorList NativeBatchNormBackward0::apply(const TensorList& grads) {
 }
 
 
+// bias is saved only for the shape check of the backward, as in PyTorch
+NativeLayerNormBackward0::NativeLayerNormBackward0(
+    const Tensor& input, IntArrayRef normalized_shape, const Tensor& weight, const Tensor& bias,
+    const Tensor& mean, const Tensor& rstd)
+    : normalized_shape_(normalized_shape.begin(), normalized_shape.end()),
+      input_requires_grad_(input.requires_grad()),
+      weight_requires_grad_(weight.requires_grad()),
+      bias_requires_grad_(bias.requires_grad())
+{
+    input_.save(input);
+    weight_.save(weight);
+    bias_.save(bias);
+    result1_.save(mean);
+    result2_.save(rstd);
+}
+std::string NativeLayerNormBackward0::name() const { return "NativeLayerNormBackward0"; }
+
+TensorList NativeLayerNormBackward0::apply(const TensorList& grads) {
+    if (!grads[0].defined()) {
+        return {Tensor(), Tensor(), Tensor()};
+    }
+    auto [grad_input, grad_weight, grad_bias] = native_layer_norm_backward(
+        grads[0], input_.unpack(), normalized_shape_, result1_.unpack(), result2_.unpack(),
+        weight_.unpack(), bias_.unpack(),
+        {input_requires_grad_, weight_requires_grad_, bias_requires_grad_});
+    return {grad_input, grad_weight, grad_bias};
+}
+
+
 NativeDropoutBackward0::NativeDropoutBackward0(const Tensor& mask, double scale)
     : scale_(scale)
 {

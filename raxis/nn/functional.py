@@ -132,6 +132,11 @@ def batch_norm(input: Tensor, running_mean: Tensor | None, running_var: Tensor |
     return raxis.batch_norm(input, weight, bias, running_mean, running_var, training, momentum, eps)
 
 
+def layer_norm(input: Tensor, normalized_shape, weight: Tensor | None = None,
+               bias: Tensor | None = None, eps: float = 1e-5) -> Tensor:
+    return raxis.layer_norm(input, normalized_shape, weight, bias, eps)
+
+
 # -- Losses --
 
 def mse_loss(input: Tensor, target: Tensor, reduction: str = "mean") -> Tensor:

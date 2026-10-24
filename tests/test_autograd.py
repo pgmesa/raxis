@@ -1418,6 +1418,10 @@ class TestCreateGraph:
         assert g.requires_grad
         with pytest.raises(RuntimeError, match="derivative for 'convolution_backward' is not implemented"):
             raxis.autograd.grad(g.sum(), x)
+        x = raxis.rand((2, 4), requires_grad=True)
+        g, = raxis.autograd.grad(F_.layer_norm(x, (4,)).pow(3).sum(), x, create_graph=True)
+        with pytest.raises(RuntimeError, match="derivative for 'native_layer_norm_backward' is not implemented"):
+            raxis.autograd.grad(g.sum(), x)
 
     def test_once_differentiable_raises_on_second_derivative(self):
         import warnings

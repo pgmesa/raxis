@@ -152,6 +152,21 @@ Tensor batch_norm(
     return result;
 }
 
+Tensor layer_norm(
+    const Tensor& input, IntArrayRef normalized_shape, const Tensor& weight, const Tensor& bias,
+    double eps
+) {
+    auto [result, mean, rstd] = ops::native_layer_norm(input, normalized_shape, weight, bias, eps);
+    if (autograd::requires_autograd({input, weight, bias})) {
+        auto grad_fn = std::make_shared<autograd::NativeLayerNormBackward0>(
+            input, normalized_shape, weight, bias, mean, rstd);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, {input, weight, bias});
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
 // From: aten/src/ATen/native/Dropout.cpp (dropout, _dropout_impl)
 Tensor dropout(const Tensor& input, double p, bool train) {
     RAXIS_CHECK(p >= 0.0 && p <= 1.0,
@@ -306,6 +321,20 @@ std::tuple<Tensor, Tensor, Tensor> native_batch_norm_backward(
     if (autograd::requires_autograd({grad_output, input, weight})) {
         set_not_implemented({&grad_input, &grad_weight, &grad_bias}, {grad_output, input, weight},
                             "native_batch_norm_backward");
+    }
+    return {grad_input, grad_weight, grad_bias};
+}
+
+std::tuple<Tensor, Tensor, Tensor> native_layer_norm_backward(
+    const Tensor& grad_output, const Tensor& input, IntArrayRef normalized_shape,
+    const Tensor& mean, const Tensor& rstd, const Tensor& weight, const Tensor& bias,
+    std::array<bool, 3> output_mask
+) {
+    auto [grad_input, grad_weight, grad_bias] = ops::native_layer_norm_backward(
+        grad_output, input, normalized_shape, mean, rstd, weight, bias, output_mask);
+    if (autograd::requires_autograd({grad_output, input, weight})) {
+        set_not_implemented({&grad_input, &grad_weight, &grad_bias}, {grad_output, input, weight},
+                            "native_layer_norm_backward");
     }
     return {grad_input, grad_weight, grad_bias};
 }

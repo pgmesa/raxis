@@ -846,6 +846,43 @@ def test_batch_norm_module_errors():
     assert tuple(bn(raxis.randn(1, 3)).shape) == (1, 3)
 
 
+# ===========================================================================
+# LAYER NORM MODULE
+# ===========================================================================
+
+LAYER_NORM_MODULES = [
+    ("last_dim", lambda lib: lib.nn.LayerNorm(8), (4, 6, 8)),
+    ("two_dims", lambda lib: lib.nn.LayerNorm((5, 6), eps=1e-3), (3, 5, 6)),
+    ("no_bias", lambda lib: lib.nn.LayerNorm(7, bias=False), (5, 7)),
+    ("no_affine", lambda lib: lib.nn.LayerNorm(7, elementwise_affine=False), (5, 7)),
+]
+
+
+@pytest.mark.parametrize("name, make, x_shape", LAYER_NORM_MODULES, ids=[n for n, _, _ in LAYER_NORM_MODULES])
+def test_layer_norm_modules(name, make, x_shape):
+    r_ln, t_ln = make(raxis), make(torch)
+    assert repr(r_ln) == repr(t_ln)
+    assert list(r_ln.state_dict()) == list(t_ln.state_dict())
+    # Non-trivial parameters, so their gradients are checked through them
+    for (_, r_param), (_, t_param) in zip(r_ln.named_parameters(), t_ln.named_parameters()):
+        values = randf_centered(*t_param.shape, seed=3) + 1
+        with torch.no_grad():
+            t_param.copy_(torch.from_numpy(values))
+        with raxis.no_grad():
+            r_param.copy_(raxis.tensor(values))
+    data = randf_centered(*x_shape) * 3 + 1
+    r = raxis.tensor(data, requires_grad=True)
+    t = torch.tensor(data, requires_grad=True)
+    r_out, t_out = r_ln(r), t_ln(t)
+    check_match(r_out, t_out, atol=1e-5, context=name)
+    grad = randf_centered(*x_shape, seed=9)
+    r_out.backward(raxis.tensor(grad))
+    t_out.backward(torch.from_numpy(grad))
+    check_match(r.grad, t.grad, atol=1e-5, context=f"{name} input grad")
+    for (r_name, r_param), (_, t_param) in zip(r_ln.named_parameters(), t_ln.named_parameters()):
+        check_match(r_param.grad, t_param.grad, atol=1e-4, context=f"{name} {r_name} grad")
+
+
 def cnn_bn(lib):
     lib.manual_seed(0)
     return lib.nn.Sequential(

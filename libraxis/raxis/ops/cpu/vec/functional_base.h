@@ -189,4 +189,33 @@ inline scalar_t map2_reduce_all(
     return vec_reduce_all(red_fun, acc_vec);
 }
 
+// From: aten/src/ATen/cpu/vec/functional_base.h
+// reduce(map(data[i], data2[i], data3[i])) in one pass
+template <typename scalar_t, typename MapOp, typename ReduceOp>
+inline scalar_t map3_reduce_all(
+    const MapOp& map_fun,
+    const ReduceOp& red_fun,
+    const scalar_t* data,
+    const scalar_t* data2,
+    const scalar_t* data3,
+    int64_t size
+) {
+    using Vec = Vectorized<scalar_t>;
+    if (size < Vec::size()) {
+        Vec data_vec = map_fun(Vec::loadu(data, size), Vec::loadu(data2, size), Vec::loadu(data3, size));
+        return vec_reduce_all(red_fun, data_vec, size);
+    }
+    int64_t d = Vec::size();
+    Vec acc_vec = map_fun(Vec::loadu(data), Vec::loadu(data2), Vec::loadu(data3));
+    for (; d < size - (size % Vec::size()); d += Vec::size()) {
+        acc_vec = red_fun(acc_vec, map_fun(Vec::loadu(data + d), Vec::loadu(data2 + d), Vec::loadu(data3 + d)));
+    }
+    if (size - d > 0) {
+        Vec data_vec = map_fun(
+            Vec::loadu(data + d, size - d), Vec::loadu(data2 + d, size - d), Vec::loadu(data3 + d, size - d));
+        acc_vec = Vec::set(acc_vec, red_fun(acc_vec, data_vec), size - d);
+    }
+    return vec_reduce_all(red_fun, acc_vec);
+}
+
 } // namespace raxis::vec

@@ -1449,6 +1449,13 @@ PYBIND11_MODULE(_C, c) {
             training, momentum, eps);
     }, py::arg("input"), py::arg("weight"), py::arg("bias"), py::arg("running_mean"),
        py::arg("running_var"), py::arg("training"), py::arg("momentum"), py::arg("eps"));
+    c.def("layer_norm", [](const raxis::Tensor& input, raxis::VecOrInt normalized_shape,
+                           std::optional<raxis::Tensor> weight, std::optional<raxis::Tensor> bias,
+                           double eps) {
+        return raxis::layer_norm(input, normalized_shape, weight.value_or(raxis::Tensor{}),
+                                 bias.value_or(raxis::Tensor{}), eps);
+    }, py::arg("input"), py::arg("normalized_shape"), py::arg("weight") = py::none(),
+       py::arg("bias") = py::none(), py::arg("eps") = 1e-5);
     c.def("logical_not",
         py::overload_cast<const raxis::Tensor&>(&raxis::logical_not),
         py::arg("input"));

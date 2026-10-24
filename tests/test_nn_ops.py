@@ -720,6 +720,80 @@ class TestBatchNorm:
 
 
 # ===========================================================================
+# LAYER NORM
+# ===========================================================================
+
+# (input shape, normalized_shape): rows shorter and longer than a vector, a
+# row long enough for the cascade of Welford chunks, several normalized dims
+LAYER_NORM_CASES = [
+    ((4, 7), (7,)), ((3, 5, 37), (37,)), ((2, 3, 4, 5), (4, 5)), ((2, 3000), (3000,)), ((6, 1), (1,)),
+]
+
+
+def layer_norm_both(shape, normalized_shape, dtype=np.float32, affine=True, seed=0):
+    rng = np.random.RandomState(seed)
+    x = (rng.randn(*shape) * 3 + 2).astype(dtype)
+    r_x, t_x = make_grad_pair(x)
+    r_w, t_w = make_grad_pair(rng.randn(*normalized_shape).astype(dtype)) if affine else (None, None)
+    r_b, t_b = make_grad_pair(rng.randn(*normalized_shape).astype(dtype)) if affine else (None, None)
+    r_out = raxis.nn.functional.layer_norm(r_x, normalized_shape, r_w, r_b)
+    t_out = F.layer_norm(t_x, normalized_shape, t_w, t_b)
+    grad = rng.randn(*shape).astype(dtype)
+    t_out.backward(torch.from_numpy(grad.copy()))
+    r_out.backward(raxis.from_numpy(grad.copy()))
+    pairs = {"output": (r_out, t_out), "input grad": (r_x.grad, t_x.grad)}
+    if affine:
+        pairs["weight grad"] = (r_w.grad, t_w.grad)
+        pairs["bias grad"] = (r_b.grad, t_b.grad)
+    return pairs
+
+
+class TestLayerNorm:
+
+    @pytest.mark.parametrize("shape, normalized_shape", LAYER_NORM_CASES)
+    @pytest.mark.parametrize("affine", [True, False])
+    def test_forward_backward(self, shape, normalized_shape, affine):
+        for name, (r, t) in layer_norm_both(shape, normalized_shape, affine=affine).items():
+            check_match(r, t, atol=1e-4, context=f"layer_norm {shape} {name}")
+
+    def test_float64(self):
+        for name, (r, t) in layer_norm_both((3, 5, 37), (5, 37), dtype=np.float64).items():
+            check_match(r, t, atol=1e-10, context=f"layer_norm float64 {name}")
+
+    def test_weight_without_bias(self):
+        x = randf_centered(4, 6)
+        w = randf_centered(6, seed=2)
+        r_out = raxis.nn.functional.layer_norm(raxis.tensor(x), (6,), raxis.tensor(w))
+        check_match(r_out, F.layer_norm(torch.tensor(x), (6,), torch.tensor(w)), atol=1e-5)
+
+    def test_empty_batch(self):
+        w = raxis.ones(4, requires_grad=True)
+        x = raxis.zeros(0, 4, requires_grad=True)
+        out = raxis.nn.functional.layer_norm(x, (4,), w)
+        assert tuple(out.shape) == (0, 4)
+        out.sum().backward()
+        check_match(w.grad, torch.zeros(4))
+
+    def test_grad_fn(self):
+        x = raxis.randn(2, 3, 4, requires_grad=True)
+        out = raxis.nn.functional.layer_norm(x, (3, 4))
+        assert out.grad_fn.name() == "NativeLayerNormBackward0"
+        # mean and rstd keep the leading dims, as in torch
+        assert tuple(out.grad_fn._saved_result1.shape) == (2, 1, 1)
+        assert tuple(out.grad_fn._saved_result2.shape) == (2, 1, 1)
+
+    def test_errors(self):
+        x = raxis.randn(2, 3, 4)
+        ln = raxis.nn.functional.layer_norm
+        with pytest.raises(RuntimeError, match=r"Given normalized_shape=\[3\], expected input with shape"):
+            ln(x, (3,))
+        with pytest.raises(RuntimeError, match="Expected weight to be of same shape as normalized_shape"):
+            ln(x, (4,), raxis.ones(3))
+        with pytest.raises(RuntimeError, match="Expected normalized_shape to be at least 1-dimensional"):
+            ln(x, ())
+
+
+# ===========================================================================
 # TENSOR CREATION FROM NUMPY
 # ===========================================================================
 

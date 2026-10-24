@@ -150,6 +150,27 @@ private:
 };
 
 
+class RAXIS_API NativeLayerNormBackward0 : public Node {
+public:
+    NativeLayerNormBackward0(
+        const Tensor& input, IntArrayRef normalized_shape, const Tensor& weight, const Tensor& bias,
+        const Tensor& mean, const Tensor& rstd);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    SavedVariable input_{this, "input"};
+    DimVector normalized_shape_;
+    SavedVariable weight_{this, "weight"};
+    SavedVariable bias_{this, "bias"};
+    SavedVariable result1_{this, "result1"};  // mean
+    SavedVariable result2_{this, "result2"};  // rstd
+    bool input_requires_grad_;
+    bool weight_requires_grad_;
+    bool bias_requires_grad_;
+};
+
+
 // The mask is a bool tensor (1 byte per element); the scale 1 / (1 - p) is
 // applied again in the backward instead of being stored in the mask
 class RAXIS_API NativeDropoutBackward0 : public Node {
