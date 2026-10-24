@@ -11,7 +11,7 @@ read end to end, while running at PyTorch speed on CPU.
 
 > **Status: alpha.** CPU only. Tensors with views and broadcasting, type
 > promotion, elementwise ops, reductions, matmul, autograd, and an `nn`/`optim`
-> package with enough to train MLPs and CNNs (Conv1d/2d, pooling, BatchNorm).
+> package with enough to train MLPs and CNNs (Conv1d/2d, pooling, BatchNorm, LayerNorm).
 > CUDA is next.
 
 ## Install
