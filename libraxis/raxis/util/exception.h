@@ -64,6 +64,13 @@ public:
     using std::runtime_error::runtime_error;
 };
 
+// From: c10/util/Exception.h (NotImplementedError)
+// A valid request raxis does not support: Python sees a NotImplementedError
+class NotImplementedError : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+
 } // namespace raxis
 
 
@@ -83,6 +90,9 @@ public:
                 ::raxis::detail::format_message(__VA_ARGS__));                \
         }                                                                     \
     } while (0)
+
+// Like RAXIS_CHECK, raising raxis::NotImplementedError (TORCH_CHECK_NOT_IMPLEMENTED)
+#define RAXIS_CHECK_NOT_IMPLEMENTED(cond, ...)                                    do {                                                                              if (!(cond)) [[unlikely]] {                                                       throw ::raxis::NotImplementedError(                                               ::raxis::detail::format_message(__VA_ARGS__));                        }                                                                         } while (0)
 
 // Like RAXIS_CHECK, raising raxis::IndexError (TORCH_CHECK_INDEX)
 #define RAXIS_CHECK_INDEX(cond, ...)                                          \

@@ -20,4 +20,5 @@
 #include <raxis/ops/convolution.h>
 #include <raxis/ops/pooling.h>
 #include <raxis/ops/normalization.h>
+#include <raxis/ops/padding.h>
 #include <raxis/ops/distribution_ops.h>

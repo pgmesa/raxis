@@ -1288,6 +1288,10 @@ RECORDED_OPS = [
     ("bce", (3, 4), lambda x: F_.binary_cross_entropy(x.sigmoid(), raxis.ones(3, 4) * 0.5)),
     ("max_pool2d", (1, 1, 4, 4), lambda x: F_.max_pool2d(x, 2)),
     ("avg_pool2d", (1, 1, 4, 4), lambda x: F_.avg_pool2d(x, 2)),
+    ("pad constant", (3, 4), lambda x: F_.pad(x, (1, 2, -1, 1), value=0.5)),
+    ("pad reflect", (1, 3, 4), lambda x: F_.pad(x, (2, 1), mode="reflect")),
+    ("pad replicate", (1, 3, 4), lambda x: F_.pad(x, (1, 2, 2, 0), mode="replicate")),
+    ("pad circular", (1, 3, 4), lambda x: F_.pad(x, (2, 1), mode="circular")),
     ("dropout", (3, 4), lambda x: F_.dropout(x, 0.5, True)),
     ("custom Function", (3, 4), lambda x: TestCreateGraph.Cube.apply(x)),
 ]

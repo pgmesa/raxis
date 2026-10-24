@@ -114,6 +114,15 @@ def avg_pool2d(input: Tensor, kernel_size, stride=None, padding=0, ceil_mode: bo
                             count_include_pad, divisor_override)
 
 
+# -- Padding --
+
+def pad(input: Tensor, pad: Sequence[int], mode: str = "constant", value: float | None = None) -> Tensor:
+    """Pads input with a (left, right) pair per dim, starting from the last
+    dim. mode is "constant" (with value, 0 by default), "reflect",
+    "replicate" or "circular". Negative pads crop."""
+    return _nn.pad(input, list(pad), mode, value)
+
+
 # -- Normalization --
 
 # From: torch/nn/functional.py (_verify_batch_size, batch_norm)

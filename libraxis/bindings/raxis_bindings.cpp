@@ -59,6 +59,8 @@ PYBIND11_MODULE(_C, c) {
             e.set_error();
         } catch (const raxis::IndexError& e) {
             PyErr_SetString(PyExc_IndexError, e.what());
+        } catch (const raxis::NotImplementedError& e) {
+            PyErr_SetString(PyExc_NotImplementedError, e.what());
         } catch (const std::exception& e) {
             PyErr_SetString(PyExc_RuntimeError, e.what());
         }
@@ -1449,6 +1451,9 @@ PYBIND11_MODULE(_C, c) {
             training, momentum, eps);
     }, py::arg("input"), py::arg("weight"), py::arg("bias"), py::arg("running_mean"),
        py::arg("running_var"), py::arg("training"), py::arg("momentum"), py::arg("eps"));
+    c.def("constant_pad_nd", [](const raxis::Tensor& input, std::vector<int64_t> pad, raxis::Scalar value) {
+        return raxis::constant_pad_nd(input, pad, value);
+    }, py::arg("input"), py::arg("pad"), py::arg("value") = 0);
     c.def("layer_norm", [](const raxis::Tensor& input, raxis::VecOrInt normalized_shape,
                            std::optional<raxis::Tensor> weight, std::optional<raxis::Tensor> bias,
                            double eps) {
@@ -1703,6 +1708,12 @@ PYBIND11_MODULE(_C, c) {
                         std::optional<raxis::Tensor> bias) {
         return raxis::linear(input, weight, bias.value_or(raxis::Tensor{}));
     }, py::arg("input"), py::arg("weight"), py::arg("bias") = py::none());
+
+    // pad holds a (left, right) pair per padded dim, starting from the last
+    nn.def("pad", [](const raxis::Tensor& input, std::vector<int64_t> pad, const std::string& mode,
+                     std::optional<double> value) {
+        return raxis::pad(input, pad, mode, value);
+    }, py::arg("input"), py::arg("pad"), py::arg("mode") = "constant", py::arg("value") = py::none());
 
     nn.def("nll_loss", [](const raxis::Tensor& input, const raxis::Tensor& target,
                           std::optional<raxis::Tensor> weight, const std::string& reduction,

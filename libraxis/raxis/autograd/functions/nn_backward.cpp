@@ -180,6 +180,37 @@ TensorList NativeLayerNormBackward0::apply(const TensorList& grads) {
 }
 
 
+ConstantPadNdBackward0::ConstantPadNdBackward0(IntArrayRef pad)
+    : pad_(pad.begin(), pad.end()) {}
+std::string ConstantPadNdBackward0::name() const { return "ConstantPadNdBackward0"; }
+
+// From: torch/csrc/autograd/FunctionsManual.cpp (constant_pad_nd_backward)
+TensorList ConstantPadNdBackward0::apply(const TensorList& grads) {
+    DimVector negated(pad_.size());
+    for (size_t i = 0; i < pad_.size(); ++i) {
+        negated[i] = -pad_[i];
+    }
+    return {constant_pad_nd(grads[0], negated, 0)};
+}
+
+
+static std::string padding_node_name(PaddingMode mode, size_t pad_size, const char* suffix) {
+    const char* kind = mode == PaddingMode::Reflect ? "ReflectionPad"
+                     : mode == PaddingMode::Replicate ? "ReplicationPad" : "CircularPad";
+    return std::string(kind) + std::to_string(pad_size / 2) + "D" + suffix;
+}
+
+PaddingBackward0::PaddingBackward0(const Tensor& self, IntArrayRef pad, PaddingMode mode)
+    : self_shape_(self.shape().begin(), self.shape().end()),
+      pad_(pad.begin(), pad.end()),
+      mode_(mode) {}
+std::string PaddingBackward0::name() const { return padding_node_name(mode_, pad_.size(), "Backward0"); }
+
+TensorList PaddingBackward0::apply(const TensorList& grads) {
+    return {padding_backward(grads[0], self_shape_, pad_, mode_)};
+}
+
+
 NativeDropoutBackward0::NativeDropoutBackward0(const Tensor& mask, double scale)
     : scale_(scale)
 {
@@ -333,6 +364,17 @@ std::string AvgPool2DBackwardBackward0::name() const { return "AvgPool2DBackward
 TensorList AvgPool2DBackwardBackward0::apply(const TensorList& grads) {
     return {avg_pool2d(grads[0], kernel_size_, stride_, padding_, ceil_mode_,
                        count_include_pad_, divisor_override_)};
+}
+
+
+PaddingBackwardBackward0::PaddingBackwardBackward0(IntArrayRef pad, PaddingMode mode)
+    : pad_(pad.begin(), pad.end()), mode_(mode) {}
+std::string PaddingBackwardBackward0::name() const {
+    return padding_node_name(mode_, pad_.size(), "BackwardBackward0");
+}
+
+TensorList PaddingBackwardBackward0::apply(const TensorList& grads) {
+    return {padding(grads[0], pad_, mode_)};
 }
 
 } // namespace raxis::autograd

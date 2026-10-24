@@ -9,6 +9,7 @@
 #include <raxis/ops/dropout.h>
 #include <raxis/ops/loss.h>
 #include <raxis/ops/normalization.h>
+#include <raxis/ops/padding.h>
 #include <raxis/ops/pooling.h>
 #include <raxis/tensor/tensor.h>
 #include <raxis/util/small_vector.h>
@@ -171,6 +172,37 @@ private:
 };
 
 
+// The gradient of a constant pad is the grad cropped back: constant_pad_nd
+// with the pads negated
+class RAXIS_API ConstantPadNdBackward0 : public Node {
+public:
+    explicit ConstantPadNdBackward0(IntArrayRef pad);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    DimVector pad_;
+};
+
+
+// ReflectionPad{1,2,3}DBackward0 / ReplicationPad{1,2,3}DBackward0 (the
+// name follows the number of padded dims, as in PyTorch) and
+// CircularPad{1,2,3}DBackward0 (PyTorch builds circular padding from slice
+// copies, so its grad_fn is CopySlices). Saves the input shape, not the
+// input: the backward only needs where each output position was read from.
+class RAXIS_API PaddingBackward0 : public Node {
+public:
+    PaddingBackward0(const Tensor& self, IntArrayRef pad, PaddingMode mode);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    DimVector self_shape_;
+    DimVector pad_;
+    PaddingMode mode_;
+};
+
+
 // The mask is a bool tensor (1 byte per element); the scale 1 / (1 - p) is
 // applied again in the backward instead of being stored in the mask
 class RAXIS_API NativeDropoutBackward0 : public Node {
@@ -290,6 +322,18 @@ private:
     bool ceil_mode_;
     bool count_include_pad_;
     std::optional<int64_t> divisor_override_;
+};
+
+// padding_backward is linear in grad_output: its derivative pads again
+class RAXIS_API PaddingBackwardBackward0 : public Node {
+public:
+    PaddingBackwardBackward0(IntArrayRef pad, PaddingMode mode);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    DimVector pad_;
+    PaddingMode mode_;
 };
 
 } // namespace raxis::autograd

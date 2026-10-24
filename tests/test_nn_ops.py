@@ -794,6 +794,89 @@ class TestLayerNorm:
 
 
 # ===========================================================================
+# PADDING
+# ===========================================================================
+
+PAD_MODES = ["constant", "reflect", "replicate", "circular"]
+
+# (input shape, pad): 1, 2 and 3 padded dims with and without a batch dim,
+# negative pads (crop), a row long enough for the vectorized interior copy
+PAD_CASES = [
+    ((2, 3, 7), (2, 1)), ((3, 7), (0, 3)), ((2, 3, 5, 6), (1, 2, 3, 1)), ((3, 5, 6), (2, 2, 1, 0)),
+    ((1, 2, 3, 4, 5), (1, 1, 2, 0, 1, 2)), ((2, 3, 4, 5), (1, 1, 2, 0, 1, 2)), ((2, 3, 9), (-2, 3)),
+    ((2, 3, 5, 6), (-1, 2, 2, -2)), ((0, 3, 5), (1, 1)), ((2, 3, 40), (5, 7)),
+]
+
+
+class TestPad:
+
+    @pytest.mark.parametrize("mode", PAD_MODES)
+    @pytest.mark.parametrize("shape, pad", PAD_CASES)
+    def test_forward_backward(self, shape, pad, mode):
+        r_x, t_x = make_grad_pair(randf_centered(*shape))
+        r_out = raxis.nn.functional.pad(r_x, pad, mode=mode)
+        t_out = F.pad(t_x, pad, mode=mode)
+        check_match(r_out, t_out, context=f"pad {mode} {shape} {pad}")
+        backward_both(r_out, t_out)
+        check_match(r_x.grad, t_x.grad, atol=1e-5, context=f"pad {mode} {shape} {pad} grad")
+
+    @pytest.mark.parametrize("mode", PAD_MODES)
+    def test_double_backward(self, mode):
+        """The derivative of the pad backward with respect to the incoming
+        gradient pads it again."""
+        x = randf_centered(1, 2, 4, 5)
+        w = randf_centered(1, 2, 4, 5, seed=4)
+        results = []
+        for lib in (raxis, torch):
+            lx = lib.tensor(x, requires_grad=True)
+            out = lib.nn.functional.pad(lx, (2, 1, 1, 2), mode=mode)
+            g = lib.tensor(randf_centered(*out.shape, seed=5), requires_grad=True)
+            gx, = lib.autograd.grad(out, lx, g, create_graph=True)
+            gg, = lib.autograd.grad(gx, g, lib.tensor(w))
+            results.append(gg)
+        check_match(results[0], results[1], atol=1e-5)
+
+    @pytest.mark.parametrize("dtype", [np.float64, np.int64])
+    def test_dtypes(self, dtype):
+        x = (randf_centered(2, 3, 6) * 10).astype(dtype)
+        for mode in PAD_MODES:
+            check_match(raxis.nn.functional.pad(raxis.tensor(x), (2, 3), mode=mode),
+                        F.pad(torch.tensor(x), (2, 3), mode=mode), context=mode)
+
+    def test_constant_value(self):
+        x = randf_centered(2, 3)
+        check_match(raxis.nn.functional.pad(raxis.tensor(x), (1, 2, 0, 1), value=-3.5),
+                    F.pad(torch.tensor(x), (1, 2, 0, 1), value=-3.5))
+        check_match(raxis.constant_pad_nd(raxis.tensor(x), [1, 1], 2),
+                    torch.constant_pad_nd(torch.tensor(x), [1, 1], 2))
+
+    def test_grad_fn(self):
+        x = raxis.randn(1, 2, 4, 4, requires_grad=True)
+        pad = raxis.nn.functional.pad
+        assert pad(x, (1, 1)).grad_fn.name() == "ConstantPadNdBackward0"
+        assert pad(x[0], (1, 1), mode="reflect").grad_fn.name() == "ReflectionPad1DBackward0"
+        assert pad(x, (1, 1, 1, 1), mode="replicate").grad_fn.name() == "ReplicationPad2DBackward0"
+
+    def test_errors(self):
+        x = raxis.randn(2, 3, 4)
+        pad = raxis.nn.functional.pad
+        with pytest.raises(RuntimeError, match="Padding size should be less than the corresponding input"):
+            pad(x, (4, 0), mode="reflect")
+        with pytest.raises(NotImplementedError, match="Padding size 4 is not supported for 2D input"):
+            pad(raxis.randn(2, 3), (1, 1, 1, 1), mode="reflect")
+        with pytest.raises(NotImplementedError, match="Unrecognised padding mode"):
+            pad(x, (1, 1), mode="mirror")
+        with pytest.raises(RuntimeError, match="doesn't take in value argument"):
+            pad(x, (1, 1), mode="replicate", value=1.0)
+        with pytest.raises(RuntimeError, match="Padding value causes wrapping around more than once"):
+            pad(x, (5, 0), mode="circular")
+        with pytest.raises(RuntimeError, match="Padding length must be divisible by 2"):
+            pad(x, (1,))
+        with pytest.raises(RuntimeError, match="length must be non-negative"):
+            pad(x, (-3, -2))
+
+
+# ===========================================================================
 # TENSOR CREATION FROM NUMPY
 # ===========================================================================
 

@@ -3,6 +3,7 @@
 #include <raxis/ops/dropout.h>
 #include <raxis/ops/loss.h>
 #include <raxis/ops/normalization.h>
+#include <raxis/ops/padding.h>
 #include <raxis/ops/pooling.h>
 #include <raxis/ops/softmax.h>
 
@@ -167,6 +168,63 @@ Tensor layer_norm(
     return result;
 }
 
+Tensor constant_pad_nd(const Tensor& self, IntArrayRef pad, Scalar value) {
+    Tensor result = ops::constant_pad_nd(self, pad, value);
+    if (autograd::requires_autograd(self)) {
+        auto grad_fn = std::make_shared<autograd::ConstantPadNdBackward0>(pad);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor padding(const Tensor& self, IntArrayRef pad, PaddingMode mode) {
+    Tensor result = ops::padding(self, pad, mode);
+    if (autograd::requires_autograd(self)) {
+        auto grad_fn = std::make_shared<autograd::PaddingBackward0>(self, pad, mode);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+// From: aten/src/ATen/native/PadNd.cpp (pad_symint, _pad_enum_symint)
+Tensor pad(const Tensor& self, IntArrayRef pad, std::string_view mode, std::optional<double> value) {
+    PaddingMode padding_mode;
+    if (mode == "constant") {
+        padding_mode = PaddingMode::Constant;
+    } else if (mode == "reflect") {
+        padding_mode = PaddingMode::Reflect;
+    } else if (mode == "replicate") {
+        padding_mode = PaddingMode::Replicate;
+    } else if (mode == "circular") {
+        padding_mode = PaddingMode::Circular;
+    } else {
+        RAXIS_CHECK_NOT_IMPLEMENTED(false, "Unrecognised padding mode ", mode);
+    }
+    RAXIS_CHECK(pad.size() % 2 == 0, "Padding length must be divisible by 2");
+    RAXIS_CHECK(static_cast<int64_t>(pad.size()) <= self.ndim() * 2,
+        "Padding length should be less than or equal to two times the input dimension but got padding "
+        "length ", pad.size(), " and input of dimension ", self.ndim());
+    if (padding_mode == PaddingMode::Constant) {
+        return constant_pad_nd(self, pad, value.value_or(0.0));
+    }
+    RAXIS_CHECK(!value.has_value() || *value == 0,
+        "Padding mode \"", mode, "\" doesn't take in value argument");
+
+    const int64_t npad = static_cast<int64_t>(pad.size()) / 2;
+    const int64_t ndim = self.ndim();
+    RAXIS_CHECK_NOT_IMPLEMENTED(npad >= 1 && npad <= 3 && (ndim == npad + 1 || ndim == npad + 2),
+        "Padding size ", pad.size(), " is not supported for ", ndim, "D input tensor.\n"
+        "Supported combinations for non-constant padding:\n"
+        "  - 2D or 3D input: padding size = 2 (pads last dimension)\n"
+        "  - 3D or 4D input: padding size = 4 (pads last 2 dimensions)\n"
+        "  - 4D or 5D input: padding size = 6 (pads last 3 dimensions)");
+    return padding(self, pad, padding_mode);
+}
+
 // From: aten/src/ATen/native/Dropout.cpp (dropout, _dropout_impl)
 Tensor dropout(const Tensor& input, double p, bool train) {
     RAXIS_CHECK(p >= 0.0 && p <= 1.0,
@@ -272,6 +330,19 @@ Tensor avg_pool2d_backward(
     if (autograd::requires_autograd(grad_output)) {
         auto grad_fn = std::make_shared<autograd::AvgPool2DBackwardBackward0>(
             kernel_size, stride, padding, ceil_mode, count_include_pad, divisor_override);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, grad_output);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor padding_backward(
+    const Tensor& grad_output, IntArrayRef input_shape, IntArrayRef pad, PaddingMode mode
+) {
+    Tensor result = ops::padding_backward(grad_output, input_shape, pad, mode);
+    if (autograd::requires_autograd(grad_output)) {
+        auto grad_fn = std::make_shared<autograd::PaddingBackwardBackward0>(pad, mode);
         grad_fn->set_num_inputs(1);
         autograd::set_next_edges(grad_fn, grad_output);
         autograd::set_autograd_meta(result, grad_fn);
