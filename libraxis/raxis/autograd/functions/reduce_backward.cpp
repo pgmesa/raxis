@@ -5,6 +5,7 @@
 #include <limits>
 
 #include <raxis/autograd/variable.h>
+#include <raxis/autograd/grad_mode.h>
 #include <raxis/tensor/factories.h>
 #include <raxis/ops/tensor_advanced_indexing.h>
 #include <raxis/ops/reduce_ops.h>
@@ -377,6 +378,69 @@ TensorList CumsumBackward0::apply(const TensorList& grads) {
         return {grad};
     }
     return {reversed_cumsum(grad, dim_)};
+}
+
+
+CumprodBackward0::CumprodBackward0(const Tensor& self, int64_t dim, const Tensor& result) : dim_(dim) {
+    self_.save(self);
+    result_.save(result, /*is_output=*/true);
+}
+
+std::string CumprodBackward0::name() const { return "CumprodBackward0"; }
+
+// From: aten/src/ATen/native/ReduceOps.cpp (cumprod_backward)
+// y_j = x_0 * ... * x_j, so dy_j/dx_k = y_j / x_k for j >= k and
+// dL/dx_k = (sum over j >= k of grad_j * y_j) / x_k: a reversed cumsum, then
+// a division. A zero in x breaks the division. Per slice, with z1 the first
+// zero and z2 the second (or the end):
+//   k < z1: the same formula, summing only j < z1 (later y_j are 0)
+//   k > z1: 0, every product through x_k also goes through x_z1 = 0
+//   k = z1: y_{z1-1} * sum over z1 <= j < z2 of grad_j * x_{z1+1} * ... * x_j
+// PyTorch builds these masks with whole-tensor ops; so does this. Its
+// second-derivative path (an O(n^2) loop) is not ported: with zeros and
+// create_graph this raises instead.
+TensorList CumprodBackward0::apply(const TensorList& grads) {
+    const Tensor input = self_.unpack();
+    const Tensor grad = grads[0].to(input.dtype());
+    if (input.numel() <= 1) {
+        return {grad};
+    }
+    const int64_t dim = wrap_dim(dim_, input.ndim());
+    if (input.shape()[dim] == 1) {
+        return {grad};
+    }
+
+    const Tensor output = result_.unpack();
+    const Tensor w = output * grad;
+    const Tensor is_zero = input == 0;
+    if (!is_zero.any().item<bool>()) {
+        return {reversed_cumsum(w, dim).div(input).to(input.dtype())};
+    }
+    RAXIS_CHECK(!GradMode::is_enabled(),
+        "cumprod: the second derivative with zeros in the input is not implemented");
+
+    // Number of zeros up to each position: 0 before z1, 1 in [z1, z2)
+    const Tensor zeros_seen = is_zero.cumsum(dim);
+
+    Tensor mask = zeros_seen == 0;
+    const Tensor before_first_zero = reversed_cumsum(masked_fill(w, mask.logical_not(), 0), dim).div(input);
+    Tensor grad_input = where(mask, before_first_zero, 0);
+
+    mask = zeros_seen == 1;
+    // max over a bool slice gives the first true: z1 (0 when there is no zero,
+    // which first_zero_mask filters out)
+    const Tensor first_zero_index = std::get<1>(max(mask, dim, /*keepdim=*/true));
+    const Tensor first_zero_mask = mask.logical_and(is_zero);
+    const Tensor after_first_zero = mask.logical_and(first_zero_mask.logical_not());
+
+    const Tensor prods_after_zero = masked_fill(input, after_first_zero.logical_not(), 1).cumprod(dim);
+    const Tensor grad_until_second_zero = masked_fill(grad, zeros_seen != 1, 0);
+    const Tensor output_before_zero = masked_fill(
+        gather(output, dim, (first_zero_index - 1).relu()), first_zero_index == 0, 1);
+    const Tensor at_first_zero = (prods_after_zero * grad_until_second_zero).sum({dim}, /*keepdim=*/true)
+        * output_before_zero;
+    grad_input = where(first_zero_mask, at_first_zero, grad_input);
+    return {grad_input.to(input.dtype())};
 }
 
 

@@ -520,6 +520,10 @@ Tensor Tensor::cumsum(int64_t dim, std::optional<Dtype> dtype) const {
     return ::raxis::cumsum(*this, dim, dtype);
 }
 
+Tensor Tensor::cumprod(int64_t dim, std::optional<Dtype> dtype) const {
+    return ::raxis::cumprod(*this, dim, dtype);
+}
+
 Tensor Tensor::all(IntArrayRef dim, bool keepdim) const {
     return ::raxis::all(*this, dim, keepdim);
 }

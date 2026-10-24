@@ -217,6 +217,17 @@ Tensor cumsum(const Tensor& self, int64_t dim, std::optional<Dtype> dtype) {
     return result;
 }
 
+Tensor cumprod(const Tensor& self, int64_t dim, std::optional<Dtype> dtype) {
+    Tensor result = ops::cumprod(self, dim, dtype);
+    if (autograd::requires_autograd(self)) {
+        auto grad_fn = std::make_shared<autograd::CumprodBackward0>(self, dim, result);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
 Tensor reversed_cumsum(const Tensor& self, int64_t dim) {
     Tensor result = ops::reversed_cumsum(self, dim);
     if (autograd::requires_autograd(self)) {

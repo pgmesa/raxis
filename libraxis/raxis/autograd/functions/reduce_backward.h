@@ -238,6 +238,18 @@ private:
     int64_t dim_;
 };
 
+class RAXIS_API CumprodBackward0 : public Node {
+public:
+    CumprodBackward0(const Tensor& self, int64_t dim, const Tensor& result);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    SavedVariable self_{this, "self"};
+    SavedVariable result_{this, "result"};
+    int64_t dim_;
+};
+
 // reversed_cumsum is only used by CumsumBackward0: this is its backward,
 // for create_graph
 class RAXIS_API ReversedCumsumBackward0 : public Node {

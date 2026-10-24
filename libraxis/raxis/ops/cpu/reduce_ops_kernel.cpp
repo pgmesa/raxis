@@ -114,12 +114,14 @@ void or_kernel(TensorIterator& iter) {
 }
 
 // From: aten/src/ATen/native/cpu/ReduceOpsKernel.cpp (cpu_cum_base_kernel,
-// cumsum_cpu_kernel). Elementwise over the positions of self with dim
-// squashed to 1, each one scanning its whole slice along dim. The running
-// sum is kept in double for float (int64 for integers), as PyTorch's
-// acc_type on CPU, so a long float cumsum does not drift. reverse scans
-// from the end with the same additions as flip + cumsum + flip.
-void cumsum_kernel(const Tensor& result, const Tensor& self, int64_t dim, bool reverse) {
+// cumsum_cpu_kernel, cumprod_cpu_kernel). Elementwise over the positions of
+// self with dim squashed to 1, each one scanning its whole slice along dim.
+// The running value is kept in double for float (int64 for integers), as
+// PyTorch's acc_type on CPU, so a long float scan does not drift. reverse
+// scans from the end with the same operations as flip + scan + flip.
+template <typename combine_t>
+void cpu_cum_base_kernel(const Tensor& result, const Tensor& self, int64_t dim, bool reverse,
+                         int init, const combine_t& combine) {
     const int64_t size = self.shape()[dim];
     const int64_t self_stride = self.strides()[dim];
     const int64_t result_stride = result.strides()[dim];
@@ -143,9 +145,9 @@ void cumsum_kernel(const Tensor& result, const Tensor& self, int64_t dim, bool r
             for (int64_t i = 0; i < n; i++) {
                 scalar_t* out = reinterpret_cast<scalar_t*>(result_bytes) + first * result_stride;
                 const scalar_t* in = reinterpret_cast<const scalar_t*>(self_bytes) + first * self_stride;
-                acc_t acc = 0;
+                acc_t acc = static_cast<acc_t>(init);
                 for (int64_t j = 0; j < size; j++) {
-                    acc += in[j * step_self];
+                    acc = combine(acc, static_cast<acc_t>(in[j * step_self]));
                     out[j * step_result] = static_cast<scalar_t>(acc);
                 }
                 result_bytes += strides[0];
@@ -154,6 +156,14 @@ void cumsum_kernel(const Tensor& result, const Tensor& self, int64_t dim, bool r
         };
         iter.for_each(loop, /*grain_size=*/std::max<int64_t>(1, detail::GRAIN_SIZE / size));
     });
+}
+
+void cumsum_kernel(const Tensor& result, const Tensor& self, int64_t dim, bool reverse) {
+    cpu_cum_base_kernel(result, self, dim, reverse, /*init=*/0, [](auto a, auto b) { return a + b; });
+}
+
+void cumprod_kernel(const Tensor& result, const Tensor& self, int64_t dim, bool reverse) {
+    cpu_cum_base_kernel(result, self, dim, reverse, /*init=*/1, [](auto a, auto b) { return a * b; });
 }
 
 void argmax_kernel(TensorIterator& iter) {
@@ -172,6 +182,7 @@ REGISTER_DISPATCH(max_values_stub, &max_values_kernel);
 REGISTER_DISPATCH(min_values_stub, &min_values_kernel);
 REGISTER_DISPATCH(std_var_stub, &std_var_kernel);
 REGISTER_DISPATCH(cumsum_stub, &cumsum_kernel);
+REGISTER_DISPATCH(cumprod_stub, &cumprod_kernel);
 REGISTER_DISPATCH(argmax_stub, &argmax_kernel);
 REGISTER_DISPATCH(argmin_stub, &argmin_kernel);
 REGISTER_DISPATCH(and_stub, &and_kernel);

@@ -984,6 +984,9 @@ PYBIND11_MODULE(_C, c) {
         .def("cumsum", [](const raxis::Tensor& self, int64_t dim, std::optional<raxis::Dtype> dtype) {
             return self.cumsum(dim, dtype);
         }, py::arg("dim"), py::kw_only(), py::arg("dtype") = py::none())
+        .def("cumprod", [](const raxis::Tensor& self, int64_t dim, std::optional<raxis::Dtype> dtype) {
+            return self.cumprod(dim, dtype);
+        }, py::arg("dim"), py::kw_only(), py::arg("dtype") = py::none())
         .def("all", [](const raxis::Tensor& self, std::optional<raxis::VecOrInt> dim, bool keepdim) {
             return self.all(dim.value_or(raxis::VecOrInt{}), keepdim);
         }, py::arg("dim") = py::none(), py::arg("keepdim") = false)
@@ -1634,6 +1637,9 @@ PYBIND11_MODULE(_C, c) {
     }, py::arg("input"), py::arg("dim") = py::none(), py::arg("keepdim") = false);
     c.def("cumsum", [](const raxis::Tensor& input, int64_t dim, std::optional<raxis::Dtype> dtype) {
         return raxis::cumsum(input, dim, dtype);
+    }, py::arg("input"), py::arg("dim"), py::kw_only(), py::arg("dtype") = py::none());
+    c.def("cumprod", [](const raxis::Tensor& input, int64_t dim, std::optional<raxis::Dtype> dtype) {
+        return raxis::cumprod(input, dim, dtype);
     }, py::arg("input"), py::arg("dim"), py::kw_only(), py::arg("dtype") = py::none());
     c.def("all", [](const raxis::Tensor& input, std::optional<raxis::VecOrInt> dim, bool keepdim) {
         return raxis::all(input, dim.value_or(raxis::VecOrInt{}), keepdim);

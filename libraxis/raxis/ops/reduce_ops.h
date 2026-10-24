@@ -41,10 +41,12 @@ DECLARE_DISPATCH(reduce_fn, or_stub);
 using std_var_fn = void(*)(TensorIterator&, double correction, bool take_sqrt);
 DECLARE_DISPATCH(std_var_fn, std_var_stub);
 
-// result[..., i, ...] = sum of self[..., j, ...] for j <= i along dim, or for
-// j >= i when reverse. result and self have the same shape and dtype.
-using cumsum_fn = void(*)(const Tensor& result, const Tensor& self, int64_t dim, bool reverse);
-DECLARE_DISPATCH(cumsum_fn, cumsum_stub);
+// result[..., i, ...] = sum (product) of self[..., j, ...] for j <= i along
+// dim, or for j >= i when reverse. result and self have the same shape and
+// dtype.
+using cum_fn = void(*)(const Tensor& result, const Tensor& self, int64_t dim, bool reverse);
+DECLARE_DISPATCH(cum_fn, cumsum_stub);
+DECLARE_DISPATCH(cum_fn, cumprod_stub);
 
 RAXIS_API Tensor sum(
     const Tensor& self,
@@ -183,6 +185,13 @@ RAXIS_API Tensor cumsum(
     std::optional<Dtype> dtype = std::nullopt
 );
 
+/// Cumulative product along dim. Integral and bool inputs give int64.
+RAXIS_API Tensor cumprod(
+    const Tensor& self,
+    int64_t dim,
+    std::optional<Dtype> dtype = std::nullopt
+);
+
 // The cumulative sum from the end along dim, as flip(cumsum(flip(x))) but
 // in one pass (the backward of cumsum)
 RAXIS_API Tensor reversed_cumsum(const Tensor& self, int64_t dim);
@@ -316,13 +325,17 @@ RAXIS_API Tensor cumsum(
     std::optional<Dtype> dtype = std::nullopt
 );
 
+/// Cumulative product along dim. Integral and bool inputs give int64.
+RAXIS_API Tensor cumprod(
+    const Tensor& self,
+    int64_t dim,
+    std::optional<Dtype> dtype = std::nullopt
+);
+
 // The cumulative sum from the end along dim, as flip(cumsum(flip(x))) but
 // in one pass (the backward of cumsum)
 RAXIS_API Tensor reversed_cumsum(const Tensor& self, int64_t dim);
 
-/// Cumulative sum from the end of dim: self.flip(dim).cumsum(dim).flip(dim)
-/// in one pass, without the two flipped copies (the backward of cumsum).
-RAXIS_API Tensor reversed_cumsum(const Tensor& self, int64_t dim);
 
 /// Whether all / any elements over dim (all dims if empty) are nonzero.
 /// The result is bool, or uint8 for uint8 input (as PyTorch, for

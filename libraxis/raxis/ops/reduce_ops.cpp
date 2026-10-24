@@ -394,8 +394,9 @@ static Tensor all_any_impl(const char* name, const Tensor& self, IntArrayRef dim
     return self.dtype() == dtypes::Uint8 ? result.to(dtypes::Uint8) : result;
 }
 
-// From: aten/src/ATen/native/ReduceOps.cpp (cumsum, cumsum_out)
-static Tensor cumsum_impl(const Tensor& self, int64_t dim, std::optional<Dtype> dtype, bool reverse) {
+// From: aten/src/ATen/native/ReduceOps.cpp (cumsum, impl_func_cum_ops)
+template <typename Stub>
+static Tensor cum_op_impl(const Tensor& self, int64_t dim, std::optional<Dtype> dtype, bool reverse, Stub& stub) {
     const int64_t wrapped = wrap_dim(dim, std::max<int64_t>(self.ndim(), 1));
     const Dtype out_dtype = dtype.value_or(
         self.dtype().is_integral(/*include_bool=*/true) ? dtypes::Int64 : self.dtype());
@@ -404,17 +405,21 @@ static Tensor cumsum_impl(const Tensor& self, int64_t dim, std::optional<Dtype> 
     if (self.ndim() == 0) {
         result.copy_(input);
     } else if (self.numel() > 0) {
-        cumsum_stub(self.device().type(), result, input, wrapped, reverse);
+        stub(self.device().type(), result, input, wrapped, reverse);
     }
     return result;
 }
 
 Tensor cumsum(const Tensor& self, int64_t dim, std::optional<Dtype> dtype) {
-    return cumsum_impl(self, dim, dtype, /*reverse=*/false);
+    return cum_op_impl(self, dim, dtype, /*reverse=*/false, cumsum_stub);
 }
 
 Tensor reversed_cumsum(const Tensor& self, int64_t dim) {
-    return cumsum_impl(self, dim, std::nullopt, /*reverse=*/true);
+    return cum_op_impl(self, dim, std::nullopt, /*reverse=*/true, cumsum_stub);
+}
+
+Tensor cumprod(const Tensor& self, int64_t dim, std::optional<Dtype> dtype) {
+    return cum_op_impl(self, dim, dtype, /*reverse=*/false, cumprod_stub);
 }
 
 Tensor all(const Tensor& self, IntArrayRef dim, bool keepdim) {
@@ -449,5 +454,6 @@ DEFINE_DISPATCH(and_stub);
 DEFINE_DISPATCH(or_stub);
 DEFINE_DISPATCH(std_var_stub);
 DEFINE_DISPATCH(cumsum_stub);
+DEFINE_DISPATCH(cumprod_stub);
 
 } // namespace raxis

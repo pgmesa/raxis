@@ -201,3 +201,71 @@ def test_cumsum_backward_dtype_and_size_one():
     (t.cumsum(1, dtype=torch.float64) * 2).sum().backward()
     check_match(r.grad, t.grad)
     assert np.array(r.grad).dtype == np.float32
+
+
+# ===========================================================================
+# cumprod
+# ===========================================================================
+
+@pytest.mark.parametrize("dtype", [np.float32, np.float64, np.int32, np.int64, np.bool_],
+                         ids=lambda d: np.dtype(d).name)
+@pytest.mark.parametrize("shape", [(7,), (5, 4), (3, 8, 6)])
+def test_cumprod(shape, dtype):
+    # Values near 1 (small integers) so the products neither overflow nor vanish
+    rng = np.random.default_rng(0)
+    data = rng.uniform(0.5, 1.5, shape)
+    if np.issubdtype(dtype, np.integer) or dtype == np.bool_:
+        data = np.round(data)
+    r, t = make_pair(data.astype(dtype))
+    for dim in range(-len(shape), len(shape)):
+        r_out, t_out = r.cumprod(dim), t.cumprod(dim)
+        check_match(r_out, t_out)
+        assert np.array(r_out).dtype == t_out.numpy().dtype
+    check_match(raxis.cumprod(r, 0, dtype=raxis.float64), torch.cumprod(t, 0, dtype=torch.float64))
+
+
+def test_cumprod_edge_cases():
+    r, t = make_pair(np.array(2.5, dtype=np.float32))
+    check_match(r.cumprod(0), t.cumprod(0))
+    r, t = make_pair(np.zeros((0, 3), dtype=np.float32))
+    check_match(r.cumprod(1), t.cumprod(1))
+    r, t = make_pair(randf(6, 10, lo=0.5, hi=1.5))
+    check_match(r[:, ::3].cumprod(1), t[:, ::3].cumprod(1))
+    check_match(r.transpose(0, 1).cumprod(0), t.transpose(0, 1).cumprod(0))
+
+
+# Rows with no zero, one zero (first, middle, last) and several zeros
+CUMPROD_ZEROS = np.array([
+    [1.5, -0.5, 2.0, 0.7, 1.2],
+    [0.0, 1.5, 2.0, 0.5, 3.0],
+    [1.5, 2.0, 0.0, 0.5, 3.0],
+    [1.5, 2.0, 0.5, 3.0, 0.0],
+    [1.5, 0.0, 2.0, 0.0, 3.0],
+    [0.0, 0.0, 2.0, 0.5, 0.0],
+], dtype=np.float64)
+
+
+@pytest.mark.parametrize("dim", [0, 1, -1])
+@pytest.mark.parametrize("zeros", [False, True], ids=["nonzero", "zeros"])
+def test_cumprod_backward(dim, zeros):
+    data = CUMPROD_ZEROS if zeros else randf(6, 5, lo=0.5, hi=1.5).astype(np.float64)
+    r, t = make_grad_pair(data)
+    w = np.random.default_rng(1).standard_normal(data.shape)
+    (r.cumprod(dim) * raxis.from_numpy(w)).sum().backward()
+    (t.cumprod(dim) * torch.from_numpy(w)).sum().backward()
+    check_match(r.grad, t.grad, atol=1e-10)
+    assert r.cumprod(dim).grad_fn.name() == t.cumprod(dim).grad_fn.name()
+
+
+def test_cumprod_backward_dtype_and_size_one():
+    r, t = make_grad_pair(randf(3, 1))
+    (r.cumprod(1, dtype=raxis.float64) * 2).sum().backward()
+    (t.cumprod(1, dtype=torch.float64) * 2).sum().backward()
+    check_match(r.grad, t.grad)
+    assert np.array(r.grad).dtype == np.float32
+
+
+def test_cumprod_create_graph_with_zeros_raises():
+    r = raxis.tensor([1.0, 0.0, 2.0], requires_grad=True)
+    with pytest.raises(RuntimeError, match="second derivative"):
+        raxis.autograd.grad(r.cumprod(0).sum(), r, create_graph=True)
