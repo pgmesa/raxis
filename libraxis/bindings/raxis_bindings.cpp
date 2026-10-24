@@ -908,6 +908,9 @@ PYBIND11_MODULE(_C, c) {
         .def("scatter_add_", [](raxis::Tensor& self, int64_t dim, const raxis::Tensor& index, const raxis::Tensor& src) -> raxis::Tensor& {
             return raxis::scatter_add_(self, dim, index, src);
         }, py::arg("dim"), py::arg("index"), py::arg("src"))
+        .def("flip", [](const raxis::Tensor& self, raxis::VecOrInt dims) {
+            return raxis::flip(self, dims);
+        }, py::arg("dims"))
         .def("index_select", &raxis::index_select, py::arg("dim"), py::arg("index"))
         .def("index_add", &raxis::index_add, py::arg("dim"), py::arg("index"), py::arg("source"))
         .def("index_add_", [](raxis::Tensor& self, int64_t dim, const raxis::Tensor& index, const raxis::Tensor& source) -> raxis::Tensor& {
@@ -1571,6 +1574,9 @@ PYBIND11_MODULE(_C, c) {
         py::overload_cast<const raxis::Tensor&, int64_t, const raxis::Tensor&, raxis::Scalar>(&raxis::scatter),
         py::arg("input"), py::arg("dim"), py::arg("index"), py::arg("value"));
     c.def("scatter_add", &raxis::scatter_add, py::arg("input"), py::arg("dim"), py::arg("index"), py::arg("src"));
+    c.def("flip", [](const raxis::Tensor& input, raxis::VecOrInt dims) {
+        return raxis::flip(input, dims);
+    }, py::arg("input"), py::arg("dims"));
     c.def("index_select", &raxis::index_select, py::arg("input"), py::arg("dim"), py::arg("index"));
     c.def("index_add", &raxis::index_add, py::arg("input"), py::arg("dim"), py::arg("index"), py::arg("source"));
     c.def("index_put", [](const raxis::Tensor& input, const std::vector<std::optional<raxis::Tensor>>& indices,

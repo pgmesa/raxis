@@ -163,6 +163,61 @@ def test_method_varargs():
 
 
 # ===========================================================================
+# flip
+# ===========================================================================
+
+FLIP_CASES = [
+    ((7,),       (0,)),
+    ((3, 4),     (0,)),
+    ((3, 4),     (1,)),
+    ((3, 4),     (0, 1)),
+    ((2, 3, 4),  (0, 2)),
+    ((2, 3, 4),  (-1, 1)),
+    ((4, 1, 3),  (1, 2)),
+    ((64, 300),  (1,)),
+    ((300, 64),  (0,)),
+    ((3, 4),     ()),
+]
+
+
+@pytest.mark.parametrize("shape,dims", FLIP_CASES)
+def test_flip(shape, dims):
+    r, t = make_pair(randf(*shape))
+    check_match(r.flip(dims), t.flip(dims))
+    check_match(raxis.flip(r, dims), torch.flip(t, dims))
+
+
+def test_flip_layouts_and_dtypes():
+    r, t = make_pair(randf(2, 3, 4))
+    check_match(r.permute(2, 0, 1).flip(0, 1), t.permute(2, 0, 1).flip(0, 1))
+    check_match(r[:, ::2].flip(1), t[:, ::2].flip(1))
+    check_match(r[:1].expand(3, -1, -1).flip(0, 2), t[:1].expand(3, -1, -1).flip(0, 2))
+    check_match(r.flip(1).flip(1), t)
+    for dtype in ["int64", "int32", "bool", "float64"]:
+        rx, tx = r.to(getattr(raxis, dtype)), t.to(getattr(torch, dtype))
+        check_match(rx.flip(0, 2), tx.flip(0, 2))
+    with pytest.raises(RuntimeError):
+        r.flip(0, 0)
+
+
+def test_flip_preserves_layout():
+    r, t = make_pair(randf(4, 6))
+    r_out, t_out = r.transpose(0, 1).flip(0), t.t().flip(0)
+    check_match(r_out, t_out)
+    assert tuple(r_out.strides) == tuple(t_out.stride())
+
+
+@pytest.mark.parametrize("shape,dims", FLIP_CASES[:6])
+def test_flip_backward(shape, dims):
+    r, t = make_grad_pair(randf(*shape))
+    w = randf(*shape, seed=1)
+    (r.flip(dims) * raxis.from_numpy(w)).sum().backward()
+    (t.flip(dims) * torch.from_numpy(w)).sum().backward()
+    check_match(r.grad, t.grad)
+    assert r.flip(dims).grad_fn.name() == t.flip(dims).grad_fn.name()
+
+
+# ===========================================================================
 # clone(memory_format=...)
 # ===========================================================================
 

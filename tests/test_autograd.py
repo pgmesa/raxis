@@ -1258,6 +1258,7 @@ RECORDED_OPS = [
     ("max dim", (3, 4), lambda x: x.max(1)[0]),
     ("max", (3, 4), lambda x: x.max()),
     ("cumsum", (3, 4), lambda x: x.cumsum(1)),
+    ("flip", (3, 4), lambda x: x.flip(0, 1)),
     ("view", (3, 4), lambda x: x.view(4, 3)),
     ("transpose", (3, 4), lambda x: x.transpose(0, 1)),
     ("expand", (3, 1), lambda x: x.expand(3, 4)),

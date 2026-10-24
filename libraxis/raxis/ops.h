@@ -14,6 +14,7 @@
 #include <raxis/ops/reduce_ops.h>
 #include <raxis/ops/tensor_compare.h>
 #include <raxis/ops/tensor_advanced_indexing.h>
+#include <raxis/ops/tensor_transformations.h>
 #include <raxis/ops/linear_algebra.h>
 #include <raxis/ops/convolution.h>
 #include <raxis/ops/pooling.h>

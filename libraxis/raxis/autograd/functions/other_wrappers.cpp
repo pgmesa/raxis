@@ -6,6 +6,7 @@
 #include <raxis/ops/scalar_ops.h>
 #include <raxis/ops/tensor_compare.h>
 #include <raxis/ops/tensor_advanced_indexing.h>
+#include <raxis/ops/tensor_transformations.h>
 
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/tensor_shape.h>
@@ -348,6 +349,17 @@ Tensor& scatter_add_(Tensor& self, int64_t dim, const Tensor& index, const Tenso
     return autograd::inplace_op<autograd::ScatterAddBackward0>(self, {self, src},
         [&] { ops::scatter_add_(self, dim, index, src); },
         wrap_index_dim(dim, self), index);
+}
+
+Tensor flip(const Tensor& self, IntArrayRef dims) {
+    Tensor result = ops::flip(self, dims);
+    if (autograd::requires_autograd(self)) {
+        auto grad_fn = std::make_shared<autograd::FlipBackward0>(dims);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
 }
 
 Tensor index_select(const Tensor& self, int64_t dim, const Tensor& index) {

@@ -6,6 +6,7 @@
 #include <raxis/ops/cat_ops.h>
 #include <raxis/ops/tensor_compare.h>
 #include <raxis/ops/tensor_advanced_indexing.h>
+#include <raxis/ops/tensor_transformations.h>
 #include <raxis/autograd/variable.h>
 #include <raxis/tensor/factories.h>
 
@@ -423,6 +424,15 @@ std::string PermuteBackward0::name() const { return "PermuteBackward0"; }
 
 TensorList PermuteBackward0::apply(const TensorList& grads) {
     return {grads[0].permute(inverse_dims_)};
+}
+
+
+FlipBackward0::FlipBackward0(IntArrayRef dims) : dims_(dims.begin(), dims.end()) {}
+
+std::string FlipBackward0::name() const { return "FlipBackward0"; }
+
+TensorList FlipBackward0::apply(const TensorList& grads) {
+    return {flip(grads[0], dims_)};
 }
 
 

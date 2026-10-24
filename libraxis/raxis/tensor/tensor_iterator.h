@@ -379,6 +379,17 @@ public:
         operands_[idx].data = data;
     }
 
+    /// Byte strides of operand `idx`, one per (coalesced) iterator dim
+    IntArrayRef strides(int64_t idx) const {
+        return operands_[idx].stride_bytes;
+    }
+
+    /// Replaces the byte strides of operand `idx`. Negative strides are fine
+    /// for the loops; flip walks its output backwards this way.
+    void unsafe_set_operand_strides(int64_t idx, IntArrayRef stride_bytes) {
+        operands_[idx].stride_bytes = StrideVector(stride_bytes.begin(), stride_bytes.end());
+    }
+
     /// 1-D with every operand contiguous (after coalescing), or one element
     bool is_contiguous() const;
 

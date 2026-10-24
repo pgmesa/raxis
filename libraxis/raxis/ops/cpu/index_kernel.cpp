@@ -2,7 +2,9 @@
 #include <type_traits>
 
 #include <raxis/ops/tensor_advanced_indexing.h>
+#include <raxis/ops/tensor_transformations.h>
 #include <raxis/ops/dispatch_stub.h>
+#include <raxis/ops/cpu/loops.h>
 
 #include <raxis/core/dtype.h>
 #include <raxis/core/scalar.h>
@@ -206,10 +208,21 @@ void masked_fill_kernel(TensorIterator& iter, Scalar value) {
     });
 }
 
+// From: aten/src/ATen/native/cpu/IndexKernel.cpp (flip_kernel)
+// A copy: the flip is in the output strides set up by ops::flip. The dummy
+// input is never read. When the inner dim is not flipped, both operands are
+// contiguous there and cpu_kernel takes its vectorized path.
+void flip_kernel(TensorIterator& iter) {
+    iter.dtype().dispatch_all_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+        cpu_kernel(iter, [](scalar_t a, scalar_t /*dummy*/) -> scalar_t { return a; });
+    });
+}
+
 } // namespace CPU_CAPABILITY
 
 REGISTER_DISPATCH(index_stub, &index_kernel);
 REGISTER_DISPATCH(index_put_stub, &index_put_kernel);
 REGISTER_DISPATCH(masked_fill_stub, &masked_fill_kernel);
+REGISTER_DISPATCH(flip_stub, &flip_kernel);
 
 } // namespace raxis

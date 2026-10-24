@@ -236,6 +236,16 @@ private:
     DimVector inverse_dims_;
 };
 
+class RAXIS_API FlipBackward0 : public Node {
+public:
+    explicit FlipBackward0(IntArrayRef dims);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    DimVector dims_;
+};
+
 class RAXIS_API UnsqueezeBackward0 : public Node {
 public:
     explicit UnsqueezeBackward0(int64_t dim);
