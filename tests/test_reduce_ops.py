@@ -302,7 +302,13 @@ def test_sort_nan_layouts_and_edge_cases():
     r, t = make_pair(x)
     for descending in (False, True):
         check_sort_match(r.sort(1, descending), t.sort(dim=1, descending=descending, stable=True))
-        check_sort_match(r.topk(4, 1, largest=descending), t.topk(4, 1, largest=descending))
+        # topk: torch leaves the order of ties to the STL (it differs between
+        # MSVC and libstdc++), so compare the values
+        r_values, r_indices = r.topk(4, 1, largest=descending)
+        t_values, t_indices = t.topk(4, 1, largest=descending)
+        np.testing.assert_array_equal(np.array(r_values), t_values.numpy())
+        # raxis takes the first of equal values
+        assert np.array(r_indices).tolist() == ([[1, 4, 8, 0]] if descending else [[7, 5, 2, 6]])
     r, t = make_pair(randf(6, 10, seed=3))
     check_sort_match(r[:, ::3].sort(1), t[:, ::3].sort(1))
     check_sort_match(r.transpose(0, 1).sort(1), t.transpose(0, 1).sort(1))
