@@ -1,6 +1,7 @@
 
 #include <raxis/ops/reduce_ops.h>
 #include <raxis/ops/tensor_compare.h>
+#include <raxis/ops/sorting.h>
 
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/shape_utils.h>
@@ -160,6 +161,34 @@ std::tuple<Tensor, Tensor> max(const Tensor& self, int64_t dim, bool keepdim) {
 
 std::tuple<Tensor, Tensor> min(const Tensor& self, int64_t dim, bool keepdim) {
     return minmax_dim<autograd::MinBackward0>(self, dim, keepdim, &ops::min);
+}
+
+std::tuple<Tensor, Tensor> sort(const Tensor& self, int64_t dim, bool descending, bool stable) {
+    auto [values, indices] = ops::sort(self, dim, descending, stable);
+    if (autograd::requires_autograd(self)) {
+        int64_t wrapped = wrap_dim(dim, std::max<int64_t>(self.ndim(), 1));
+        auto grad_fn = std::make_shared<autograd::SortBackward0>(self, wrapped, indices, /*keepdim=*/true);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self);
+        autograd::set_autograd_meta(values, grad_fn);
+    }
+    return {values, indices};
+}
+
+Tensor argsort(const Tensor& self, int64_t dim, bool descending, bool stable) {
+    return std::get<1>(ops::sort(self, dim, descending, stable));
+}
+
+std::tuple<Tensor, Tensor> topk(const Tensor& self, int64_t k, int64_t dim, bool largest, bool sorted) {
+    auto [values, indices] = ops::topk(self, k, dim, largest, sorted);
+    if (autograd::requires_autograd(self)) {
+        int64_t wrapped = wrap_dim(dim, std::max<int64_t>(self.ndim(), 1));
+        auto grad_fn = std::make_shared<autograd::TopkBackward0>(self, wrapped, indices, /*keepdim=*/true);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self);
+        autograd::set_autograd_meta(values, grad_fn);
+    }
+    return {values, indices};
 }
 
 Tensor min(const Tensor& self) {

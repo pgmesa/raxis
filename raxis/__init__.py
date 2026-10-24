@@ -120,6 +120,8 @@ class return_types:
     """Named results, as torch.return_types: values, indices = x.max(0)"""
     max = _collections.namedtuple("max", ["values", "indices"])
     min = _collections.namedtuple("min", ["values", "indices"])
+    sort = _collections.namedtuple("sort", ["values", "indices"])
+    topk = _collections.namedtuple("topk", ["values", "indices"])
 
 
 def _named_result(fn, result_type):
@@ -130,7 +132,7 @@ def _named_result(fn, result_type):
     return wrapper
 
 
-for _name in ("max", "min"):
+for _name in ("max", "min", "sort", "topk"):
     _result_type = getattr(return_types, _name)
     globals()[_name] = _named_result(globals()[_name], _result_type)
     setattr(Tensor, _name, _named_result(getattr(Tensor, _name), _result_type))

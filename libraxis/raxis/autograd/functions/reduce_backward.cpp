@@ -254,6 +254,8 @@ MaxBackward0::MaxBackward0(const Tensor& self, int64_t dim, const Tensor& indice
 
 std::string MaxBackward0::name() const { return "MaxBackward0"; }
 std::string MinBackward0::name() const { return "MinBackward0"; }
+std::string SortBackward0::name() const { return "SortBackward0"; }
+std::string TopkBackward0::name() const { return "TopkBackward0"; }
 
 // From: aten/src/ATen/native/ReduceOps.cpp (value_selecting_reduction_backward)
 // zeros with the incoming gradient scattered to the selected positions

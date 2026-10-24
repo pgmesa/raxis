@@ -987,6 +987,15 @@ PYBIND11_MODULE(_C, c) {
         .def("cumprod", [](const raxis::Tensor& self, int64_t dim, std::optional<raxis::Dtype> dtype) {
             return self.cumprod(dim, dtype);
         }, py::arg("dim"), py::kw_only(), py::arg("dtype") = py::none())
+        .def("sort", [](const raxis::Tensor& self, int64_t dim, bool descending, bool stable) {
+            return raxis::sort(self, dim, descending, stable);
+        }, py::arg("dim") = -1, py::arg("descending") = false, py::kw_only(), py::arg("stable") = false)
+        .def("argsort", [](const raxis::Tensor& self, int64_t dim, bool descending, bool stable) {
+            return raxis::argsort(self, dim, descending, stable);
+        }, py::arg("dim") = -1, py::arg("descending") = false, py::arg("stable") = false)
+        .def("topk", [](const raxis::Tensor& self, int64_t k, int64_t dim, bool largest, bool sorted) {
+            return raxis::topk(self, k, dim, largest, sorted);
+        }, py::arg("k"), py::arg("dim") = -1, py::arg("largest") = true, py::arg("sorted") = true)
         .def("all", [](const raxis::Tensor& self, std::optional<raxis::VecOrInt> dim, bool keepdim) {
             return self.all(dim.value_or(raxis::VecOrInt{}), keepdim);
         }, py::arg("dim") = py::none(), py::arg("keepdim") = false)
@@ -1641,6 +1650,15 @@ PYBIND11_MODULE(_C, c) {
     c.def("cumprod", [](const raxis::Tensor& input, int64_t dim, std::optional<raxis::Dtype> dtype) {
         return raxis::cumprod(input, dim, dtype);
     }, py::arg("input"), py::arg("dim"), py::kw_only(), py::arg("dtype") = py::none());
+    c.def("sort", [](const raxis::Tensor& input, int64_t dim, bool descending, bool stable) {
+        return raxis::sort(input, dim, descending, stable);
+    }, py::arg("input"), py::arg("dim") = -1, py::arg("descending") = false, py::kw_only(), py::arg("stable") = false);
+    c.def("argsort", [](const raxis::Tensor& input, int64_t dim, bool descending, bool stable) {
+        return raxis::argsort(input, dim, descending, stable);
+    }, py::arg("input"), py::arg("dim") = -1, py::arg("descending") = false, py::arg("stable") = false);
+    c.def("topk", [](const raxis::Tensor& input, int64_t k, int64_t dim, bool largest, bool sorted) {
+        return raxis::topk(input, k, dim, largest, sorted);
+    }, py::arg("input"), py::arg("k"), py::arg("dim") = -1, py::arg("largest") = true, py::arg("sorted") = true);
     c.def("all", [](const raxis::Tensor& input, std::optional<raxis::VecOrInt> dim, bool keepdim) {
         return raxis::all(input, dim.value_or(raxis::VecOrInt{}), keepdim);
     }, py::arg("input"), py::arg("dim") = py::none(), py::arg("keepdim") = false);

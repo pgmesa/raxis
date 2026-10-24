@@ -155,6 +155,20 @@ public:
     std::string name() const override;
 };
 
+// sort and topk select values along dim as max(dim, keepdim=true) does: the
+// gradient is scattered back to the selected positions
+class RAXIS_API SortBackward0 : public MaxBackward0 {
+public:
+    using MaxBackward0::MaxBackward0;
+    std::string name() const override;
+};
+
+class RAXIS_API TopkBackward0 : public MaxBackward0 {
+public:
+    using MaxBackward0::MaxBackward0;
+    std::string name() const override;
+};
+
 class RAXIS_API MaxBackward1 : public Node {
 public:
     MaxBackward1(const Tensor& self, const Tensor& result);

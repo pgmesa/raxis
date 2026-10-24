@@ -269,3 +269,91 @@ def test_cumprod_create_graph_with_zeros_raises():
     r = raxis.tensor([1.0, 0.0, 2.0], requires_grad=True)
     with pytest.raises(RuntimeError, match="second derivative"):
         raxis.autograd.grad(r.cumprod(0).sum(), r, create_graph=True)
+
+
+# ===========================================================================
+# sort / argsort / topk
+# ===========================================================================
+
+def check_sort_match(r_result, t_result):
+    np.testing.assert_array_equal(np.array(r_result[0]), t_result[0].numpy())
+    np.testing.assert_array_equal(np.array(r_result[1]), t_result[1].numpy())
+
+
+@pytest.mark.parametrize("dtype", [np.float32, np.float64, np.int32, np.int64, np.uint8, np.bool_],
+                         ids=lambda d: np.dtype(d).name)
+@pytest.mark.parametrize("shape", [(7,), (5, 4), (3, 8, 6), (4, 1000)])
+@pytest.mark.parametrize("descending", [False, True])
+def test_sort(shape, dtype, descending):
+    # Few distinct values in the integer cases, so ties are common; raxis
+    # orders ties by position, as torch's stable sort
+    rng = np.random.default_rng(0)
+    data = (rng.standard_normal(shape) * 3).astype(dtype)
+    r, t = make_pair(data)
+    for dim in range(-len(shape), len(shape)):
+        check_sort_match(r.sort(dim, descending), t.sort(dim=dim, descending=descending, stable=True))
+        check_sort_match(raxis.sort(r, dim, descending=descending), torch.sort(t, dim=dim, descending=descending, stable=True))
+        np.testing.assert_array_equal(np.array(r.argsort(dim, descending)),
+                                      t.argsort(dim=dim, descending=descending, stable=True).numpy())
+
+
+def test_sort_nan_layouts_and_edge_cases():
+    x = np.array([[3.0, np.nan, 1.0, 3.0, np.nan, -2.0, 1.0, -np.inf, np.inf]], dtype=np.float32)
+    r, t = make_pair(x)
+    for descending in (False, True):
+        check_sort_match(r.sort(1, descending), t.sort(dim=1, descending=descending, stable=True))
+        check_sort_match(r.topk(4, 1, largest=descending), t.topk(4, 1, largest=descending))
+    r, t = make_pair(randf(6, 10, seed=3))
+    check_sort_match(r[:, ::3].sort(1), t[:, ::3].sort(1))
+    check_sort_match(r.transpose(0, 1).sort(1), t.transpose(0, 1).sort(1))
+    check_sort_match(r[:1].expand(4, -1).sort(0), t[:1].expand(4, -1).sort(dim=0, stable=True))
+    r_values, t_values = r.transpose(0, 1).sort(0)[0], t.t().sort(0)[0]
+    assert tuple(r_values.strides) == tuple(t_values.stride())
+    r, t = make_pair(np.array(2.5, dtype=np.float32))
+    check_sort_match(r.sort(), t.sort())
+    check_sort_match(r.topk(1), t.topk(1))
+    r, t = make_pair(np.zeros((0, 3), dtype=np.float32))
+    check_sort_match(r.sort(0), t.sort(0))
+    check_sort_match(r.topk(2, 1), t.topk(2, 1))
+    values, indices = r.sort()
+    assert type(r.sort()).__name__ == "sort" and type(r.topk(1, 1)).__name__ == "topk"
+
+
+@pytest.mark.parametrize("dtype", [np.float32, np.int64], ids=lambda d: np.dtype(d).name)
+@pytest.mark.parametrize("shape,dim", [((7,), 0), ((5, 40), 1), ((40, 5), 0), ((3, 600, 4), 1)])
+@pytest.mark.parametrize("largest", [True, False])
+def test_topk(shape, dim, dtype, largest):
+    # Distinct values: torch does not fix the order of ties in topk
+    rng = np.random.default_rng(1)
+    data = (rng.permutation(int(np.prod(shape))).reshape(shape) - 50).astype(dtype)
+    r, t = make_pair(data)
+    size = shape[dim]
+    # k = 1 and 2 take the partial_sort path for the long slices
+    for k in sorted({0, 1, 2, size // 3, size - 1, size}):
+        check_sort_match(r.topk(k, dim, largest), t.topk(k, dim, largest))
+        check_sort_match(raxis.topk(r, k, dim=dim, largest=largest), torch.topk(t, k, dim=dim, largest=largest))
+        # Unsorted: the same set of values per slice
+        r_values, _ = r.topk(k, dim, largest, sorted=False)
+        t_values, _ = t.topk(k, dim, largest, sorted=False)
+        np.testing.assert_array_equal(np.sort(np.array(r_values), axis=dim), np.sort(t_values.numpy(), axis=dim))
+    with pytest.raises(RuntimeError, match="out of range"):
+        r.topk(size + 1, dim)
+
+
+@pytest.mark.parametrize("op", ["sort", "sort_desc", "topk", "topk_smallest"])
+@pytest.mark.parametrize("dim", [0, 1, -1])
+def test_sort_topk_backward(op, dim):
+    data = randf(4, 6, 5)
+    r, t = make_grad_pair(data)
+    fns = {
+        "sort": lambda x: x.sort(dim)[0],
+        "sort_desc": lambda x: x.sort(dim, True)[0],
+        "topk": lambda x: x.topk(3, dim)[0],
+        "topk_smallest": lambda x: x.topk(2, dim, largest=False)[0],
+    }
+    r_out, t_out = fns[op](r), fns[op](t)
+    w = np.random.default_rng(2).standard_normal(tuple(t_out.shape)).astype(np.float32)
+    (r_out * raxis.from_numpy(w)).sum().backward()
+    (t_out * torch.from_numpy(w)).sum().backward()
+    check_match(r.grad, t.grad)
+    assert r_out.grad_fn.name() == t_out.grad_fn.name()
