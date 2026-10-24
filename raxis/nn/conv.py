@@ -23,7 +23,8 @@ class _ConvNd(Module):
     weight: (out_channels, in_channels // groups, *kernel_size), bias:
     (out_channels,). Initialized as in PyTorch: kaiming_uniform_ with
     a = sqrt(5) for the weight, U(-1/sqrt(fan_in), 1/sqrt(fan_in)) for the
-    bias. Only zero padding (padding_mode='zeros').
+    bias. padding_mode other than 'zeros' pads the input with F.pad first and
+    runs the convolution without padding.
     """
 
     def __init__(self, in_channels: int, out_channels: int, kernel_size: tuple, stride: tuple,
@@ -42,8 +43,10 @@ class _ConvNd(Module):
                     f"Invalid padding string {padding!r}, should be one of {{'same', 'valid'}}")
             if padding == "same" and any(s != 1 for s in stride):
                 raise ValueError("padding='same' is not supported for strided convolutions")
-        if padding_mode != "zeros":
-            raise NotImplementedError(f"padding_mode={padding_mode!r} is not supported, only 'zeros'")
+        valid_padding_modes = {"zeros", "reflect", "replicate", "circular"}
+        if padding_mode not in valid_padding_modes:
+            raise ValueError(
+                f"padding_mode must be one of {valid_padding_modes}, but got padding_mode='{padding_mode}'")
 
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -53,6 +56,18 @@ class _ConvNd(Module):
         self.dilation = dilation
         self.groups = groups
         self.padding_mode = padding_mode
+        # The padding as F.pad takes it: a (left, right) pair per spatial dim,
+        # last dim first
+        if isinstance(padding, str):
+            self._reversed_padding_repeated_twice = [0, 0] * len(kernel_size)
+            if padding == "same":
+                for d, k, i in zip(dilation, kernel_size, range(len(kernel_size) - 1, -1, -1)):
+                    total_padding = d * (k - 1)
+                    left_pad = total_padding // 2
+                    self._reversed_padding_repeated_twice[2 * i] = left_pad
+                    self._reversed_padding_repeated_twice[2 * i + 1] = total_padding - left_pad
+        else:
+            self._reversed_padding_repeated_twice = [p for p in reversed(padding) for _ in range(2)]
         self.weight = Parameter(raxis.empty((out_channels, in_channels // groups, *kernel_size)))
         if bias:
             self.bias = Parameter(raxis.empty((out_channels,)))
@@ -78,6 +93,8 @@ class _ConvNd(Module):
             s += ", groups={groups}"
         if self.bias is None:
             s += ", bias=False"
+        if self.padding_mode != "zeros":
+            s += ", padding_mode={padding_mode}"
         return s.format(**self.__dict__)
 
 
@@ -93,6 +110,9 @@ class Conv1d(_ConvNd):
             groups, bias, padding_mode)
 
     def forward(self, input: Tensor) -> Tensor:
+        if self.padding_mode != "zeros":
+            return F.conv1d(F.pad(input, self._reversed_padding_repeated_twice, mode=self.padding_mode),
+                            self.weight, self.bias, self.stride, 0, self.dilation, self.groups)
         return F.conv1d(input, self.weight, self.bias, self.stride, self.padding,
                         self.dilation, self.groups)
 
@@ -109,5 +129,8 @@ class Conv2d(_ConvNd):
             groups, bias, padding_mode)
 
     def forward(self, input: Tensor) -> Tensor:
+        if self.padding_mode != "zeros":
+            return F.conv2d(F.pad(input, self._reversed_padding_repeated_twice, mode=self.padding_mode),
+                            self.weight, self.bias, self.stride, 0, self.dilation, self.groups)
         return F.conv2d(input, self.weight, self.bias, self.stride, self.padding,
                         self.dilation, self.groups)

@@ -66,38 +66,43 @@ def _expand(value: int | Sequence[int], n: int) -> list[int]:
 
 
 # From: aten/src/ATen/native/Convolution.cpp (_convolution_mode, convolution_same)
-def _padding_from_string(padding: str, weight: Tensor, stride, dilation) -> list[int]:
+def _conv_padding_from_string(input: Tensor, padding: str, weight: Tensor, stride,
+                              dilation) -> tuple[Tensor, list[int]]:
+    """The input (padded when needed) and the symmetric padding for the
+    convolution that the "valid" / "same" padding strings mean."""
     spatial_dims = weight.dim() - 2
     if padding == "valid":
-        return [0] * spatial_dims
+        return input, [0] * spatial_dims
     if padding != "same":
         raise RuntimeError(f"Invalid padding string: '{padding}'")
     if any(s != 1 for s in _expand(stride, spatial_dims)):
         raise RuntimeError("padding='same' is not supported for strided convolutions")
     # The output keeps the input size when the d * (k - 1) positions the
-    # kernel overhangs are split between both sides
-    pads = []
-    for d, k in zip(_expand(dilation, spatial_dims), weight.shape[2:]):
+    # kernel overhangs are split between both sides. With an odd total the
+    # right side gets one more: the input is padded on the right by the
+    # difference and the convolution pads both sides by the left amount.
+    pads_l = []
+    extra_r = [0] * (2 * spatial_dims)
+    for i, (d, k) in enumerate(zip(_expand(dilation, spatial_dims), weight.shape[2:])):
         total = d * (k - 1)
-        if total % 2 != 0:
-            raise NotImplementedError(
-                "padding='same' with an even kernel size needs more padding on one side "
-                "than on the other, which raxis does not support yet")
-        pads.append(total // 2)
-    return pads
+        pads_l.append(total // 2)
+        extra_r[2 * (spatial_dims - 1 - i) + 1] = total - 2 * (total // 2)
+    if any(extra_r):
+        input = pad(input, extra_r)
+    return input, pads_l
 
 
 def conv1d(input: Tensor, weight: Tensor, bias: Tensor | None = None, stride=1,
            padding: int | Sequence[int] | str = 0, dilation=1, groups: int = 1) -> Tensor:
     if isinstance(padding, str):
-        padding = _padding_from_string(padding, weight, stride, dilation)
+        input, padding = _conv_padding_from_string(input, padding, weight, stride, dilation)
     return raxis.conv1d(input, weight, bias, stride, padding, dilation, groups)
 
 
 def conv2d(input: Tensor, weight: Tensor, bias: Tensor | None = None, stride=1,
            padding: int | Sequence[int] | str = 0, dilation=1, groups: int = 1) -> Tensor:
     if isinstance(padding, str):
-        padding = _padding_from_string(padding, weight, stride, dilation)
+        input, padding = _conv_padding_from_string(input, padding, weight, stride, dilation)
     return raxis.conv2d(input, weight, bias, stride, padding, dilation, groups)
 
 

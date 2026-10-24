@@ -689,6 +689,13 @@ CONV_MODULES = [
     ("conv2d_same", lambda lib: lib.nn.Conv2d(2, 4, 3, padding="same", dilation=2), (1, 2, 8, 8)),
     ("conv1d", lambda lib: lib.nn.Conv1d(3, 5, 4, stride=2, padding="valid"), (2, 3, 11)),
     ("conv2d_unbatched", lambda lib: lib.nn.Conv2d(3, 4, 3), (3, 6, 6)),
+    # Even kernel: the right side gets one more pad than the left
+    ("conv2d_same_even", lambda lib: lib.nn.Conv2d(2, 3, (2, 4), padding="same"), (1, 2, 7, 6)),
+    ("conv1d_same_even", lambda lib: lib.nn.Conv1d(2, 3, 4, padding="same", dilation=3), (2, 2, 9)),
+    ("conv2d_reflect", lambda lib: lib.nn.Conv2d(3, 4, 3, padding=(1, 2), padding_mode="reflect"), (2, 3, 6, 6)),
+    ("conv2d_replicate_same", lambda lib: lib.nn.Conv2d(2, 3, 4, padding="same", padding_mode="replicate"),
+     (1, 2, 5, 5)),
+    ("conv1d_circular", lambda lib: lib.nn.Conv1d(2, 3, 3, padding=2, padding_mode="circular"), (2, 2, 7)),
 ]
 
 
@@ -734,11 +741,8 @@ def test_conv_module_errors():
         nn.Conv2d(3, 6, 3, padding="full")
     with pytest.raises(ValueError, match="not supported for strided convolutions"):
         nn.Conv2d(3, 6, 3, stride=2, padding="same")
-    with pytest.raises(NotImplementedError):
-        nn.Conv2d(3, 6, 3, padding_mode="reflect")
-    # Even kernel: 'same' needs one more pad on one side
-    with pytest.raises(NotImplementedError):
-        nn.Conv2d(3, 6, 2, padding="same")(raxis.randn(1, 3, 5, 5))
+    with pytest.raises(ValueError, match="padding_mode must be one of"):
+        nn.Conv2d(3, 6, 3, padding_mode="mirror")
 
 
 POOL_MODULES = [
