@@ -1092,6 +1092,15 @@ PYBIND11_MODULE(_C, c) {
     }, py::arg("other"), py::arg("fill_value"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false,
        py::arg_v("memory_format", raxis::MemoryFormat::Preserve, "preserve_format"));
 
+    c.def("arange", [](raxis::Scalar start, raxis::Scalar end, raxis::Scalar step, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
+        return raxis::arange(start, end, step, options);
+    }, py::arg("start"), py::arg("end"), py::arg("step") = 1, py::kw_only(), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false);
+    c.def("arange", [](raxis::Scalar end, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
+        return raxis::arange(end, options);
+    }, py::arg("end"), py::kw_only(), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false);
+
     c.def("rand", [](raxis::VecOrInt shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
         auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
         return raxis::rand(shape, options);

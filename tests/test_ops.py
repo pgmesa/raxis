@@ -1045,6 +1045,31 @@ class TestFactories:
         t = torch.full((3, 4), 7.5)
         check_match(r, t, context="full")
 
+    @pytest.mark.parametrize("args", [
+        (5,), (0, 10, 3), (10, 0, -2), (10, 0, -3), (-3, 4), (3, 3), (2.5, 7, 0.3), (0, 1, 0.1),
+        (True, 4), (-5, 333.3, 0.0123),
+        # Long enough to split between threads: the boundaries of the chunks
+        # and of the vectors must not change the rounding
+        (0, 100000, 0.37), (0, 300000),
+    ])
+    def test_arange(self, args, device):
+        check_match(raxis.arange(*args), torch.arange(*args), atol=0, context=f"arange{args}")
+
+    def test_arange_dtype(self, device):
+        for r_dtype, t_dtype in [(raxis.float64, torch.float64), (raxis.int32, torch.int32), (raxis.uint8, torch.uint8)]:
+            check_match(raxis.arange(1, 9, 2, dtype=r_dtype), torch.arange(1, 9, 2, dtype=t_dtype))
+        check_match(raxis.arange(0, 100000, 0.37, dtype=raxis.float64),
+                    torch.arange(0, 100000, 0.37, dtype=torch.float64), atol=0)
+        assert raxis.arange(3, dtype=raxis.float32, requires_grad=True).requires_grad
+
+    def test_arange_errors(self, device):
+        with pytest.raises(RuntimeError, match="step must be nonzero"):
+            raxis.arange(0, 5, 0)
+        with pytest.raises(RuntimeError, match="upper bound and lower bound inconsistent with step sign"):
+            raxis.arange(5, 0, 1)
+        with pytest.raises(RuntimeError, match="unsupported range"):
+            raxis.arange(0, float("inf"))
+
     def test_empty_shape(self, device):
         r = raxis.empty((5, 3))
         assert tuple(r.shape) == (5, 3)
