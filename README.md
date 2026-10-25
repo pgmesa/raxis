@@ -11,8 +11,8 @@ read end to end, while running at PyTorch speed on CPU.
 
 > **Status: alpha.** CPU only. Tensors with views and broadcasting, type
 > promotion, elementwise ops, reductions, matmul, autograd, and an `nn`/`optim`
-> package with enough to train MLPs and CNNs (Conv1d/2d, pooling, BatchNorm, LayerNorm).
-> CUDA is next.
+> package with enough to train MLPs, CNNs (Conv1d/2d, pooling, BatchNorm) and a
+> small GPT (Embedding, LayerNorm, GELU, scaled dot product attention). CUDA is next.
 
 ## Install
 
@@ -87,7 +87,9 @@ has `debug` and `release` presets; `CMakeLists.txt` lists the build options
 `scripts/bench_ops.py` benchmarks each op against PyTorch and NumPy,
 `scripts/bench_training.py` times a training step of the example models, and
 `examples/` has notebooks that train MLPs on two moons and MNIST and a CNN on
-MNIST with either Raxis or PyTorch.
+MNIST with either Raxis or PyTorch, and `examples/nanogpt` trains
+[nanoGPT](https://github.com/karpathy/nanoGPT)'s character-level Shakespeare
+model, with its `model.py` unchanged except for the imports.
 
 ## License
 
