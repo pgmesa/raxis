@@ -167,14 +167,13 @@ class Module:
     # weights such as a language model's embedding and output projection)
     # is yielded once, under its first name, unless remove_duplicate=False:
     # otherwise an optimizer would update a tied weight twice per step.
-    # The memos hold ids: Tensor.__eq__ is elementwise, so tensors cannot go
-    # in a set. From: torch/nn/modules/module.py (named_modules, _named_members)
+    # From: torch/nn/modules/module.py (named_modules, _named_members)
 
     def named_children(self) -> Iterator[tuple[str, "Module"]]:
         memo = set()
         for name, module in self._modules.items():
-            if module is not None and id(module) not in memo:
-                memo.add(id(module))
+            if module is not None and module not in memo:
+                memo.add(module)
                 yield name, module
 
     def children(self) -> Iterator["Module"]:
@@ -185,10 +184,10 @@ class Module:
                       remove_duplicate: bool = True) -> Iterator[tuple[str, "Module"]]:
         if memo is None:
             memo = set()
-        if id(self) in memo:
+        if self in memo:
             return
         if remove_duplicate:
-            memo.add(id(self))
+            memo.add(self)
         yield prefix, self
         for name, module in self._modules.items():
             if module is not None:
@@ -205,10 +204,10 @@ class Module:
                    if recurse else [(prefix, self)])
         for module_name, module in modules:
             for name, value in get_members(module):
-                if value is None or id(value) in memo:
+                if value is None or value in memo:
                     continue
                 if remove_duplicate:
-                    memo.add(id(value))
+                    memo.add(value)
                 yield (f"{module_name}.{name}" if module_name else name), value
 
     def named_parameters(self, prefix: str = "", recurse: bool = True,
