@@ -1252,15 +1252,17 @@ class TestRandom:
                 "np.array(raxis.randint(0, 10**12, (1001,))).tolist(), "
                 "np.array(raxis.randn((1001,))).tolist()]))")
         outputs = []
-        for capability in ("default", ""):
+        # "": the best one the CPU has (AVX512 on the dev machine)
+        for capability in ("default", "avx2", ""):
             env = dict(os.environ, RAXIS_CPU_CAPABILITY=capability)
             result = subprocess.run([sys.executable, "-c", code], env=env,
                                     capture_output=True, text=True, check=True)
             outputs.append(json.loads(result.stdout))
-        (rand_a, randint_a, randn_a), (rand_b, randint_b, randn_b) = outputs
-        assert rand_a == rand_b
-        assert randint_a == randint_b
-        np.testing.assert_allclose(randn_a, randn_b, rtol=1e-5, atol=1e-6)
+        rand_a, randint_a, randn_a = outputs[0]
+        for rand_b, randint_b, randn_b in outputs[1:]:
+            assert rand_a == rand_b
+            assert randint_a == randint_b
+            np.testing.assert_allclose(randn_a, randn_b, rtol=1e-5, atol=1e-6)
 
 
 class TestMultinomial:

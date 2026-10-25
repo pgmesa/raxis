@@ -7,7 +7,7 @@
 
 #include <raxis/util/parallel.h>
 
-#if defined(CPU_CAPABILITY_AVX2)
+#if defined(CPU_CAPABILITY_AVX2) || defined(CPU_CAPABILITY_AVX512)
 #include <immintrin.h>
 #endif
 
@@ -16,7 +16,53 @@ namespace raxis {
 
 inline namespace CPU_CAPABILITY {
 
-#if defined(CPU_CAPABILITY_AVX2)
+#if defined(CPU_CAPABILITY_AVX512)
+
+// The AVX2 algorithm below with all 16 lanes in one register per word: the
+// even and odd products are merged with a mask blend
+inline void mulhilo_epu32(__m512i a, __m512i m, __m512i& lo, __m512i& hi) {
+    const __m512i even = _mm512_mul_epu32(a, m);
+    const __m512i odd = _mm512_mul_epu32(_mm512_srli_epi64(a, 32), m);
+    lo = _mm512_mask_blend_epi32(0xAAAA, even, _mm512_slli_epi64(odd, 32));
+    hi = _mm512_mask_blend_epi32(0xAAAA, _mm512_srli_epi64(even, 32), odd);
+}
+
+// Same output as philox4x32_10_lanes<kPhiloxLanes>: one register per word
+inline void philox_batch(uint64_t counter, uint64_t key, uint32_t* out) {
+    static_assert(kPhiloxLanes == 16);
+    alignas(64) uint32_t lo[kPhiloxLanes];
+    alignas(64) uint32_t hi[kPhiloxLanes];
+    for (int l = 0; l < kPhiloxLanes; ++l) {
+        const uint64_t ctr = counter + static_cast<uint64_t>(l);
+        lo[l] = static_cast<uint32_t>(ctr);
+        hi[l] = static_cast<uint32_t>(ctr >> 32);
+    }
+    const __m512i sa = _mm512_set1_epi32(static_cast<int>(detail::kPhiloxSA));
+    const __m512i sb = _mm512_set1_epi32(static_cast<int>(detail::kPhiloxSB));
+    __m512i c0 = _mm512_load_si512(lo);
+    __m512i c1 = _mm512_load_si512(hi);
+    __m512i c2 = _mm512_setzero_si512();
+    __m512i c3 = _mm512_setzero_si512();
+    auto key0 = static_cast<uint32_t>(key);
+    auto key1 = static_cast<uint32_t>(key >> 32);
+    for (int round = 0; round < 10; ++round) {
+        __m512i lo0, hi0, lo1, hi1;
+        mulhilo_epu32(c0, sa, lo0, hi0);
+        mulhilo_epu32(c2, sb, lo1, hi1);
+        c0 = _mm512_xor_si512(_mm512_xor_si512(hi1, c1), _mm512_set1_epi32(static_cast<int>(key0)));
+        c2 = _mm512_xor_si512(_mm512_xor_si512(hi0, c3), _mm512_set1_epi32(static_cast<int>(key1)));
+        c1 = lo1;
+        c3 = lo0;
+        key0 += detail::kPhilox10A;
+        key1 += detail::kPhilox10B;
+    }
+    _mm512_storeu_si512(out + 0 * kPhiloxLanes, c0);
+    _mm512_storeu_si512(out + 1 * kPhiloxLanes, c1);
+    _mm512_storeu_si512(out + 2 * kPhiloxLanes, c2);
+    _mm512_storeu_si512(out + 3 * kPhiloxLanes, c3);
+}
+
+#elif defined(CPU_CAPABILITY_AVX2)
 
 // Philox for 8 lanes, one 32-bit lane per block. AVX2 has no 32x32 -> 64-bit
 // multiply on all 8 lanes: _mm256_mul_epu32 multiplies the even lanes into
@@ -90,7 +136,7 @@ template <typename F>
 void philox_for_each_batch(int64_t n, int64_t per_batch, uint64_t seed, uint64_t offset, int64_t grain, const F& f) {
     const int64_t batches = (n + per_batch - 1) / per_batch;
     parallel_for(0, batches, std::max<int64_t>(1, grain / per_batch), [&](int64_t begin, int64_t end) {
-        alignas(32) uint32_t words[kPhiloxBatchWords];
+        alignas(64) uint32_t words[kPhiloxBatchWords];
         for (int64_t batch = begin; batch < end; ++batch) {
             philox_batch(offset + static_cast<uint64_t>(batch) * kPhiloxLanes, seed, words);
             const int64_t first = batch * per_batch;

@@ -436,7 +436,7 @@ class TestDropout:
         code = ("import raxis, numpy as np; raxis.manual_seed(5); "
                 "print(np.array(raxis.dropout(raxis.ones((97, 131)), 0.3, True)).sum())")
         sums = set()
-        for capability in ("default", None):  # None: the best one the CPU has
+        for capability in ("default", "avx2", None):  # None: the best one the CPU has
             env = {k: v for k, v in os.environ.items() if k != "RAXIS_CPU_CAPABILITY"}
             if capability is not None:
                 env["RAXIS_CPU_CAPABILITY"] = capability

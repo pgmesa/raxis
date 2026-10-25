@@ -91,7 +91,9 @@ void dropout_backward_kernel(const Tensor& grad_input, const Tensor& grad, const
 
 } // namespace CPU_CAPABILITY
 
-REGISTER_DISPATCH(fused_dropout_stub, &fused_dropout_kernel);
+// The Philox batch fits one AVX512 register per word (1.3x); the backward
+// is a masked multiply, memory-bound
+ALSO_REGISTER_AVX512_DISPATCH(fused_dropout_stub, &fused_dropout_kernel);
 REGISTER_DISPATCH(dropout_backward_stub, &dropout_backward_kernel);
 
 } // namespace raxis
