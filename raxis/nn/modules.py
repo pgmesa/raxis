@@ -162,39 +162,68 @@ class Module:
 
     # -- Traversal --
 
-    def children(self) -> Iterator["Module"]:
-        for module in self._modules.values():
-            if module is not None:
-                yield module
+    # A module or tensor reachable through several names (shared layers, tied
+    # weights such as a language model's embedding and output projection)
+    # is yielded once, under its first name, unless remove_duplicate=False:
+    # otherwise an optimizer would update a tied weight twice per step.
+    # The memos hold ids: Tensor.__eq__ is elementwise, so tensors cannot go
+    # in a set. From: torch/nn/modules/module.py (named_modules, _named_members)
 
-    def named_modules(self, prefix: str = "") -> Iterator[tuple[str, "Module"]]:
+    def named_children(self) -> Iterator[tuple[str, "Module"]]:
+        memo = set()
+        for name, module in self._modules.items():
+            if module is not None and id(module) not in memo:
+                memo.add(id(module))
+                yield name, module
+
+    def children(self) -> Iterator["Module"]:
+        for _, module in self.named_children():
+            yield module
+
+    def named_modules(self, memo: set | None = None, prefix: str = "",
+                      remove_duplicate: bool = True) -> Iterator[tuple[str, "Module"]]:
+        if memo is None:
+            memo = set()
+        if id(self) in memo:
+            return
+        if remove_duplicate:
+            memo.add(id(self))
         yield prefix, self
         for name, module in self._modules.items():
             if module is not None:
-                yield from module.named_modules(f"{prefix}.{name}" if prefix else name)
+                yield from module.named_modules(memo, f"{prefix}.{name}" if prefix else name, remove_duplicate)
 
     def modules(self) -> Iterator["Module"]:
         for _, module in self.named_modules():
             yield module
 
-    def named_parameters(self, prefix: str = "") -> Iterator[tuple[str, Parameter]]:
-        for module_name, module in self.named_modules(prefix):
-            for name, param in module._parameters.items():
-                if param is not None:
-                    yield (f"{module_name}.{name}" if module_name else name), param
+    def _named_members(self, get_members: Callable, prefix: str, recurse: bool,
+                       remove_duplicate: bool) -> Iterator[tuple[str, Tensor]]:
+        memo = set()
+        modules = (self.named_modules(prefix=prefix, remove_duplicate=remove_duplicate)
+                   if recurse else [(prefix, self)])
+        for module_name, module in modules:
+            for name, value in get_members(module):
+                if value is None or id(value) in memo:
+                    continue
+                if remove_duplicate:
+                    memo.add(id(value))
+                yield (f"{module_name}.{name}" if module_name else name), value
 
-    def parameters(self) -> Iterator[Parameter]:
-        for _, param in self.named_parameters():
+    def named_parameters(self, prefix: str = "", recurse: bool = True,
+                         remove_duplicate: bool = True) -> Iterator[tuple[str, Parameter]]:
+        return self._named_members(lambda m: m._parameters.items(), prefix, recurse, remove_duplicate)
+
+    def parameters(self, recurse: bool = True) -> Iterator[Parameter]:
+        for _, param in self.named_parameters(recurse=recurse):
             yield param
 
-    def named_buffers(self, prefix: str = "") -> Iterator[tuple[str, Tensor]]:
-        for module_name, module in self.named_modules(prefix):
-            for name, buf in module._buffers.items():
-                if buf is not None:
-                    yield (f"{module_name}.{name}" if module_name else name), buf
+    def named_buffers(self, prefix: str = "", recurse: bool = True,
+                      remove_duplicate: bool = True) -> Iterator[tuple[str, Tensor]]:
+        return self._named_members(lambda m: m._buffers.items(), prefix, recurse, remove_duplicate)
 
-    def buffers(self) -> Iterator[Tensor]:
-        for _, buf in self.named_buffers():
+    def buffers(self, recurse: bool = True) -> Iterator[Tensor]:
+        for _, buf in self.named_buffers(recurse=recurse):
             yield buf
 
     def apply(self, fn: Callable[["Module"], None]) -> "Module":
@@ -365,3 +394,4 @@ class Sequential(Module):
         for module in self._modules.values():
             x = module(x)
         return x
+

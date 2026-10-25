@@ -101,6 +101,32 @@ class TestModule:
         with pytest.raises(NotImplementedError):
             mlp(raxis).to("cuda")
 
+    def test_tied_weights_are_yielded_once(self):
+        """A weight shared by two modules (nanoGPT ties the token embedding
+        to the output projection) must reach the optimizer once."""
+        names = []
+        for lib in (raxis, torch):
+            model = lib.nn.Sequential(lib.nn.Linear(4, 4), lib.nn.Linear(4, 4))
+            model[1].weight = model[0].weight
+            names.append([n for n, _ in model.named_parameters()])
+            assert len(list(model.parameters())) == 3
+            assert len(list(model.named_parameters(remove_duplicate=False))) == 4
+            assert len(model.state_dict()) == 4
+        assert names[0] == names[1]
+
+    def test_shared_module_is_yielded_once(self):
+        for lib in (raxis, torch):
+            layer = lib.nn.Linear(2, 2)
+            model = lib.nn.Sequential(layer, lib.nn.ReLU(), layer)
+            assert [n for n, _ in model.named_modules()] == ["", "0", "1"]
+            assert len(list(model.children())) == 2
+            assert len(list(model.parameters())) == 2
+
+    def test_parameters_without_recurse(self):
+        model = nn.Sequential(nn.Linear(2, 2))
+        model.scale = nn.Parameter(raxis.ones(1))
+        assert [n for n, _ in model.named_parameters(recurse=False)] == ["scale"]
+
 
 # ===========================================================================
 # HOOKS
