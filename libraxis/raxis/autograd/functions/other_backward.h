@@ -285,6 +285,7 @@ public:
 
 private:
     DimVector self_shape_;
+    bool has_dim_;
 };
 
 class RAXIS_API ExpandBackward0 : public Node {

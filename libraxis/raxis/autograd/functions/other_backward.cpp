@@ -465,9 +465,10 @@ TensorList UnsqueezeBackward0::apply(const TensorList& grads) {
 
 
 SqueezeBackward0::SqueezeBackward0(const Tensor& self, std::optional<int64_t> dim)
-    : self_shape_(self.shape()) {}
+    : self_shape_(self.shape()), has_dim_(dim.has_value()) {}
 
-std::string SqueezeBackward0::name() const { return "SqueezeBackward0"; }
+// torch has one node per overload: squeeze() and squeeze(dim)
+std::string SqueezeBackward0::name() const { return has_dim_ ? "SqueezeBackward1" : "SqueezeBackward0"; }
 
 TensorList SqueezeBackward0::apply(const TensorList& grads) {
     return {grads[0].reshape(self_shape_)};
