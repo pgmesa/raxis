@@ -1,4 +1,5 @@
 #include <raxis/ops/activation.h>
+#include <raxis/ops/attention.h>
 #include <raxis/ops/convolution.h>
 #include <raxis/ops/dropout.h>
 #include <raxis/ops/embedding.h>
@@ -250,6 +251,22 @@ Tensor pad(const Tensor& self, IntArrayRef pad, std::string_view mode, std::opti
     return padding(self, pad, padding_mode);
 }
 
+std::tuple<Tensor, Tensor> scaled_dot_product_flash_attention_for_cpu(
+    const Tensor& query, const Tensor& key, const Tensor& value, double dropout_p, bool is_causal,
+    const Tensor& attn_mask, std::optional<double> scale
+) {
+    auto [output, logsumexp] = ops::scaled_dot_product_flash_attention_for_cpu(
+        query, key, value, dropout_p, is_causal, attn_mask, scale);
+    if (autograd::requires_autograd({query, key, value})) {
+        auto grad_fn = std::make_shared<autograd::ScaledDotProductFlashAttentionForCpuBackward0>(
+            query, key, value, attn_mask, is_causal, scale, output, logsumexp);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, {query, key, value});
+        autograd::set_autograd_meta(output, grad_fn);
+    }
+    return {output, logsumexp};
+}
+
 // From: aten/src/ATen/native/Dropout.cpp (dropout, _dropout_impl)
 Tensor dropout(const Tensor& input, double p, bool train) {
     RAXIS_CHECK(p >= 0.0 && p <= 1.0,
@@ -458,6 +475,20 @@ std::tuple<Tensor, Tensor, Tensor> native_layer_norm_backward(
                             "native_layer_norm_backward");
     }
     return {grad_input, grad_weight, grad_bias};
+}
+
+std::tuple<Tensor, Tensor, Tensor> scaled_dot_product_flash_attention_for_cpu_backward(
+    const Tensor& grad_output, const Tensor& query, const Tensor& key, const Tensor& value,
+    const Tensor& output, const Tensor& logsumexp, double dropout_p, bool is_causal,
+    const Tensor& attn_mask, std::optional<double> scale
+) {
+    auto [grad_query, grad_key, grad_value] = ops::scaled_dot_product_flash_attention_for_cpu_backward(
+        grad_output, query, key, value, output, logsumexp, dropout_p, is_causal, attn_mask, scale);
+    if (autograd::requires_autograd({grad_output, query, key, value})) {
+        set_not_implemented({&grad_query, &grad_key, &grad_value}, {grad_output, query, key, value},
+                            "_scaled_dot_product_flash_attention_for_cpu_backward");
+    }
+    return {grad_query, grad_key, grad_value};
 }
 
 } // namespace raxis

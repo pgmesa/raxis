@@ -832,22 +832,28 @@ class TestEmbedding:
 # SCALED DOT PRODUCT ATTENTION
 # ===========================================================================
 
-def sdpa_both(q_shape, kv_len=None, seed=0, **kwargs):
+def sdpa_both(q_shape, kv_len=None, seed=0, dtype=np.float32, heads_last=False, **kwargs):
     """Output and q/k/v gradients of raxis and torch for the same inputs;
-    numpy arrays in kwargs become tensors of each library."""
+    numpy arrays in kwargs become tensors of each library. heads_last
+    stores q, k and v as [B, L, H, E] and passes the [B, H, L, E] view, as
+    a transformer does after splitting the projection into heads."""
     rng = np.random.RandomState(seed)
     *batch, L, E = q_shape
     S = kv_len or L
-    q = rng.randn(*q_shape).astype(np.float32)
-    k, v = (rng.randn(*batch, S, E).astype(np.float32) for _ in range(2))
-    grad = rng.randn(*q_shape).astype(np.float32)
+    q = rng.randn(*q_shape).astype(dtype)
+    k, v = (rng.randn(*batch, S, E).astype(dtype) for _ in range(2))
+    grad = rng.randn(*q_shape).astype(dtype)
     results = []
     for lib in (raxis, torch):
-        tensors = [lib.tensor(a, requires_grad=True) for a in (q, k, v)]
+        if heads_last:
+            leaves = [lib.tensor(np.ascontiguousarray(a.swapaxes(1, 2)), requires_grad=True) for a in (q, k, v)]
+            tensors = [t.transpose(1, 2) for t in leaves]
+        else:
+            leaves = tensors = [lib.tensor(a, requires_grad=True) for a in (q, k, v)]
         kw = {name: lib.tensor(val) if isinstance(val, np.ndarray) else val for name, val in kwargs.items()}
         out = lib.nn.functional.scaled_dot_product_attention(*tensors, **kw)
         out.backward(lib.tensor(grad))
-        results.append([out] + [t.grad for t in tensors])
+        results.append([out] + [t.grad for t in leaves])
     return results
 
 
@@ -856,9 +862,46 @@ class TestScaledDotProductAttention:
     @pytest.mark.parametrize("q_shape, kv_len", [((2, 4, 16, 8), None), ((3, 7, 5), 9), ((1, 2, 64, 32), None)])
     @pytest.mark.parametrize("is_causal", [False, True])
     def test_forward_backward(self, q_shape, kv_len, is_causal):
-        # torch runs its CPU flash attention kernel: same math, other rounding
+        # 4-D inputs run the flash kernel in both libraries, 3-D the math path
+        r, t = sdpa_both(q_shape, kv_len, is_causal=is_causal)
+        assert r[0].grad_fn.name() == t[0].grad_fn.name()
+        for r_val, t_val in zip(r, t):
+            check_match(r_val, t_val, atol=1e-5)
+
+    @pytest.mark.parametrize("q_shape, kv_len, is_causal", [
+        ((1, 2, 700, 16), None, True),    # query blocks of 64, two key blocks
+        ((1, 2, 800, 8), 1100, False),    # query blocks of 256, three key blocks
+        ((2, 3, 20, 4), 7, True),         # more queries than keys
+    ])
+    def test_flash_blocks(self, q_shape, kv_len, is_causal):
         for r, t in zip(*sdpa_both(q_shape, kv_len, is_causal=is_causal)):
             check_match(r, t, atol=1e-5)
+
+    def test_flash_layout_and_double(self):
+        r, t = sdpa_both((2, 4, 64, 32), heads_last=True, is_causal=True)
+        # The output keeps the [B, L, H, E] storage of the inputs, so the
+        # transpose + view back to [B, L, H * E] is free (torch does the same)
+        assert r[0].strides == t[0].stride()
+        for r_val, t_val in zip(r, t):
+            check_match(r_val, t_val, atol=1e-5)
+        for r_val, t_val in zip(*sdpa_both((2, 3, 17, 6), 23, dtype=np.float64, scale=0.3, is_causal=True)):
+            check_match(r_val, t_val, atol=1e-12)
+
+    def test_math_fallback(self):
+        # A mask that requires grad keeps the math path, which differentiates it
+        T = 6
+        rng = np.random.RandomState(2)
+        q, mask = rng.randn(1, 2, T, 4).astype(np.float32), rng.randn(T, T).astype(np.float32)
+        grads = []
+        for lib in (raxis, torch):
+            x = lib.tensor(q, requires_grad=True)
+            m = lib.tensor(mask, requires_grad=True)
+            out = lib.nn.functional.scaled_dot_product_attention(x, x, x, attn_mask=m)
+            assert out.grad_fn.name() != "ScaledDotProductFlashAttentionForCpuBackward0"
+            out.sum().backward()
+            grads.append((x.grad, m.grad))
+        for r_val, t_val in zip(*grads):
+            check_match(r_val, t_val, atol=1e-5)
 
     def test_masks_and_scale(self):
         T = 10
@@ -869,6 +912,7 @@ class TestScaledDotProductAttention:
             dict(attn_mask=np.tril(np.ones((T, T), dtype=bool), -1)),
             dict(attn_mask=rng.randn(T, T).astype(np.float32)),
             dict(attn_mask=rng.rand(2, 1, T, T) > 0.3),
+            dict(attn_mask=rng.randn(1, 3, 1, T).astype(np.float32)),
         ]
         for kwargs in cases:
             for r, t in zip(*sdpa_both((2, 3, T, 4), **kwargs)):

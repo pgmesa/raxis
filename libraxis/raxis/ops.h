@@ -1,6 +1,7 @@
 #pragma once
 
 #include <raxis/ops/activation.h>
+#include <raxis/ops/attention.h>
 #include <raxis/ops/copy.h>
 #include <raxis/ops/dropout.h>
 #include <raxis/ops/embedding.h>

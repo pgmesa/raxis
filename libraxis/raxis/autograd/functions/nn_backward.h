@@ -7,6 +7,7 @@
 #include <raxis/autograd/graph.h>
 #include <raxis/autograd/saved_variable.h>
 #include <raxis/ops/activation.h>
+#include <raxis/ops/attention.h>
 #include <raxis/ops/dropout.h>
 #include <raxis/ops/embedding.h>
 #include <raxis/ops/loss.h>
@@ -230,6 +231,29 @@ private:
     DimVector self_shape_;
     DimVector pad_;
     PaddingMode mode_;
+};
+
+
+// The mask gets no gradient (SDPA only picks the fused kernel when it does
+// not require one). logsumexp is an output without grad_fn, so it is saved
+// as an input
+class RAXIS_API ScaledDotProductFlashAttentionForCpuBackward0 : public Node {
+public:
+    ScaledDotProductFlashAttentionForCpuBackward0(
+        const Tensor& query, const Tensor& key, const Tensor& value, const Tensor& attn_mask,
+        bool is_causal, std::optional<double> scale, const Tensor& output, const Tensor& logsumexp);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    SavedVariable query_{this, "query"};
+    SavedVariable key_{this, "key"};
+    SavedVariable value_{this, "value"};
+    SavedVariable attn_mask_{this, "attn_mask"};
+    bool is_causal_;
+    std::optional<double> scale_;
+    SavedVariable output_{this, "output"};
+    SavedVariable logsumexp_{this, "logsumexp"};
 };
 
 

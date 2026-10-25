@@ -1,6 +1,7 @@
 #include <raxis/autograd/functions/nn_backward.h>
 
 #include <raxis/ops/activation.h>
+#include <raxis/ops/attention.h>
 #include <raxis/ops/convolution.h>
 #include <raxis/ops/dropout.h>
 #include <raxis/ops/embedding.h>
@@ -232,6 +233,30 @@ std::string PaddingBackward0::name() const { return padding_node_name(mode_, pad
 
 TensorList PaddingBackward0::apply(const TensorList& grads) {
     return {padding_backward(grads[0], self_shape_, pad_, mode_)};
+}
+
+
+ScaledDotProductFlashAttentionForCpuBackward0::ScaledDotProductFlashAttentionForCpuBackward0(
+    const Tensor& query, const Tensor& key, const Tensor& value, const Tensor& attn_mask,
+    bool is_causal, std::optional<double> scale, const Tensor& output, const Tensor& logsumexp)
+    : is_causal_(is_causal), scale_(scale)
+{
+    query_.save(query);
+    key_.save(key);
+    value_.save(value);
+    attn_mask_.save(attn_mask);
+    output_.save(output, /*is_output=*/true);
+    logsumexp_.save(logsumexp);
+}
+std::string ScaledDotProductFlashAttentionForCpuBackward0::name() const {
+    return "ScaledDotProductFlashAttentionForCpuBackward0";
+}
+
+TensorList ScaledDotProductFlashAttentionForCpuBackward0::apply(const TensorList& grads) {
+    auto [grad_query, grad_key, grad_value] = scaled_dot_product_flash_attention_for_cpu_backward(
+        grads[0], query_.unpack(), key_.unpack(), value_.unpack(), output_.unpack(), logsumexp_.unpack(),
+        /*dropout_p=*/0.0, is_causal_, attn_mask_.unpack(), scale_);
+    return {grad_query, grad_key, grad_value};
 }
 
 

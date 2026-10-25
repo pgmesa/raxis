@@ -1430,6 +1430,11 @@ class TestCreateGraph:
         g, = raxis.autograd.grad(F_.layer_norm(x, (4,)).pow(3).sum(), x, create_graph=True)
         with pytest.raises(RuntimeError, match="derivative for 'native_layer_norm_backward' is not implemented"):
             raxis.autograd.grad(g.sum(), x)
+        x = raxis.rand((1, 2, 3, 4), requires_grad=True)
+        y = raxis.nn.functional.scaled_dot_product_attention(x, x, x)
+        g, = raxis.autograd.grad(y.pow(3).sum(), x, create_graph=True)
+        with pytest.raises(RuntimeError, match="'_scaled_dot_product_flash_attention_for_cpu_backward' is not"):
+            raxis.autograd.grad(g.sum(), x)
 
     def test_once_differentiable_raises_on_second_derivative(self):
         import warnings
@@ -1782,6 +1787,7 @@ OUTPUT_SAVING_OPS = [
     ("relu",       lambda x: x.relu()),
     ("softmax",    lambda x: x.softmax(1)),
     ("log_softmax", lambda x: x.log_softmax(1)),
+    ("sdpa_flash", lambda x: raxis.nn.functional.scaled_dot_product_attention(*[x.view(1, 1, 4, 5)] * 3)),
 ]
 
 
