@@ -25,9 +25,11 @@ import raxis
 ALL = "all"
 NO_BOOL = "no_bool"
 FLOAT = "float"
+INTEGRAL = "integral"
 
 _FLOAT_DTYPES = {"float32", "float64"}
 _BOOL_DTYPES = {"bool"}
+_INTEGRAL_DTYPES = {"uint8", "int32", "int64"}
 
 
 def dtype_allowed(dtype_str, category):
@@ -37,6 +39,8 @@ def dtype_allowed(dtype_str, category):
         return dtype_str not in _BOOL_DTYPES
     if category == FLOAT:
         return dtype_str in _FLOAT_DTYPES
+    if category == INTEGRAL:
+        return dtype_str in _INTEGRAL_DTYPES
     return True
 
 
@@ -737,7 +741,7 @@ def run_forward_benchmarks(runner):
     _run_section(runner, "Random", [
         ("uniform_", FLOAT, S_RANDOM, lambda r: r.uniform_(), lambda t: t.uniform_()),
         ("normal_", FLOAT, S_RANDOM, lambda r: r.normal_(), lambda t: t.normal_()),
-        ("randint_", NO_BOOL, S_RANDOM, lambda r: r.randint_(0, 100), lambda t: t.random_(0, 100)),
+        ("randint_", INTEGRAL, S_RANDOM, lambda r: r.randint_(0, 100), lambda t: t.random_(0, 100)),
         ("dropout", FLOAT, S_RANDOM,
         lambda r: raxis.dropout(r, 0.5, True),
         lambda t: torch.dropout(t, 0.5, True)),
