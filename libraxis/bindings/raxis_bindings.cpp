@@ -913,6 +913,8 @@ PYBIND11_MODULE(_C, c) {
         .def("flip", [](const raxis::Tensor& self, raxis::VecOrInt dims) {
             return raxis::flip(self, dims);
         }, py::arg("dims"))
+        .def("tril", &raxis::tril, py::arg("diagonal") = 0)
+        .def("triu", &raxis::triu, py::arg("diagonal") = 0)
         .def("index_select", &raxis::index_select, py::arg("dim"), py::arg("index"))
         .def("index_add", &raxis::index_add, py::arg("dim"), py::arg("index"), py::arg("source"))
         .def("index_add_", [](raxis::Tensor& self, int64_t dim, const raxis::Tensor& index, const raxis::Tensor& source) -> raxis::Tensor& {
@@ -1610,6 +1612,8 @@ PYBIND11_MODULE(_C, c) {
     c.def("flip", [](const raxis::Tensor& input, raxis::VecOrInt dims) {
         return raxis::flip(input, dims);
     }, py::arg("input"), py::arg("dims"));
+    c.def("tril", &raxis::tril, py::arg("input"), py::arg("diagonal") = 0);
+    c.def("triu", &raxis::triu, py::arg("input"), py::arg("diagonal") = 0);
     c.def("index_select", &raxis::index_select, py::arg("input"), py::arg("dim"), py::arg("index"));
     c.def("index_add", &raxis::index_add, py::arg("input"), py::arg("dim"), py::arg("index"), py::arg("source"));
     c.def("index_put", [](const raxis::Tensor& input, const std::vector<std::optional<raxis::Tensor>>& indices,

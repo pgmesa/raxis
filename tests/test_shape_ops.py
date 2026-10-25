@@ -218,6 +218,44 @@ def test_flip_backward(shape, dims):
 
 
 # ===========================================================================
+# tril / triu
+# ===========================================================================
+
+@pytest.mark.parametrize("fn", ["tril", "triu"])
+@pytest.mark.parametrize("diagonal", [-7, -2, 0, 1, 3, 9])
+@pytest.mark.parametrize("shape", [(5, 6), (6, 5), (3, 5, 6), (2, 1, 4, 4), (300, 300)])
+def test_tril_triu(fn, diagonal, shape):
+    r, t = make_pair(randf(*shape))
+    check_match(getattr(r, fn)(diagonal), getattr(t, fn)(diagonal))
+    check_match(getattr(raxis, fn)(r, diagonal), getattr(torch, fn)(t, diagonal))
+
+
+@pytest.mark.parametrize("fn", ["tril", "triu"])
+def test_tril_triu_layouts_and_dtypes(fn):
+    r, t = make_pair(randf(3, 5, 6))
+    # A transposed matrix is read in place; a permuted batch is copied first
+    check_match(getattr(r[0].transpose(0, 1), fn)(1), getattr(t[0].transpose(0, 1), fn)(1))
+    check_match(getattr(r.transpose(0, 2), fn)(-1), getattr(t.transpose(0, 2), fn)(-1))
+    check_match(getattr(r[:, ::2], fn)(), getattr(t[:, ::2], fn)())
+    for dtype in ["int64", "int32", "bool", "float64"]:
+        check_match(getattr(r.to(getattr(raxis, dtype)), fn)(), getattr(t.to(getattr(torch, dtype)), fn)())
+    check_match(getattr(raxis.ones(0, 3), fn)(), getattr(torch.ones(0, 3), fn)())
+    with pytest.raises(RuntimeError, match="input tensor must have at least 2 dimensions"):
+        getattr(raxis.ones(3), fn)()
+
+
+@pytest.mark.parametrize("fn", ["tril", "triu"])
+def test_tril_triu_backward(fn):
+    r, t = make_grad_pair(randf(2, 4, 5))
+    w = randf(2, 4, 5, seed=1)
+    r_out, t_out = getattr(r, fn)(1), getattr(t, fn)(1)
+    (r_out * raxis.from_numpy(w)).sum().backward()
+    (t_out * torch.from_numpy(w)).sum().backward()
+    check_match(r.grad, t.grad)
+    assert r_out.grad_fn.name() == t_out.grad_fn.name()
+
+
+# ===========================================================================
 # clone(memory_format=...)
 # ===========================================================================
 

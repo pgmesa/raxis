@@ -22,4 +22,5 @@
 #include <raxis/ops/normalization.h>
 #include <raxis/ops/padding.h>
 #include <raxis/ops/range_factories.h>
+#include <raxis/ops/triangular_ops.h>
 #include <raxis/ops/distribution_ops.h>

@@ -7,6 +7,7 @@
 #include <raxis/ops/tensor_compare.h>
 #include <raxis/ops/tensor_advanced_indexing.h>
 #include <raxis/ops/tensor_transformations.h>
+#include <raxis/ops/triangular_ops.h>
 #include <raxis/autograd/variable.h>
 #include <raxis/tensor/factories.h>
 
@@ -433,6 +434,24 @@ std::string FlipBackward0::name() const { return "FlipBackward0"; }
 
 TensorList FlipBackward0::apply(const TensorList& grads) {
     return {flip(grads[0], dims_)};
+}
+
+
+TrilBackward0::TrilBackward0(int64_t diagonal) : diagonal_(diagonal) {}
+
+std::string TrilBackward0::name() const { return "TrilBackward0"; }
+
+TensorList TrilBackward0::apply(const TensorList& grads) {
+    return {tril(grads[0], diagonal_)};
+}
+
+
+TriuBackward0::TriuBackward0(int64_t diagonal) : diagonal_(diagonal) {}
+
+std::string TriuBackward0::name() const { return "TriuBackward0"; }
+
+TensorList TriuBackward0::apply(const TensorList& grads) {
+    return {triu(grads[0], diagonal_)};
 }
 
 

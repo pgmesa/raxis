@@ -1260,6 +1260,8 @@ RECORDED_OPS = [
     ("cumsum", (3, 4), lambda x: x.cumsum(1)),
     ("cumprod", (3, 4), lambda x: x.cumprod(1)),
     ("flip", (3, 4), lambda x: x.flip(0, 1)),
+    ("tril", (3, 4), lambda x: x.tril(1)),
+    ("triu", (3, 4), lambda x: x.triu(-1)),
     ("sort", (3, 4), lambda x: x.sort(1)[0]),
     ("topk", (3, 4), lambda x: x.topk(2, 0)[0]),
     ("view", (3, 4), lambda x: x.view(4, 3)),

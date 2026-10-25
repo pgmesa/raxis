@@ -246,6 +246,27 @@ private:
     DimVector dims_;
 };
 
+// tril and triu are linear: the gradient keeps the same triangle
+class RAXIS_API TrilBackward0 : public Node {
+public:
+    explicit TrilBackward0(int64_t diagonal);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    int64_t diagonal_;
+};
+
+class RAXIS_API TriuBackward0 : public Node {
+public:
+    explicit TriuBackward0(int64_t diagonal);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    int64_t diagonal_;
+};
+
 class RAXIS_API UnsqueezeBackward0 : public Node {
 public:
     explicit UnsqueezeBackward0(int64_t dim);

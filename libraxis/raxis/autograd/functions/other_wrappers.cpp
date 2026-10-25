@@ -7,6 +7,7 @@
 #include <raxis/ops/tensor_compare.h>
 #include <raxis/ops/tensor_advanced_indexing.h>
 #include <raxis/ops/tensor_transformations.h>
+#include <raxis/ops/triangular_ops.h>
 
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/tensor_shape.h>
@@ -355,6 +356,28 @@ Tensor flip(const Tensor& self, IntArrayRef dims) {
     Tensor result = ops::flip(self, dims);
     if (autograd::requires_autograd(self)) {
         auto grad_fn = std::make_shared<autograd::FlipBackward0>(dims);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor tril(const Tensor& self, int64_t diagonal) {
+    Tensor result = ops::tril(self, diagonal);
+    if (autograd::requires_autograd(self)) {
+        auto grad_fn = std::make_shared<autograd::TrilBackward0>(diagonal);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor triu(const Tensor& self, int64_t diagonal) {
+    Tensor result = ops::triu(self, diagonal);
+    if (autograd::requires_autograd(self)) {
+        auto grad_fn = std::make_shared<autograd::TriuBackward0>(diagonal);
         grad_fn->set_num_inputs(1);
         autograd::set_next_edges(grad_fn, self);
         autograd::set_autograd_meta(result, grad_fn);
