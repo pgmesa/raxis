@@ -14,6 +14,9 @@ enum class CPUCapability {
 #ifdef HAVE_AVX2_CPU_DEFINITION
     AVX2 = 1,
 #endif
+#ifdef HAVE_AVX512_CPU_DEFINITION
+    AVX512 = 2,
+#endif
     NUM_OPTIONS
 };
 
@@ -30,12 +33,18 @@ struct RAXIS_API DispatchStubImpl {
 #ifdef HAVE_AVX2_CPU_DEFINITION
         , void* AVX2
 #endif
+#ifdef HAVE_AVX512_CPU_DEFINITION
+        , void* AVX512
+#endif
     );
 
     void* choose_cpu_impl(
         void* DEFAULT
 #ifdef HAVE_AVX2_CPU_DEFINITION
         , void* AVX2
+#endif
+#ifdef HAVE_AVX512_CPU_DEFINITION
+        , void* AVX512
 #endif
     );
 
@@ -60,6 +69,9 @@ private:
 #ifdef HAVE_AVX2_CPU_DEFINITION
                 , reinterpret_cast<void*>(AVX2)
 #endif
+#ifdef HAVE_AVX512_CPU_DEFINITION
+                , reinterpret_cast<void*>(AVX512)
+#endif
             )
         );
     }
@@ -78,6 +90,9 @@ public:
     static RAXIS_API FnPtr DEFAULT;
 #ifdef HAVE_AVX2_CPU_DEFINITION
     static RAXIS_API FnPtr AVX2;
+#endif
+#ifdef HAVE_AVX512_CPU_DEFINITION
+    static RAXIS_API FnPtr AVX512;
 #endif
 
 private:
@@ -121,9 +136,16 @@ struct RegisterCUDADispatch {
 #define REGISTER_AVX2_DISPATCH(name, fn)
 #endif
 
+#ifdef HAVE_AVX512_CPU_DEFINITION
+#define REGISTER_AVX512_DISPATCH(name, fn) REGISTER_ARCH_DISPATCH(name, AVX512, fn)
+#else
+#define REGISTER_AVX512_DISPATCH(name, fn)
+#endif
+
 #define REGISTER_ALL_CPU_DISPATCH(name, fn) \
     REGISTER_ARCH_DISPATCH(name, DEFAULT, fn) \
-    REGISTER_AVX2_DISPATCH(name, fn)
+    REGISTER_AVX2_DISPATCH(name, fn) \
+    REGISTER_AVX512_DISPATCH(name, fn)
 
 #define REGISTER_NO_CPU_DISPATCH(name) \
     REGISTER_ALL_CPU_DISPATCH(name, nullptr)
@@ -131,9 +153,22 @@ struct RegisterCUDADispatch {
 #if defined(__CUDACC__)
 #define REGISTER_DISPATCH(name, fn) REGISTER_CUDA_DISPATCH(name, fn)
 #elif defined(CPU_CAPABILITY)
+// From: aten/src/ATen/native/DispatchStub.h
+// As in PyTorch, a kernel opts in to AVX512 with ALSO_REGISTER_AVX512_DISPATCH:
+// in the AVX512 build REGISTER_DISPATCH stores nullptr and the stub falls back
+// to the AVX2 kernel. Wider registers only pay off in compute-bound kernels
+// (transcendentals, softmax, attention); memory-bound ones gain nothing, and
+// keeping them on AVX2 keeps their summation order (and so their results)
+// equal to PyTorch's.
+#ifdef CPU_CAPABILITY_AVX512
+#define REGISTER_DISPATCH(name, fn) REGISTER_ARCH_DISPATCH(name, CPU_CAPABILITY, nullptr)
+#else
 #define REGISTER_DISPATCH(name, fn) REGISTER_ARCH_DISPATCH(name, CPU_CAPABILITY, fn)
+#endif
+#define ALSO_REGISTER_AVX512_DISPATCH(name, fn) REGISTER_ARCH_DISPATCH(name, CPU_CAPABILITY, fn)
 #else
 #define REGISTER_DISPATCH(name, fn)
+#define ALSO_REGISTER_AVX512_DISPATCH(name, fn)
 #endif
 
 } // namespace raxis

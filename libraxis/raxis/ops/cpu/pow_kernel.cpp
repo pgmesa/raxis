@@ -109,7 +109,7 @@ void pow_tensor_scalar_kernel(TensorIterator& iter, Scalar exp_scalar) {
 
 } // namespace CPU_CAPABILITY
 
-REGISTER_DISPATCH(pow_tensor_tensor_stub, &pow_tensor_tensor_kernel);
-REGISTER_DISPATCH(pow_tensor_scalar_stub, &pow_tensor_scalar_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(pow_tensor_tensor_stub, &pow_tensor_tensor_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(pow_tensor_scalar_stub, &pow_tensor_scalar_kernel);
 
 } // namespace raxis

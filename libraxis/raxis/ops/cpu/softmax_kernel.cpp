@@ -294,9 +294,9 @@ void log_softmax_kernel(const Tensor& result, const Tensor& self, int64_t dim) {
 
 } // namespace CPU_CAPABILITY
 
-REGISTER_DISPATCH(softmax_stub, &softmax_kernel);
-REGISTER_DISPATCH(log_softmax_stub, &log_softmax_kernel);
-REGISTER_DISPATCH(softmax_backward_stub, &softmax_backward_kernel);
-REGISTER_DISPATCH(log_softmax_backward_stub, &log_softmax_backward_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(softmax_stub, &softmax_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(log_softmax_stub, &log_softmax_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(softmax_backward_stub, &softmax_backward_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(log_softmax_backward_stub, &log_softmax_backward_kernel);
 
 } // namespace raxis

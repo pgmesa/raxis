@@ -163,7 +163,7 @@ void gelu_backward_kernel(TensorIterator& iter, GeluType approximate) {
 
 REGISTER_DISPATCH(relu_stub, &relu_kernel);
 REGISTER_DISPATCH(threshold_backward_stub, &threshold_backward_kernel);
-REGISTER_DISPATCH(gelu_stub, &gelu_kernel);
-REGISTER_DISPATCH(gelu_backward_stub, &gelu_backward_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(gelu_stub, &gelu_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(gelu_backward_stub, &gelu_backward_kernel);
 
 } // namespace raxis

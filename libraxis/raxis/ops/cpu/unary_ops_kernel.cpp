@@ -227,33 +227,35 @@ void logical_not_kernel(TensorIterator& iter) {
 
 } // namespace CPU_CAPABILITY
 
+// AVX512 only where PyTorch registers it (UnaryOpsKernel.cpp): the
+// transcendentals; neg, abs, rounding, sqrt and sin/cos/tan stay on AVX2
 REGISTER_DISPATCH(neg_stub, &neg_kernel);
 REGISTER_DISPATCH(abs_stub, &abs_kernel);
-REGISTER_DISPATCH(sign_stub, &sign_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(sign_stub, &sign_kernel);
 REGISTER_DISPATCH(ceil_stub, &ceil_kernel);
 REGISTER_DISPATCH(floor_stub, &floor_kernel);
 REGISTER_DISPATCH(round_stub, &round_kernel);
-REGISTER_DISPATCH(exp_stub, &exp_kernel);
-REGISTER_DISPATCH(expm1_stub, &expm1_kernel);
-REGISTER_DISPATCH(log_stub, &log_kernel);
-REGISTER_DISPATCH(log2_stub, &log2_kernel);
-REGISTER_DISPATCH(log10_stub, &log10_kernel);
-REGISTER_DISPATCH(log1p_stub, &log1p_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(exp_stub, &exp_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(expm1_stub, &expm1_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(log_stub, &log_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(log2_stub, &log2_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(log10_stub, &log10_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(log1p_stub, &log1p_kernel);
 REGISTER_DISPATCH(sqrt_stub, &sqrt_kernel);
 REGISTER_DISPATCH(rsqrt_stub, &rsqrt_kernel);
-REGISTER_DISPATCH(reciprocal_stub, &reciprocal_kernel);
-REGISTER_DISPATCH(sigmoid_stub, &sigmoid_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(reciprocal_stub, &reciprocal_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(sigmoid_stub, &sigmoid_kernel);
 REGISTER_DISPATCH(logical_not_stub, &logical_not_kernel);
 REGISTER_DISPATCH(sin_stub, &sin_kernel);
 REGISTER_DISPATCH(cos_stub, &cos_kernel);
 REGISTER_DISPATCH(tan_stub, &tan_kernel);
-REGISTER_DISPATCH(asin_stub, &asin_kernel);
-REGISTER_DISPATCH(acos_stub, &acos_kernel);
-REGISTER_DISPATCH(atan_stub, &atan_kernel);
-REGISTER_DISPATCH(sinh_stub, &sinh_kernel);
-REGISTER_DISPATCH(cosh_stub, &cosh_kernel);
-REGISTER_DISPATCH(tanh_stub, &tanh_kernel);
-REGISTER_DISPATCH(erf_stub, &erf_kernel);
-REGISTER_DISPATCH(erfc_stub, &erfc_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(asin_stub, &asin_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(acos_stub, &acos_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(atan_stub, &atan_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(sinh_stub, &sinh_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(cosh_stub, &cosh_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(tanh_stub, &tanh_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(erf_stub, &erf_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(erfc_stub, &erfc_kernel);
 
 } // namespace raxis

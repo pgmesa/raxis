@@ -9,6 +9,7 @@
 #include <raxis/tensor/tensor.h>
 
 
+#include <algorithm>
 #include <cstdint>
 #include <type_traits>
 
@@ -62,21 +63,23 @@ void uniform_impl(scalar_t* out, int64_t n, double low, double high, uint64_t se
 // two independent normals radius * cos(theta) and radius * sin(theta), with
 // radius = sqrt(-2 log(1 - u1)) (1 - u1 is in (0, 1], so log is finite) and
 // theta = 2 pi u2. Pairing j with j + 8 instead of 2j with 2j + 1 keeps the
-// loads contiguous, so each half is one AVX2 register for float.
+// loads contiguous, so each half is one AVX2 register for float. A wider
+// register (AVX512 float) loads and stores only the 8 lanes of a half.
 // From: aten/src/ATen/native/cpu/DistributionTemplates.h (NormalFill16)
 template <typename scalar_t>
 inline void box_muller_16(scalar_t* data, vec::Vectorized<scalar_t> mean, vec::Vectorized<scalar_t> stddev) {
     using Vec = vec::Vectorized<scalar_t>;
+    constexpr int width = std::min(Vec::size(), 8);
     const Vec one(1);
     const Vec minus_two(-2);
     const Vec two_pi(static_cast<scalar_t>(2.0 * 3.14159265358979323846));
-    for (int j = 0; j < 8; j += Vec::size()) {
-        const Vec u1 = one - Vec::loadu(data + j);
-        const Vec u2 = Vec::loadu(data + j + 8);
+    for (int j = 0; j < 8; j += width) {
+        const Vec u1 = one - Vec::loadu(data + j, width);
+        const Vec u2 = Vec::loadu(data + j + 8, width);
         const Vec radius = (minus_two * u1.log()).sqrt();
         const Vec theta = two_pi * u2;
-        vec::fmadd(radius * theta.cos(), stddev, mean).store(data + j);
-        vec::fmadd(radius * theta.sin(), stddev, mean).store(data + j + 8);
+        vec::fmadd(radius * theta.cos(), stddev, mean).store(data + j, width);
+        vec::fmadd(radius * theta.sin(), stddev, mean).store(data + j + 8, width);
     }
 }
 
@@ -161,8 +164,11 @@ void randint_kernel(const Tensor& self, int64_t low, uint64_t range, uint64_t se
 
 } // namespace CPU_CAPABILITY
 
-REGISTER_DISPATCH(uniform_stub, &uniform_kernel);
+// Kernels of raxis's own (Philox): AVX512 where it measured faster, and the
+// same values on every ISA. normal_ stays on AVX2: Box-Muller pairs j with
+// j + 8, so a 16-lane float register would be half empty (0.8x)
+ALSO_REGISTER_AVX512_DISPATCH(uniform_stub, &uniform_kernel);
 REGISTER_DISPATCH(normal_stub,  &normal_kernel);
-REGISTER_DISPATCH(randint_stub, &randint_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(randint_stub, &randint_kernel);
 
 } // namespace raxis

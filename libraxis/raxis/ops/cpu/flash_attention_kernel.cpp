@@ -492,7 +492,7 @@ void flash_attention_backward_kernel(
 
 } // namespace CPU_CAPABILITY
 
-REGISTER_DISPATCH(flash_attention_stub, &flash_attention_kernel);
-REGISTER_DISPATCH(flash_attention_backward_stub, &flash_attention_backward_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(flash_attention_stub, &flash_attention_kernel);
+ALSO_REGISTER_AVX512_DISPATCH(flash_attention_backward_stub, &flash_attention_backward_kernel);
 
 } // namespace raxis

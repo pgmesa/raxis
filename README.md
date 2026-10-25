@@ -56,7 +56,7 @@ graph.render(loss, "loss.svg")  # needs pip install 'raxis[viz]' and Graphviz
 | Path | What it holds |
 |---|---|
 | `libraxis/raxis/tensor` | TensorImpl and storage, views and strides, type promotion, TensorIterator |
-| `libraxis/raxis/ops` | Operators and their CPU kernels, compiled once per ISA (AVX2, NEON, ...) and picked at runtime |
+| `libraxis/raxis/ops` | Operators and their CPU kernels, compiled once per ISA (AVX2, AVX512, NEON) and picked at runtime |
 | `libraxis/raxis/autograd` | Graph, engine and backward functions |
 | `libraxis/bindings` | pybind11 module `raxis._C` |
 | `raxis/` | Python package: `nn`, `optim`, `autograd.graph`, tensor printing |
