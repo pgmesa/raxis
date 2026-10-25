@@ -993,3 +993,49 @@ def test_cnn_batch_norm_training_matches_torch():
     r_model.eval()
     t_model.eval()
     check_match(r_model(raxis.tensor(x)), t_model(torch.from_numpy(x)), atol=1e-4, context="eval")
+
+
+# ===========================================================================
+# GRADIENT CLIPPING
+# ===========================================================================
+
+def grads_pair(seed=1):
+    """The same gradients on raxis and torch parameters; the last one has none."""
+    pairs = []
+    for lib in (raxis, torch):
+        params = [lib.nn.Parameter(lib.zeros(5, 3)), lib.nn.Parameter(lib.zeros(7)), lib.nn.Parameter(lib.zeros(2))]
+        rng = np.random.RandomState(seed)
+        for p in params[:2]:
+            p.grad = lib.tensor(rng.randn(*p.shape).astype(np.float32))
+        pairs.append(params)
+    return pairs
+
+
+class TestClipGrad:
+
+    @pytest.mark.parametrize("norm_type", [2.0, 1, 3.5, math.inf, 0])
+    @pytest.mark.parametrize("max_norm", [0.1, 100.0])
+    def test_clip_grad_norm_matches_torch(self, norm_type, max_norm):
+        r_params, t_params = grads_pair()
+        r_norm = nn.utils.clip_grad_norm_(r_params, max_norm, norm_type)
+        t_norm = torch.nn.utils.clip_grad_norm_(t_params, max_norm, norm_type)
+        check_match(r_norm, t_norm, atol=1e-5)
+        for r, t in zip(r_params[:2], t_params[:2]):
+            check_match(r.grad, t.grad, atol=1e-6)
+        assert r_params[2].grad is None
+
+    def test_clip_grad_value_matches_torch(self):
+        r_params, t_params = grads_pair()
+        nn.utils.clip_grad_value_(r_params, 0.5)
+        torch.nn.utils.clip_grad_value_(t_params, 0.5)
+        for r, t in zip(r_params[:2], t_params[:2]):
+            check_match(r.grad, t.grad)
+
+    def test_no_gradients(self):
+        assert nn.utils.clip_grad_norm_([nn.Parameter(raxis.zeros(2))], 1.0).item() == 0.0
+
+    def test_non_finite_norm(self):
+        p = nn.Parameter(raxis.zeros(2))
+        p.grad = raxis.tensor([1.0, math.inf])
+        with pytest.raises(RuntimeError, match="is non-finite, so it cannot be clipped"):
+            nn.utils.clip_grad_norm_(p, 1.0, error_if_nonfinite=True)

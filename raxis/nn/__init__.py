@@ -1,4 +1,4 @@
-from raxis.nn import functional, init
+from raxis.nn import functional, init, utils
 from raxis.nn.modules import Module, Sequential, ModuleList, ModuleDict, Parameter
 from raxis.nn.activations import ReLU, LeakyReLU, SELU, Sigmoid, Tanh, Softmax, LogSoftmax
 from raxis.nn.layers import Linear, Flatten, Dropout
