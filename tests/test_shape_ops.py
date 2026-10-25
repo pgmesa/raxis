@@ -160,6 +160,7 @@ def test_method_varargs():
     check_match(r.permute(2, 0, 1), t.permute(2, 0, 1))
     check_match(r[:1].expand(3, -1, -1), t[:1].expand(3, -1, -1))
     check_match(r.reshape(-1), t.reshape(-1))
+    check_match(r.view(-1), t.view(-1))
 
 
 # ===========================================================================
