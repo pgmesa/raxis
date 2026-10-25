@@ -129,6 +129,58 @@ class TestModule:
 
 
 # ===========================================================================
+# CONTAINERS
+# ===========================================================================
+
+class TestModuleList:
+
+    def test_registers_and_indexes(self):
+        r, t = (lib.nn.ModuleList([lib.nn.Linear(2, 3), lib.nn.Linear(3, 1)]) for lib in (raxis, torch))
+        assert [n for n, _ in r.named_parameters()] == [n for n, _ in t.named_parameters()]
+        assert len(r) == 2 and r[-1] is r[1] and isinstance(r[:1], nn.ModuleList) and len(r[:1]) == 1
+        with pytest.raises(IndexError, match="index 2 is out of range"):
+            r[2]
+
+    def test_mutation_keeps_names_contiguous(self):
+        layers = [nn.Linear(1, 1) for _ in range(4)]
+        ml = nn.ModuleList(layers[:2])
+        ml.append(layers[2])
+        ml += [layers[3]]
+        ml.insert(1, nn.ReLU())
+        assert list(ml._modules) == ["0", "1", "2", "3", "4"]
+        assert isinstance(ml[1], nn.ReLU)
+        del ml[1]
+        assert list(ml) == layers and list(ml._modules) == ["0", "1", "2", "3"]
+        assert ml.pop(0) is layers[0] and ml[0] is layers[1] and ml._modules["0"] is layers[1]
+
+    def test_repr_compresses_repeats_as_torch(self):
+        reprs = []
+        for lib in (raxis, torch):
+            ml = lib.nn.ModuleList([lib.nn.Linear(2, 2) for _ in range(3)] + [lib.nn.ReLU()])
+            reprs.append(repr(lib.nn.Sequential(ml)))
+        assert reprs[0] == reprs[1]
+
+
+class TestModuleDict:
+
+    def test_dict_interface(self):
+        md = nn.ModuleDict(dict(fc=nn.Linear(2, 2), act=nn.ReLU()))
+        assert list(md) == ["fc", "act"] and "fc" in md and len(md) == 2
+        assert md.fc is md["fc"]
+        md.update([("out", nn.Linear(2, 1))])
+        assert list(md.keys()) == ["fc", "act", "out"]
+        assert [n for n, _ in md.named_parameters()] == ["fc.weight", "fc.bias", "out.weight", "out.bias"]
+        assert isinstance(md.pop("act"), nn.ReLU) and "act" not in md and not hasattr(md, "act")
+        md.clear()
+        assert len(md) == 0 and list(md.parameters()) == []
+
+    def test_repr_matches_torch(self):
+        r, t = (repr(lib.nn.ModuleDict(dict(fc=lib.nn.Linear(2, 2), h=lib.nn.ModuleList([lib.nn.ReLU()]))))
+                for lib in (raxis, torch))
+        assert r == t
+
+
+# ===========================================================================
 # HOOKS
 # ===========================================================================
 

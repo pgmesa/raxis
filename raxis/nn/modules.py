@@ -1,5 +1,6 @@
+import operator
 from collections import OrderedDict, namedtuple
-from typing import Any, Callable, Iterator, Mapping
+from typing import Any, Callable, Iterable, Iterator, Mapping
 
 import raxis
 from raxis import Tensor
@@ -395,3 +396,136 @@ class Sequential(Module):
             x = module(x)
         return x
 
+
+# From: torch/nn/modules/container.py
+class ModuleList(Module):
+    """Holds submodules in a list, registered under the names "0", "1", ...
+    so parameters() and train()/eval() reach them (a plain Python list
+    would hide them)."""
+
+    def __init__(self, modules: Iterable[Module] | None = None) -> None:
+        super().__init__()
+        if modules is not None:
+            self.extend(modules)
+
+    def _abs_index(self, idx: int) -> str:
+        idx = operator.index(idx)
+        if not -len(self) <= idx < len(self):
+            raise IndexError(f"index {idx} is out of range")
+        return str(idx % len(self))
+
+    def __getitem__(self, idx: int | slice) -> "Module | ModuleList":
+        if isinstance(idx, slice):
+            return type(self)(list(self._modules.values())[idx])
+        return self._modules[self._abs_index(idx)]
+
+    def __setitem__(self, idx: int, module: Module) -> None:
+        self.register_module(self._abs_index(idx), module)
+
+    def __delitem__(self, idx: int | slice) -> None:
+        modules = list(self._modules.values())
+        del modules[idx if isinstance(idx, slice) else int(self._abs_index(idx))]
+        # Renumber what is left, so the names stay "0", "1", ...
+        for name in list(self._modules):
+            object.__delattr__(self, name)
+        self._modules.clear()
+        self.extend(modules)
+
+    def __len__(self) -> int:
+        return len(self._modules)
+
+    def __iter__(self) -> Iterator[Module]:
+        return iter(self._modules.values())
+
+    def __iadd__(self, modules: Iterable[Module]) -> "ModuleList":
+        return self.extend(modules)
+
+    def append(self, module: Module) -> "ModuleList":
+        self.register_module(str(len(self)), module)
+        return self
+
+    def extend(self, modules: Iterable[Module]) -> "ModuleList":
+        for module in modules:
+            self.append(module)
+        return self
+
+    def insert(self, index: int, module: Module) -> None:
+        modules = list(self._modules.values())
+        modules.insert(index, module)
+        self._modules.clear()
+        self.extend(modules)
+
+    def pop(self, idx: int | slice) -> "Module | ModuleList":
+        module = self[idx]
+        del self[idx]
+        return module
+
+    def __repr__(self) -> str:
+        """Runs of identical submodules are printed once: (0-3): 4 x Block(...)"""
+        reprs = [repr(module) for module in self]
+        if not reprs:
+            return f"{type(self).__name__}()"
+        runs = []  # [first index, last index, repr]
+        for i, r in enumerate(reprs):
+            if runs and runs[-1][2] == r:
+                runs[-1][1] = i
+            else:
+                runs.append([i, i, r])
+        lines = []
+        for start, end, r in runs:
+            r = r.replace("\n", "\n  ")
+            lines.append(f"({start}): {r}" if start == end else f"({start}-{end}): {end - start + 1} x {r}")
+        return f"{type(self).__name__}(\n  " + "\n  ".join(lines) + "\n)"
+
+
+# From: torch/nn/modules/container.py
+class ModuleDict(Module):
+    """Holds submodules in an ordered dict; its keys are their names, so
+    model.blocks["encoder"] and model.blocks.encoder are the same module."""
+
+    def __init__(self, modules: Mapping[str, Module] | Iterable[tuple[str, Module]] | None = None) -> None:
+        super().__init__()
+        if modules is not None:
+            self.update(modules)
+
+    def __getitem__(self, key: str) -> Module:
+        return self._modules[key]
+
+    def __setitem__(self, key: str, module: Module) -> None:
+        self.register_module(key, module)
+
+    def __delitem__(self, key: str) -> None:
+        del self._modules[key]
+        object.__delattr__(self, key)
+
+    def __len__(self) -> int:
+        return len(self._modules)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._modules)
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._modules
+
+    def keys(self):
+        return self._modules.keys()
+
+    def items(self):
+        return self._modules.items()
+
+    def values(self):
+        return self._modules.values()
+
+    def pop(self, key: str) -> Module:
+        module = self[key]
+        del self[key]
+        return module
+
+    def clear(self) -> None:
+        for key in list(self._modules):
+            del self[key]
+
+    def update(self, modules: Mapping[str, Module] | Iterable[tuple[str, Module]]) -> None:
+        items = modules.items() if isinstance(modules, Mapping) else modules
+        for key, module in items:
+            self[key] = module
