@@ -919,6 +919,7 @@ PYBIND11_MODULE(_C, c) {
         .def("flip", [](const raxis::Tensor& self, raxis::VecOrInt dims) {
             return raxis::flip(self, dims);
         }, py::arg("dims"))
+        .def("multinomial", &raxis::multinomial, py::arg("num_samples"), py::arg("replacement") = false)
         .def("tril", &raxis::tril, py::arg("diagonal") = 0)
         .def("triu", &raxis::triu, py::arg("diagonal") = 0)
         .def("index_select", &raxis::index_select, py::arg("dim"), py::arg("index"))
@@ -1141,6 +1142,9 @@ PYBIND11_MODULE(_C, c) {
         return raxis::randint_like(other, low, high, options, memory_format);
     }, py::arg("other"), py::arg("low"), py::arg("high"), py::arg("dtype") = py::none(), py::arg("device") = py::none(),
        py::arg_v("memory_format", raxis::MemoryFormat::Preserve, "preserve_format"));
+
+    c.def("multinomial", &raxis::multinomial, py::arg("input"), py::arg("num_samples"),
+          py::arg("replacement") = false);
 
     c.def("manual_seed", &raxis::manual_seed, py::arg("seed"));
     // The Philox block function, for tests against its known-answer vectors

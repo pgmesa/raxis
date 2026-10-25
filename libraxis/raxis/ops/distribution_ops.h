@@ -49,11 +49,18 @@ RAXIS_API Tensor& normal_(Tensor& self, double mean = 0.0, double std = 1.0);
 /// Fills tensor with integers drawn from U[low, high).
 RAXIS_API Tensor& randint_(Tensor& self, int64_t low, int64_t high);
 
+/// num_samples category indices drawn from each row of self (1-D or 2-D),
+/// with probabilities proportional to its non-negative weights. Without
+/// replacement a category is drawn at most once per row.
+RAXIS_API Tensor multinomial(const Tensor& self, int64_t num_samples, bool replacement = false);
+
 namespace ops {
 
 RAXIS_API Tensor& uniform_(Tensor& self, double low = 0.0, double high = 1.0);
 RAXIS_API Tensor& normal_(Tensor& self, double mean = 0.0, double std = 1.0);
 RAXIS_API Tensor& randint_(Tensor& self, int64_t low, int64_t high);
+// From: aten/src/ATen/native/Distributions.cpp (multinomial_out)
+RAXIS_API Tensor multinomial(const Tensor& self, int64_t num_samples, bool replacement = false);
 
 } // namespace ops
 

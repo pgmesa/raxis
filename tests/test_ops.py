@@ -1263,6 +1263,65 @@ class TestRandom:
         np.testing.assert_allclose(randn_a, randn_b, rtol=1e-5, atol=1e-6)
 
 
+class TestMultinomial:
+
+    @pytest.mark.parametrize("dtype", ["float32", "float64"])
+    def test_with_replacement_frequencies(self, dtype):
+        raxis.manual_seed(0)
+        # Unnormalized weights, one category with zero weight
+        p = np.array([1.0, 2.0, 0.0, 7.0])
+        samples = np.array(raxis.multinomial(raxis.tensor(p, dtype=getattr(raxis, dtype)), 200_000, True))
+        assert samples.dtype == np.int64 and samples.shape == (200_000,)
+        np.testing.assert_allclose(np.bincount(samples, minlength=4) / 200_000, p / p.sum(), atol=0.005)
+
+    def test_single_draw_frequencies(self):
+        raxis.manual_seed(1)
+        p = np.tile([1.0, 2.0, 0.0, 7.0], (50_000, 1)).astype(np.float32)
+        samples = np.array(raxis.multinomial(raxis.tensor(p), 1))
+        assert samples.shape == (50_000, 1)
+        np.testing.assert_allclose(np.bincount(samples[:, 0], minlength=4) / 50_000, [0.1, 0.2, 0, 0.7], atol=0.01)
+
+    def test_without_replacement(self):
+        raxis.manual_seed(2)
+        p = raxis.rand((6, 10))
+        samples = np.array(p.multinomial(10))
+        assert all(len(set(row)) == 10 for row in samples)
+        # The first draw follows the weights, the second avoids it
+        w = np.tile([1.0, 2.0, 3.0], (30_000, 1)).astype(np.float32)
+        draws = np.array(raxis.multinomial(raxis.tensor(w), 2))
+        np.testing.assert_allclose(np.bincount(draws[:, 0]) / 30_000, [1 / 6, 2 / 6, 3 / 6], atol=0.01)
+        assert np.all(draws[:, 0] != draws[:, 1])
+
+    def test_shapes(self):
+        p = raxis.rand((5, 4))
+        assert raxis.multinomial(p, 3, replacement=True).shape == (5, 3)
+        assert raxis.multinomial(p[0], 2).shape == (2,)
+        assert raxis.multinomial(raxis.rand((0, 4)), 2).shape == (0, 2)
+
+    def test_seeded(self):
+        p = raxis.rand((4, 20))
+        draws = []
+        for _ in range(2):
+            raxis.manual_seed(7)
+            draws.append([np.array(p.multinomial(5, True)), np.array(p.multinomial(5))])
+        for a, b in zip(*draws):
+            np.testing.assert_array_equal(a, b)
+
+    def test_errors(self):
+        with pytest.raises(RuntimeError, match="contains either `inf`, `nan` or element < 0"):
+            raxis.multinomial(raxis.tensor([-1.0, 1.0]), 1)
+        with pytest.raises(RuntimeError, match="contains either `inf`, `nan` or element < 0"):
+            raxis.multinomial(raxis.tensor([float("nan"), 1.0]), 2, True)
+        with pytest.raises(RuntimeError, match=r"sum of probabilities <= 0"):
+            raxis.multinomial(raxis.tensor([[1.0, 1.0], [0.0, 0.0]]), 1)
+        with pytest.raises(RuntimeError, match="cannot sample n_sample > prob_dist.size"):
+            raxis.multinomial(raxis.tensor([1.0, 1.0]), 3)
+        with pytest.raises(RuntimeError, match="prob_dist must be 1 or 2 dim"):
+            raxis.multinomial(raxis.rand((2, 2, 2)), 1)
+        with pytest.raises(RuntimeError, match="only supports floating-point dtypes"):
+            raxis.multinomial(raxis.tensor([1, 2]), 1)
+
+
 class TestCppPrint:
     """C++ operator<< (Tensor::to_string), in libtorch's format
     (aten/src/ATen/core/Formatting.cpp), quirks included."""
