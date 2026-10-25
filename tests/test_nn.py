@@ -737,6 +737,8 @@ ACTIVATIONS = [
     ("ReLU", lambda lib: lib.nn.ReLU()),
     ("LeakyReLU", lambda lib: lib.nn.LeakyReLU(0.2)),
     ("SELU", lambda lib: lib.nn.SELU()),
+    ("GELU", lambda lib: lib.nn.GELU()),
+    ("GELU tanh", lambda lib: lib.nn.GELU(approximate="tanh")),
     ("Sigmoid", lambda lib: lib.nn.Sigmoid()),
     ("Tanh", lambda lib: lib.nn.Tanh()),
     ("Softmax", lambda lib: lib.nn.Softmax(dim=1)),

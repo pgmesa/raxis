@@ -1722,6 +1722,14 @@ PYBIND11_MODULE(_C, c) {
         return raxis::linear(input, weight, bias.value_or(raxis::Tensor{}));
     }, py::arg("input"), py::arg("weight"), py::arg("bias") = py::none());
 
+    nn.def("gelu", [](const raxis::Tensor& input, const std::string& approximate) {
+        return raxis::gelu(input, approximate);
+    }, py::arg("input"), py::kw_only(), py::arg("approximate") = "none");
+    nn.def("gelu_backward", [](const raxis::Tensor& grad_output, const raxis::Tensor& input,
+                               const std::string& approximate) {
+        return raxis::gelu_backward(grad_output, input, approximate);
+    }, py::arg("grad_output"), py::arg("input"), py::kw_only(), py::arg("approximate") = "none");
+
     // pad holds a (left, right) pair per padded dim, starting from the last
     nn.def("pad", [](const raxis::Tensor& input, std::vector<int64_t> pad, const std::string& mode,
                      std::optional<double> value) {

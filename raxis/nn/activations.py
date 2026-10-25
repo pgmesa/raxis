@@ -31,6 +31,21 @@ class SELU(Module):
         return F.selu(x)
 
 
+class GELU(Module):
+    """x * Phi(x), Phi the standard normal CDF; approximate='tanh' uses
+    0.5 * x * (1 + tanh(sqrt(2 / pi) * (x + 0.044715 * x^3)))"""
+
+    def __init__(self, approximate: str = "none") -> None:
+        super().__init__()
+        self.approximate = approximate
+
+    def forward(self, x: Tensor) -> Tensor:
+        return F.gelu(x, approximate=self.approximate)
+
+    def extra_repr(self) -> str:
+        return f"approximate={self.approximate!r}"
+
+
 class Sigmoid(Module):
     """1 / (1 + exp(-x))"""
 

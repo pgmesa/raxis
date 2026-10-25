@@ -54,6 +54,54 @@ class TestRelu:
         check_match(r, t, context="relu_")
 
 
+class TestGelu:
+
+    @pytest.mark.parametrize("approximate", ["none", "tanh"])
+    @pytest.mark.parametrize("shape", [(5, 10), (3, 4, 5), (), (200, 300)])
+    def test_forward_backward(self, shape, approximate, device):
+        r, t = make_grad_pair(np.asarray(randf_centered(*shape) * 4), device)
+        r_out = raxis.nn.functional.gelu(r, approximate=approximate)
+        t_out = F.gelu(t, approximate=approximate)
+        # torch computes the erf version with oneDNN (1-2 ulp apart), and
+        # where tanh saturates its vector tanh and std::tanh differ by ~1e-6;
+        # which elements take the vector path depends on the thread split
+        check_match(r_out, t_out, atol=1e-5, context=f"gelu {approximate}")
+        backward_both(r_out, t_out)
+        check_match(r.grad, t.grad, atol=1e-5, context=f"gelu {approximate} grad")
+        assert r_out.grad_fn.name() == "GeluBackward0"
+
+    @pytest.mark.parametrize("approximate", ["none", "tanh"])
+    def test_float64(self, approximate, device):
+        x = randf_centered(50, 7).astype(np.float64) * 4
+        r, t = make_grad_pair(x, device)
+        r_out = raxis.nn.functional.gelu(r, approximate=approximate)
+        t_out = F.gelu(t, approximate=approximate)
+        check_match(r_out, t_out, atol=1e-14)
+        r_out.sum().backward()
+        t_out.sum().backward()
+        check_match(r.grad, t.grad, atol=1e-14)
+
+    @pytest.mark.parametrize("approximate", ["none", "tanh"])
+    def test_double_backward(self, approximate, device):
+        """gelu_backward is recorded with create_graph: its derivatives with
+        respect to the incoming gradient and to x match torch's."""
+        results = []
+        for lib in (raxis, torch):
+            x = lib.tensor(randf_centered(4, 5) * 3, requires_grad=True)
+            g = lib.tensor(randf_centered(4, 5, seed=3), requires_grad=True)
+            out = lib.nn.functional.gelu(x, approximate=approximate)
+            gx, = lib.autograd.grad(out, x, g, create_graph=True)
+            results.append(lib.autograd.grad((gx * gx).sum(), (x, g)))
+        for r, t in zip(*results):
+            check_match(r, t, atol=1e-5)
+
+    def test_errors(self, device):
+        with pytest.raises(RuntimeError, match="approximate argument must be either none or tanh"):
+            raxis.nn.functional.gelu(raxis.ones(3), approximate="fast")
+        with pytest.raises(RuntimeError, match="not implemented for"):
+            raxis.nn.functional.gelu(raxis.ones(3, dtype=raxis.int64))
+
+
 # ===========================================================================
 # SOFTMAX / LOG_SOFTMAX
 # ===========================================================================

@@ -24,6 +24,16 @@ TensorList ReluBackward0::apply(const TensorList& grads) {
 }
 
 
+GeluBackward0::GeluBackward0(const Tensor& self, GeluType approximate) : approximate_(approximate) {
+    self_.save(self);
+}
+std::string GeluBackward0::name() const { return "GeluBackward0"; }
+
+TensorList GeluBackward0::apply(const TensorList& grads) {
+    return {gelu_backward(grads[0], self_.unpack(), approximate_ == GeluType::Tanh ? "tanh" : "none")};
+}
+
+
 SoftmaxBackward0::SoftmaxBackward0(const Tensor& result, int64_t dim)
     : dim_(dim)
 {
@@ -243,6 +253,54 @@ TensorList ThresholdBackwardBackward0::apply(const TensorList& grads) {
     Tensor grad_grad_output, grad_self;
     if (needs_grad_[0]) grad_grad_output = threshold_backward(grad, self_.unpack(), threshold_);
     if (needs_grad_[1]) grad_self = zeros_like(grad);
+    return {grad_grad_output, grad_self};
+}
+
+
+// From: tools/autograd/derivatives.yaml (gelu_backward)
+//       torch/csrc/autograd/FunctionsManual.cpp (gelu_double_backward)
+// gelu_backward(g, x) = g * gelu'(x): linear in g, so d/dg is gelu_backward
+// again, and d/dx = gg * g * gelu''(x)
+GeluBackwardBackward0::GeluBackwardBackward0(const Tensor& grad_output, const Tensor& self, GeluType approximate)
+    : approximate_(approximate), needs_grad_{grad_output.requires_grad(), self.requires_grad()}
+{
+    grad_output_.save(grad_output);
+    self_.save(self);
+}
+std::string GeluBackwardBackward0::name() const { return "GeluBackwardBackward0"; }
+
+TensorList GeluBackwardBackward0::apply(const TensorList& grads) {
+    const Tensor& grad = grads[0];
+    const Tensor self = self_.unpack();
+    const char* approximate = approximate_ == GeluType::Tanh ? "tanh" : "none";
+    Tensor grad_grad_output, grad_self;
+    if (needs_grad_[0]) {
+        grad_grad_output = gelu_backward(grad, self, approximate);
+    }
+    if (needs_grad_[1]) {
+        Tensor second_derivative;
+        if (approximate_ == GeluType::Tanh) {
+            // gelu' = f'gh + f g h with f = 0.5 x, g = 1 - tanh^2(inner),
+            // h = inner'; differentiating each factor once more
+            const Tensor inner = (self + self.pow(3) * kGeluKappa) * kGeluBeta;
+            const Tensor tanh_inner = inner.tanh();
+            const Tensor sech_inner = inner.cosh().reciprocal();
+            const Tensor f = self * 0.5;
+            const Tensor g = -(tanh_inner * tanh_inner) + 1;
+            const Tensor h = (self * self * (3 * kGeluKappa) + 1) * kGeluBeta;
+            const Tensor f_prime_gh = g * h * 0.5;
+            const Tensor g_prime = sech_inner * 2 * (-sech_inner * tanh_inner) * h;
+            const Tensor g_prime_fh = f * h * g_prime;
+            const Tensor h_prime_fg = f * g * (self * (6 * kGeluKappa * kGeluBeta));
+            second_derivative = f_prime_gh * 2 + g_prime_fh + h_prime_fg;
+        } else {
+            // gelu'' = 2 pdf(x) - x^2 pdf(x)
+            const Tensor self_sq = self * self;
+            const Tensor pdf = (self_sq * -0.5).exp() * kGeluPdfScale;
+            second_derivative = pdf * 2 - self_sq * pdf;
+        }
+        grad_self = grad * grad_output_.unpack() * second_derivative;
+    }
     return {grad_grad_output, grad_self};
 }
 

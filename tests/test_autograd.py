@@ -1342,6 +1342,7 @@ class TestCreateGraph:
         "tanh":    lambda z: z.tanh(),
         "relu":    lambda z: z.relu(),
         "sigmoid": lambda z: z.sigmoid(),
+        "gelu":    lambda z: (raxis if isinstance(z, raxis.Tensor) else torch).nn.functional.gelu(z),
     }
 
     @staticmethod

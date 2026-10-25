@@ -18,6 +18,18 @@ namespace raxis {
 
 RAXIS_AUTOGRAD_UNARY_ALL_SAVE_RESULT(relu, ReluBackward0)
 
+Tensor gelu(const Tensor& self, std::string_view approximate) {
+    const GeluType type = gelu_type_from_string(approximate);
+    Tensor result = ops::gelu(self, type);
+    if (autograd::requires_autograd(self)) {
+        auto grad_fn = std::make_shared<autograd::GeluBackward0>(self, type);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
 Tensor softmax(const Tensor& self, int64_t dim) {
     Tensor result = ops::softmax(self, dim);
     if (autograd::requires_autograd(self)) {
@@ -252,6 +264,18 @@ Tensor threshold_backward(const Tensor& grad, const Tensor& self, Scalar thresho
     Tensor result = ops::threshold_backward(grad, self, threshold);
     if (autograd::requires_autograd(grad, self)) {
         auto grad_fn = std::make_shared<autograd::ThresholdBackwardBackward0>(grad, self, threshold);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, grad, self);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor gelu_backward(const Tensor& grad, const Tensor& self, std::string_view approximate) {
+    const GeluType type = gelu_type_from_string(approximate);
+    Tensor result = ops::gelu_backward(grad, self, type);
+    if (autograd::requires_autograd(grad, self)) {
+        auto grad_fn = std::make_shared<autograd::GeluBackwardBackward0>(grad, self, type);
         grad_fn->set_num_inputs(1);
         autograd::set_next_edges(grad_fn, grad, self);
         autograd::set_autograd_meta(result, grad_fn);

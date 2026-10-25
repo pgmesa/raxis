@@ -6,6 +6,7 @@
 #include <raxis/core/scalar.h>
 #include <raxis/autograd/graph.h>
 #include <raxis/autograd/saved_variable.h>
+#include <raxis/ops/activation.h>
 #include <raxis/ops/dropout.h>
 #include <raxis/ops/loss.h>
 #include <raxis/ops/normalization.h>
@@ -25,6 +26,18 @@ public:
 
 private:
     SavedVariable result_{this, "result"};
+};
+
+
+class RAXIS_API GeluBackward0 : public Node {
+public:
+    GeluBackward0(const Tensor& self, GeluType approximate);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    SavedVariable self_{this, "self"};
+    GeluType approximate_;
 };
 
 
@@ -236,6 +249,20 @@ public:
 private:
     SavedVariable self_{this, "self"};
     Scalar threshold_;
+    std::array<bool, 2> needs_grad_;
+};
+
+
+class RAXIS_API GeluBackwardBackward0 : public Node {
+public:
+    GeluBackwardBackward0(const Tensor& grad_output, const Tensor& self, GeluType approximate);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    SavedVariable grad_output_{this, "grad_output"};
+    SavedVariable self_{this, "self"};
+    GeluType approximate_;
     std::array<bool, 2> needs_grad_;
 };
 

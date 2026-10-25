@@ -33,6 +33,10 @@ def selu(input: Tensor) -> Tensor:
     return (raxis.relu(input) + negative) * SELU_SCALE
 
 
+def gelu(input: Tensor, approximate: str = "none") -> Tensor:
+    return _nn.gelu(input, approximate=approximate)
+
+
 def sigmoid(input: Tensor) -> Tensor:
     return raxis.sigmoid(input)
 
