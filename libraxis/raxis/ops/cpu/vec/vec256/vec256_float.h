@@ -225,8 +225,32 @@ public:
         return Sleef_tanhf8_u10(values_);
     }
 
+    // From: aten/src/ATen/cpu/vec/vec256/vec256_float.h
+    // Abramowitz and Stegun 7.1.26: erf(x) = 1 - (a1 t + ... + a5 t^5) e^(-x^2)
+    // with t = 1 / (1 + p |x|), absolute error below 1.5e-7, about 3x
+    // faster than Sleef's erf. The sign is taken off and put back with xor
     Vectorized erf() const {
-        return Sleef_erff8_u10(values_);
+        const __m256 neg_zero_vec = _mm256_set1_ps(-0.f);
+        const __m256 one_vec = _mm256_set1_ps(1.0f);
+        const __m256 p = _mm256_set1_ps(0.3275911f);
+        const __m256 p1 = _mm256_set1_ps(0.254829592f);
+        const __m256 p2 = _mm256_set1_ps(-0.284496736f);
+        const __m256 p3 = _mm256_set1_ps(1.421413741f);
+        const __m256 p4 = _mm256_set1_ps(-1.453152027f);
+        const __m256 p5 = _mm256_set1_ps(1.061405429f);
+        const __m256 sign_mask = _mm256_and_ps(neg_zero_vec, values_);
+        const __m256 abs_vec = _mm256_xor_ps(sign_mask, values_);
+        // t = 1 / (p * |x| + 1)
+        const __m256 t = _mm256_div_ps(one_vec, _mm256_fmadd_ps(p, abs_vec, one_vec));
+        // r = p5 t^4 + p4 t^3 + p3 t^2 + p2 t + p1, by Horner
+        __m256 r = _mm256_fmadd_ps(p5, t, p4);
+        r = _mm256_fmadd_ps(r, t, p3);
+        r = _mm256_fmadd_ps(r, t, p2);
+        r = _mm256_fmadd_ps(r, t, p1);
+        // 1 - r * t * exp(-x^2)
+        const __m256 neg_exp = _mm256_xor_ps(neg_zero_vec, Sleef_expf8_u10(_mm256_xor_ps(neg_zero_vec, _mm256_mul_ps(values_, values_))));
+        const __m256 result = _mm256_fmadd_ps(_mm256_mul_ps(neg_exp, t), r, one_vec);
+        return _mm256_xor_ps(sign_mask, result);
     }
 
     Vectorized erfc() const {
