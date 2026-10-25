@@ -1,6 +1,7 @@
 #include <raxis/ops/activation.h>
 #include <raxis/ops/convolution.h>
 #include <raxis/ops/dropout.h>
+#include <raxis/ops/embedding.h>
 #include <raxis/ops/loss.h>
 #include <raxis/ops/normalization.h>
 #include <raxis/ops/padding.h>
@@ -17,6 +18,18 @@
 namespace raxis {
 
 RAXIS_AUTOGRAD_UNARY_ALL_SAVE_RESULT(relu, ReluBackward0)
+
+Tensor embedding(const Tensor& weight, const Tensor& indices, int64_t padding_idx, bool scale_grad_by_freq) {
+    Tensor result = ops::embedding(weight, indices, padding_idx, scale_grad_by_freq);
+    if (autograd::requires_autograd(weight)) {
+        auto grad_fn = std::make_shared<autograd::EmbeddingBackward0>(
+            indices, weight.shape()[0], padding_idx, scale_grad_by_freq);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, weight);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
 
 Tensor gelu(const Tensor& self, std::string_view approximate) {
     const GeluType type = gelu_type_from_string(approximate);
@@ -266,6 +279,19 @@ Tensor threshold_backward(const Tensor& grad, const Tensor& self, Scalar thresho
         auto grad_fn = std::make_shared<autograd::ThresholdBackwardBackward0>(grad, self, threshold);
         grad_fn->set_num_inputs(1);
         autograd::set_next_edges(grad_fn, grad, self);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+Tensor embedding_dense_backward(
+    const Tensor& grad, const Tensor& indices, int64_t num_weights, int64_t padding_idx, bool scale_grad_by_freq
+) {
+    Tensor result = ops::embedding_dense_backward(grad, indices, num_weights, padding_idx, scale_grad_by_freq);
+    if (autograd::requires_autograd(grad)) {
+        auto grad_fn = std::make_shared<autograd::EmbeddingDenseBackwardBackward0>(indices, padding_idx);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, grad);
         autograd::set_autograd_meta(result, grad_fn);
     }
     return result;

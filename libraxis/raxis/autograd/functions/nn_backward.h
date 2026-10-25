@@ -8,6 +8,7 @@
 #include <raxis/autograd/saved_variable.h>
 #include <raxis/ops/activation.h>
 #include <raxis/ops/dropout.h>
+#include <raxis/ops/embedding.h>
 #include <raxis/ops/loss.h>
 #include <raxis/ops/normalization.h>
 #include <raxis/ops/padding.h>
@@ -185,6 +186,22 @@ private:
 };
 
 
+// The gradient of the gathered rows is scattered back into a zero weight
+// gradient (embedding_dense_backward)
+class RAXIS_API EmbeddingBackward0 : public Node {
+public:
+    EmbeddingBackward0(const Tensor& indices, int64_t num_weights, int64_t padding_idx, bool scale_grad_by_freq);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    SavedVariable indices_{this, "indices"};
+    int64_t num_weights_;
+    int64_t padding_idx_;
+    bool scale_grad_by_freq_;
+};
+
+
 // The gradient of a constant pad is the grad cropped back: constant_pad_nd
 // with the pads negated
 class RAXIS_API ConstantPadNdBackward0 : public Node {
@@ -264,6 +281,20 @@ private:
     SavedVariable self_{this, "self"};
     GeluType approximate_;
     std::array<bool, 2> needs_grad_;
+};
+
+
+// embedding_dense_backward is linear in grad: its derivative gathers the
+// rows again (padding_idx rows stay zero). indices is not differentiable
+class RAXIS_API EmbeddingDenseBackwardBackward0 : public Node {
+public:
+    EmbeddingDenseBackwardBackward0(const Tensor& indices, int64_t padding_idx);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    SavedVariable indices_{this, "indices"};
+    int64_t padding_idx_;
 };
 
 

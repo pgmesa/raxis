@@ -59,6 +59,24 @@ def linear(input: Tensor, weight: Tensor, bias: Tensor | None = None) -> Tensor:
     return _nn.linear(input, weight, bias)
 
 
+# From: torch/nn/functional.py (embedding)
+def embedding(input: Tensor, weight: Tensor, padding_idx: int | None = None, max_norm: float | None = None,
+              norm_type: float = 2.0, scale_grad_by_freq: bool = False, sparse: bool = False) -> Tensor:
+    if padding_idx is not None:
+        if padding_idx > 0:
+            assert padding_idx < weight.size(0), "Padding_idx must be within num_embeddings"
+        elif padding_idx < 0:
+            assert padding_idx >= -weight.size(0), "Padding_idx must be within num_embeddings"
+            padding_idx = weight.size(0) + padding_idx
+    else:
+        padding_idx = -1
+    if max_norm is not None:
+        raise NotImplementedError("embedding: max_norm is not supported yet")
+    if sparse:
+        raise NotImplementedError("embedding: raxis has no sparse gradients")
+    return raxis.embedding(weight, input, padding_idx, scale_grad_by_freq)
+
+
 def dropout(input: Tensor, p: float = 0.5, training: bool = True) -> Tensor:
     return raxis.dropout(input, p, training)
 

@@ -41,6 +41,62 @@ class Linear(Module):
                 f"bias={self.bias is not None}")
 
 
+# From: torch/nn/modules/sparse.py
+class Embedding(Module):
+    """A lookup table: row i of weight (num_embeddings, embedding_dim) is
+    the vector of index i. Initialized from N(0, 1); the padding_idx row
+    starts at zero and gets no gradient."""
+
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int | None = None,
+                 max_norm: float | None = None, norm_type: float = 2.0, scale_grad_by_freq: bool = False,
+                 sparse: bool = False, _weight: Tensor | None = None) -> None:
+        super().__init__()
+        self.num_embeddings = num_embeddings
+        self.embedding_dim = embedding_dim
+        if padding_idx is not None:
+            if padding_idx > 0:
+                assert padding_idx < num_embeddings, "Padding_idx must be within num_embeddings"
+            elif padding_idx < 0:
+                assert padding_idx >= -num_embeddings, "Padding_idx must be within num_embeddings"
+                padding_idx = num_embeddings + padding_idx
+        self.padding_idx = padding_idx
+        self.max_norm = max_norm
+        self.norm_type = norm_type
+        self.scale_grad_by_freq = scale_grad_by_freq
+        self.sparse = sparse
+        if _weight is None:
+            self.weight = Parameter(raxis.empty((num_embeddings, embedding_dim)))
+            self.reset_parameters()
+        else:
+            assert list(_weight.shape) == [num_embeddings, embedding_dim], \
+                "Shape of weight does not match num_embeddings and embedding_dim"
+            self.weight = Parameter(_weight)
+
+    def reset_parameters(self) -> None:
+        init.normal_(self.weight)
+        if self.padding_idx is not None:
+            with raxis.no_grad():
+                self.weight[self.padding_idx].fill_(0)
+
+    def forward(self, input: Tensor) -> Tensor:
+        return F.embedding(input, self.weight, self.padding_idx, self.max_norm, self.norm_type,
+                           self.scale_grad_by_freq, self.sparse)
+
+    def extra_repr(self) -> str:
+        s = f"{self.num_embeddings}, {self.embedding_dim}"
+        if self.padding_idx is not None:
+            s += f", padding_idx={self.padding_idx}"
+        if self.max_norm is not None:
+            s += f", max_norm={self.max_norm}"
+        if self.norm_type != 2:
+            s += f", norm_type={self.norm_type}"
+        if self.scale_grad_by_freq:
+            s += ", scale_grad_by_freq=True"
+        if self.sparse:
+            s += ", sparse=True"
+        return s
+
+
 class Flatten(Module):
     """Flattens dims [start_dim, end_dim] into one."""
 

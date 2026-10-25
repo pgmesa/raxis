@@ -998,6 +998,28 @@ def test_cnn_batch_norm_training_matches_torch():
 
 
 # ===========================================================================
+# EMBEDDING
+# ===========================================================================
+
+def test_embedding_module():
+    for padding_idx in (None, 2, -1):
+        r_emb, t_emb = raxis.nn.Embedding(10, 4, padding_idx), torch.nn.Embedding(10, 4, padding_idx)
+        assert repr(r_emb) == repr(t_emb)
+        assert r_emb.padding_idx == t_emb.padding_idx
+        if padding_idx is not None:
+            assert np.all(np.array(r_emb.weight.detach())[padding_idx] == 0)
+        copy_params(r_emb, t_emb)
+        idx = np.array([[1, 2, 9], [2, 2, 0]])
+        r_out, t_out = r_emb(raxis.tensor(idx)), t_emb(torch.tensor(idx))
+        check_match(r_out, t_out)
+        r_out.sum().backward()
+        t_out.sum().backward()
+        check_match(r_emb.weight.grad, t_emb.weight.grad)
+    std = np.array(raxis.nn.Embedding(1000, 100).weight.detach()).std()
+    assert abs(std - 1.0) < 0.02
+
+
+# ===========================================================================
 # GRADIENT CLIPPING
 # ===========================================================================
 

@@ -3,6 +3,7 @@
 #include <raxis/ops/activation.h>
 #include <raxis/ops/copy.h>
 #include <raxis/ops/dropout.h>
+#include <raxis/ops/embedding.h>
 #include <raxis/ops/loss.h>
 #include <raxis/ops/softmax.h>
 #include <raxis/ops/fill.h>

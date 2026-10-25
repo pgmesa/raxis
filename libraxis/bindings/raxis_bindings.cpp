@@ -1618,6 +1618,10 @@ PYBIND11_MODULE(_C, c) {
     c.def("flip", [](const raxis::Tensor& input, raxis::VecOrInt dims) {
         return raxis::flip(input, dims);
     }, py::arg("input"), py::arg("dims"));
+    c.def("embedding", &raxis::embedding, py::arg("weight"), py::arg("indices"), py::arg("padding_idx") = -1,
+          py::arg("scale_grad_by_freq") = false);
+    c.def("embedding_dense_backward", &raxis::embedding_dense_backward, py::arg("grad_output"), py::arg("indices"),
+          py::arg("num_weights"), py::arg("padding_idx"), py::arg("scale_grad_by_freq"));
     c.def("tril", &raxis::tril, py::arg("input"), py::arg("diagonal") = 0);
     c.def("triu", &raxis::triu, py::arg("input"), py::arg("diagonal") = 0);
     c.def("index_select", &raxis::index_select, py::arg("input"), py::arg("dim"), py::arg("index"));

@@ -3,6 +3,7 @@
 #include <raxis/ops/activation.h>
 #include <raxis/ops/convolution.h>
 #include <raxis/ops/dropout.h>
+#include <raxis/ops/embedding.h>
 #include <raxis/ops/normalization.h>
 #include <raxis/ops/pooling.h>
 #include <raxis/ops/softmax.h>
@@ -190,6 +191,19 @@ TensorList NativeLayerNormBackward0::apply(const TensorList& grads) {
 }
 
 
+EmbeddingBackward0::EmbeddingBackward0(
+    const Tensor& indices, int64_t num_weights, int64_t padding_idx, bool scale_grad_by_freq)
+    : num_weights_(num_weights), padding_idx_(padding_idx), scale_grad_by_freq_(scale_grad_by_freq)
+{
+    indices_.save(indices);
+}
+std::string EmbeddingBackward0::name() const { return "EmbeddingBackward0"; }
+
+TensorList EmbeddingBackward0::apply(const TensorList& grads) {
+    return {embedding_dense_backward(grads[0], indices_.unpack(), num_weights_, padding_idx_, scale_grad_by_freq_)};
+}
+
+
 ConstantPadNdBackward0::ConstantPadNdBackward0(IntArrayRef pad)
     : pad_(pad.begin(), pad.end()) {}
 std::string ConstantPadNdBackward0::name() const { return "ConstantPadNdBackward0"; }
@@ -302,6 +316,25 @@ TensorList GeluBackwardBackward0::apply(const TensorList& grads) {
         grad_self = grad * grad_output_.unpack() * second_derivative;
     }
     return {grad_grad_output, grad_self};
+}
+
+
+// From: torch/csrc/autograd/FunctionsManual.cpp (embedding_dense_double_backward_symint)
+// The frequency scaling is not applied again: the first backward did it
+EmbeddingDenseBackwardBackward0::EmbeddingDenseBackwardBackward0(const Tensor& indices, int64_t padding_idx)
+    : padding_idx_(padding_idx)
+{
+    indices_.save(indices);
+}
+std::string EmbeddingDenseBackwardBackward0::name() const { return "EmbeddingDenseBackwardBackward0"; }
+
+TensorList EmbeddingDenseBackwardBackward0::apply(const TensorList& grads) {
+    const Tensor indices = indices_.unpack();
+    Tensor gg_weight = embedding(grads[0], indices);
+    if (padding_idx_ >= 0) {
+        gg_weight = masked_fill(gg_weight, (indices == padding_idx_).unsqueeze(-1), 0);
+    }
+    return {gg_weight};
 }
 
 

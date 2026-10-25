@@ -768,6 +768,67 @@ class TestBatchNorm:
 
 
 # ===========================================================================
+# EMBEDDING
+# ===========================================================================
+
+# (num_embeddings, embedding_dim, indices shape, padding_idx, scale_grad_by_freq):
+# repeated indices, a negative padding_idx, more rows than one thread's grain
+EMBEDDING_CASES = [
+    (65, 32, (12, 64), None, False), (10, 7, (5,), 3, False), (10, 7, (4, 6), -1, True),
+    (5000, 16, (3, 1000), None, False), (5000, 64, (4, 100), 0, True), (4, 3, (0,), None, False),
+]
+
+
+class TestEmbedding:
+
+    @pytest.mark.parametrize("num, dim, shape, padding_idx, freq", EMBEDDING_CASES)
+    def test_forward_backward(self, num, dim, shape, padding_idx, freq):
+        rng = np.random.RandomState(0)
+        r_w, t_w = make_grad_pair(rng.randn(num, dim).astype(np.float32))
+        idx = rng.randint(0, num, size=shape)
+        r_out = raxis.nn.functional.embedding(raxis.tensor(idx), r_w, padding_idx, scale_grad_by_freq=freq)
+        t_out = F.embedding(torch.tensor(idx), t_w, padding_idx, scale_grad_by_freq=freq)
+        check_match(r_out, t_out, atol=0)
+        backward_both(r_out, t_out)
+        # Each row is summed by one thread in index order: same order as torch
+        check_match(r_w.grad, t_w.grad, atol=0)
+        assert r_out.grad_fn.name() == "EmbeddingBackward0"
+
+    def test_int32_indices_and_float64(self):
+        w = randf_centered(6, 4).astype(np.float64)
+        idx = np.array([[0, 5, 5], [2, 0, 1]], dtype=np.int32)
+        r_w, t_w = make_grad_pair(w)
+        r_out = raxis.nn.functional.embedding(raxis.tensor(idx), r_w)
+        t_out = F.embedding(torch.tensor(idx), t_w)
+        check_match(r_out, t_out)
+        backward_both(r_out, t_out)
+        check_match(r_w.grad, t_w.grad)
+
+    def test_double_backward(self):
+        results = []
+        for lib in (raxis, torch):
+            w = lib.tensor(randf_centered(6, 3), requires_grad=True)
+            idx = lib.tensor([[1, 2, 2], [0, 5, 2]])
+            out = lib.nn.functional.embedding(idx, w, padding_idx=2)
+            g = lib.tensor(randf_centered(2, 3, 3, seed=2), requires_grad=True)
+            gw, = lib.autograd.grad(out, w, g, create_graph=True)
+            gg, = lib.autograd.grad((gw * lib.tensor(randf_centered(6, 3, seed=3))).sum(), g)
+            results.append(gg)
+        check_match(results[0], results[1])
+
+    def test_errors(self):
+        w = raxis.randn(5, 3)
+        with pytest.raises(IndexError, match="index out of range in self"):
+            raxis.nn.functional.embedding(raxis.tensor([1, 5]), w)
+        with pytest.raises(RuntimeError, match="'indices' to have one of the following scalar types: Long, Int"):
+            raxis.nn.functional.embedding(raxis.tensor([1.0]), w)
+        with pytest.raises(RuntimeError, match="'weight' must be 2-D"):
+            raxis.nn.functional.embedding(raxis.tensor([1]), raxis.randn(5))
+        with pytest.raises(AssertionError, match="Padding_idx must be within num_embeddings"):
+            raxis.nn.functional.embedding(raxis.tensor([1]), w, padding_idx=5)
+
+
+# ===========================================================================
 # LAYER NORM
 # ===========================================================================
 

@@ -1260,6 +1260,7 @@ RECORDED_OPS = [
     ("cumsum", (3, 4), lambda x: x.cumsum(1)),
     ("cumprod", (3, 4), lambda x: x.cumprod(1)),
     ("flip", (3, 4), lambda x: x.flip(0, 1)),
+    ("embedding", (5, 3), lambda x: raxis.nn.functional.embedding(raxis.tensor([[0, 4], [4, 1]]), x)),
     ("tril", (3, 4), lambda x: x.tril(1)),
     ("triu", (3, 4), lambda x: x.triu(-1)),
     ("sort", (3, 4), lambda x: x.sort(1)[0]),
