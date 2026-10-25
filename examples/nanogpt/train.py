@@ -16,6 +16,10 @@ Usage (after python prepare.py):
     python train.py --backend raxis
     python train.py --backend torch
     python train.py --backend raxis --full    # the full shakespeare_char config
+
+As nanoGPT, the model is saved to <out_dir>/ckpt.pt whenever the val loss
+improves (out-raxis or out-torch by default), for sample.py. Both backends
+write torch's checkpoint format, so either one can sample from the other's.
 """
 
 import argparse
@@ -39,6 +43,7 @@ parser.add_argument("--log_interval", type=int, default=10)
 parser.add_argument("--threads", type=int, help="number of threads (default: the library's)")
 parser.add_argument("--seed", type=int, default=1337)
 parser.add_argument("--out", help="write the losses and timings to this json file")
+parser.add_argument("--out_dir", help="checkpoint directory, relative to this file (default: out-<backend>)")
 args = parser.parse_args()
 
 # The model module picks the library from this variable at import time
@@ -121,6 +126,10 @@ def get_lr(it):
     return min_lr + coeff * (learning_rate - min_lr)
 
 
+out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), args.out_dir or f"out-{args.backend}")
+os.makedirs(out_dir, exist_ok=True)
+best_val_loss = 1e9
+
 history = {"backend": args.backend, "config": config, "threads": lib.get_num_threads(),
            "train_loss": [], "eval": [], "step_ms": []}
 X, Y = get_batch("train")
@@ -134,6 +143,13 @@ for iter_num in range(max_iters + 1):
         losses = estimate_loss()
         print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
         history["eval"].append({"iter": iter_num, **losses})
+        if iter_num > 0 and losses["val"] < best_val_loss:
+            best_val_loss = losses["val"]
+            checkpoint = {"model": model.state_dict(), "optimizer": optimizer.state_dict(),
+                          "model_args": model_args, "iter_num": iter_num, "best_val_loss": best_val_loss,
+                          "config": {**config, "dataset": "shakespeare_char"}}
+            print(f"saving checkpoint to {out_dir}")
+            lib.save(checkpoint, os.path.join(out_dir, "ckpt.pt"))
     if iter_num == max_iters:
         break
 

@@ -81,3 +81,4 @@ docs/_build/
 # Datasets downloaded by the examples
 examples/mnist/
 examples/nanogpt/data/
+examples/nanogpt/out-*/

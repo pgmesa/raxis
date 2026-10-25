@@ -89,7 +89,9 @@ has `debug` and `release` presets; `CMakeLists.txt` lists the build options
 `examples/` has notebooks that train MLPs on two moons and MNIST and a CNN on
 MNIST with either Raxis or PyTorch, and `examples/nanogpt` trains
 [nanoGPT](https://github.com/karpathy/nanoGPT)'s character-level Shakespeare
-model, with its `model.py` unchanged except for the imports.
+model, with its `model.py` unchanged except for the imports, and samples from
+it. `raxis.save` and `raxis.load` use PyTorch's checkpoint format, so a model
+trained with one library can be sampled with the other.
 
 ## License
 
