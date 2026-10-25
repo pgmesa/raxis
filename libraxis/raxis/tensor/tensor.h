@@ -96,6 +96,8 @@ public:
     IntArrayRef strides() const;
     DimVector byte_strides() const;
     int64_t storage_offset() const;
+    // The memory this tensor views, shared with its views
+    const std::shared_ptr<detail::StorageImpl>& storage() const;
     Dtype dtype() const;
     Device device() const;
     TensorOptions options() const;

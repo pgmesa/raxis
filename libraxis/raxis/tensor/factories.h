@@ -45,6 +45,17 @@ RAXIS_API Tensor from_blob(
     Device device = DeviceType::CPU
 );
 
+// A tensor over an existing storage (shared, not copied), as torch's
+// empty({0}).set_(storage, storage_offset, size, stride). Checks that the
+// view stays inside the storage. Rebuilds the views of a loaded checkpoint
+RAXIS_API Tensor from_storage(
+    std::shared_ptr<detail::StorageImpl> storage,
+    int64_t storage_offset,
+    IntArrayRef shape,
+    IntArrayRef strides,
+    Dtype dtype
+);
+
 RAXIS_API Tensor empty(IntArrayRef shape, TensorOptions options = {});
 RAXIS_API Tensor empty_like(
     const Tensor& other,

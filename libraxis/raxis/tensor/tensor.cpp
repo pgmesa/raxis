@@ -96,6 +96,11 @@ int64_t Tensor::storage_offset() const {
     ensure_defined("storage_offset");
     return impl_->storage_offset();
 }
+
+const std::shared_ptr<detail::StorageImpl>& Tensor::storage() const {
+    ensure_defined("storage");
+    return impl_->storage();
+}
                                                              
 
 Dtype Tensor::dtype() const {

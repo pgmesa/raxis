@@ -25,6 +25,7 @@
 #include "python_tensor_factory.h"
 #include "python_indexing.h"
 #include "python_function.h"
+#include "python_storage.h"
 
 
 namespace py = pybind11;
@@ -219,6 +220,8 @@ PYBIND11_MODULE(_C, c) {
     py::class_<raxis::autograd::AccumulateGrad, Node, std::shared_ptr<raxis::autograd::AccumulateGrad>>
         accumulate_grad(c, "AccumulateGrad");
 
+    raxis::python::bind_untyped_storage(c);
+
     // Tensor
     py::class_<raxis::Tensor>(c, "Tensor")
         // Aliases `data` (shares its TensorImpl). Lets Python subclasses such
@@ -332,6 +335,10 @@ PYBIND11_MODULE(_C, c) {
         })
         .def("_is_view", &raxis::Tensor::is_view)
         .def("_use_count", &raxis::Tensor::use_count)
+        .def("untyped_storage", [](const raxis::Tensor& self) {
+            return self.storage();
+        })
+        .def("storage_offset", &raxis::Tensor::storage_offset)
         // C++ operator<< output (libtorch's format), not the Python repr
         .def("_cpp_str", &raxis::Tensor::to_string)
         // Address of the TensorImpl: identifies the tensor across Python
@@ -1053,6 +1060,7 @@ PYBIND11_MODULE(_C, c) {
             >>> raxis.tensor([1, 2.0, 3])                # promotes to float
     )doc");
 
+    raxis::python::bind_storage_functions(c);
     c.def("from_numpy", [](py::array arr) {
         return raxis::python::tensor_from_numpy(arr);
     });

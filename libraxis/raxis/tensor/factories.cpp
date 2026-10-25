@@ -86,6 +86,29 @@ Tensor from_blob(
     );
 }
 
+Tensor from_storage(
+    std::shared_ptr<detail::StorageImpl> storage,
+    int64_t storage_offset,
+    IntArrayRef shape,
+    IntArrayRef strides,
+    Dtype dtype
+) {
+    RAXIS_CHECK(storage, "from_storage: undefined storage");
+    RAXIS_CHECK(shape.size() == strides.size(), "from_storage: shape and strides must have the same length");
+    RAXIS_CHECK(storage_offset >= 0, "from_storage: negative storage_offset ", storage_offset);
+    int64_t numel = 1;
+    int64_t last = storage_offset;
+    for (size_t d = 0; d < shape.size(); ++d) {
+        RAXIS_CHECK(shape[d] >= 0 && strides[d] >= 0, "from_storage: negative size or stride");
+        numel *= shape[d];
+        last += (shape[d] - 1) * strides[d];
+    }
+    const auto storage_numel = static_cast<int64_t>(storage->nbytes() / dtype.itemsize());
+    RAXIS_CHECK(numel == 0 || last < storage_numel,
+        "from_storage: the view needs ", last + 1, " elements, but the storage has ", storage_numel);
+    return Tensor(std::make_shared<detail::TensorImpl>(std::move(storage), storage_offset, shape, strides, dtype));
+}
+
 static void set_requires_grad(Tensor& t, const TensorOptions& options) {
     if (options.requires_grad()) {
         RAXIS_CHECK(t.dtype().is_floating(),
