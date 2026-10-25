@@ -1531,6 +1531,26 @@ class TestGradMode:
             pass
         assert raxis.is_grad_enabled() == True
 
+    def test_as_decorator(self, device):
+        @raxis.no_grad()
+        def double(x, depth=0):
+            assert not raxis.is_grad_enabled()
+            # A recursive call must not lose the mode saved by the outer one
+            if depth < 2:
+                double(x, depth + 1)
+            return x * 2
+
+        @raxis.enable_grad()
+        def square(x):
+            return x * x
+
+        x = raxis.ones(2, requires_grad=True)
+        assert not double(x).requires_grad
+        assert raxis.is_grad_enabled()
+        assert double.__name__ == "double"
+        with raxis.no_grad():
+            assert square(x).requires_grad
+
 
 # ===========================================================================
 # RETAIN_GRAPH / MULTIPLE BACKWARD

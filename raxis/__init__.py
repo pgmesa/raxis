@@ -148,8 +148,21 @@ for _name in ("reshape", "view", "permute", "expand", "flip"):
 del _name
 
 
-class no_grad:
-    """Context manager that disables gradient computation."""
+# From: torch/utils/_contextlib.py (_DecoratorContextManager)
+class _GradModeDecorator:
+    """Lets a grad mode context manager decorate a function; every call runs
+    in a new instance, so a recursive call does not overwrite the saved mode."""
+
+    def __call__(self, func):
+        @_functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            with type(self)():
+                return func(*args, **kwargs)
+        return wrapper
+
+
+class no_grad(_GradModeDecorator):
+    """Context manager (or decorator) that disables gradient computation."""
     def __enter__(self):
         self._prev = _C.is_grad_enabled()
         _C.set_grad_enabled(False)
@@ -159,8 +172,8 @@ class no_grad:
         _C.set_grad_enabled(self._prev)
 
 
-class enable_grad:
-    """Context manager that enables gradient computation."""
+class enable_grad(_GradModeDecorator):
+    """Context manager (or decorator) that enables gradient computation."""
     def __enter__(self):
         self._prev = _C.is_grad_enabled()
         _C.set_grad_enabled(True)
