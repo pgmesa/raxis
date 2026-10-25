@@ -62,6 +62,9 @@ Tensor.__repr__ = _str
 # Identity hash, as torch: __eq__ is elementwise, so pybind11 leaves Tensor
 # unhashable, but tensors must key dicts (optimizer state, parameter maps)
 Tensor.__hash__ = object.__hash__
+# float and int are shadowed below by the dtype aliases
+Tensor.__float__ = lambda self: _builtins.float(self.item())
+Tensor.__int__ = lambda self: _builtins.int(self.item())
 
 # Dtype aliases, as in torch
 float = float32

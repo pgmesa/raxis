@@ -238,6 +238,12 @@ PYBIND11_MODULE(_C, c) {
         })
         .def_property_readonly("dtype", &raxis::Tensor::dtype, "Data type")
         .def_property_readonly("device", &raxis::Tensor::device, "Device")
+        .def("size", [](const raxis::Tensor& self, std::optional<int64_t> dim) -> py::object {
+            if (!dim) {
+                return py::cast(self.shape());
+            }
+            return py::int_(self.shape()[raxis::wrap_dim(*dim, self.ndim())]);
+        }, py::arg("dim") = py::none())
         .def("numel", &raxis::Tensor::numel)
         .def("dim", &raxis::Tensor::ndim)
         .def_property_readonly("ndim", &raxis::Tensor::ndim)
