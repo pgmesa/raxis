@@ -183,6 +183,10 @@ public:
         return Sleef_expf4_u10(values_);
     }
 
+    Vectorized exp_u20() const {
+        return exp();
+    }
+
     Vectorized expm1() const {
         return Sleef_expm1f4_u10(values_);
     }

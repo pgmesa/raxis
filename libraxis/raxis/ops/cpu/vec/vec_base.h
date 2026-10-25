@@ -224,6 +224,11 @@ public:
         return map([](T x) -> T { return static_cast<T>(std::exp(static_cast<double>(x))); });
     }
 
+    // A faster exp with a looser error bound (20 ULP); specialized for AVX2 float
+    Vectorized exp_u20() const {
+        return exp();
+    }
+
     Vectorized log() const {
         return map([](T x) -> T { return static_cast<T>(std::log(static_cast<double>(x))); });
     }

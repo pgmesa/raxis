@@ -169,6 +169,58 @@ public:
         return Sleef_expf8_u10(values_);
     }
 
+    // From: aten/src/ATen/cpu/vec/vec256/vec256_float.h
+    // exp(x) = 2^n * exp(r) with n = round(x / ln 2) and r = x - n ln 2 in
+    // [-ln2 / 2, ln2 / 2], where a degree 5 polynomial is enough for 20 ULP.
+    // 2^n is built directly in the exponent bits. Inputs below ln(FLT_MIN)
+    // give 0 (also -inf, which flash attention relies on). Used where speed
+    // matters more than the last bits, as torch does in the attention softmax
+    Vectorized exp_u20() const {
+        const __m256 vec_factorial_1 = _mm256_set1_ps(0.999999701f);  // 1/factorial(1)
+        const __m256 vec_factorial_2 = _mm256_set1_ps(0.499991506f);  // 1/factorial(2)
+        const __m256 vec_factorial_3 = _mm256_set1_ps(0.166676521f);  // 1/factorial(3)
+        const __m256 vec_factorial_4 = _mm256_set1_ps(0.0418978221f);  // 1/factorial(4)
+        const __m256 vec_factorial_5 = _mm256_set1_ps(0.00828929059f);  // 1/factorial(5)
+        const __m256 vec_exp_log2ef = _mm256_castsi256_ps(_mm256_set1_epi32(0x3fb8aa3b));  // log2(e)
+        const __m256 vec_half = _mm256_set1_ps(0.5f);
+        const __m256 vec_one = _mm256_set1_ps(1.f);
+        const __m256 vec_zero = _mm256_set1_ps(0.f);
+        const __m256 vec_two = _mm256_set1_ps(2.f);
+        const __m256 vec_ln2f = _mm256_castsi256_ps(_mm256_set1_epi32(0x3f317218));  // ln(2)
+        const __m256 vec_ln_flt_min = _mm256_castsi256_ps(_mm256_set1_epi32(0xc2aeac50));
+        const __m256 vec_ln_flt_max = _mm256_castsi256_ps(_mm256_set1_epi32(0x42b17218));
+        const __m256i vec_127 = _mm256_set1_epi32(0x0000007f);
+        const int n_mantissa_bits = 23;
+
+        const __m256 less_ln_flt_min_mask = _mm256_cmp_ps(values_, vec_ln_flt_min, _CMP_LT_OS);
+        __m256 vec_src = _mm256_min_ps(values_, vec_ln_flt_max);
+        vec_src = _mm256_max_ps(vec_src, vec_ln_flt_min);
+
+        // fx = floor(x * log2(e) + 0.5)
+        __m256 vec_fx = _mm256_fmadd_ps(vec_src, vec_exp_log2ef, vec_half);
+        vec_fx = _mm256_floor_ps(vec_fx);
+
+        // r = x - fx * ln2
+        const __m256 vec_exp_poly = _mm256_fnmadd_ps(vec_fx, vec_ln2f, vec_src);
+
+        __m256 vec_res = _mm256_fmadd_ps(vec_exp_poly, vec_factorial_5, vec_factorial_4);
+        vec_res = _mm256_fmadd_ps(vec_exp_poly, vec_res, vec_factorial_3);
+        vec_res = _mm256_fmadd_ps(vec_exp_poly, vec_res, vec_factorial_2);
+        vec_res = _mm256_fmadd_ps(vec_exp_poly, vec_res, vec_factorial_1);
+        vec_res = _mm256_fmadd_ps(vec_exp_poly, vec_res, vec_one);
+
+        // 2^(n - 1) and a final * 2, so that n = 128 does not overflow the exponent
+        const __m256 vec_exp_number = _mm256_sub_ps(vec_fx, vec_one);
+        const __m256i vec_exp_number_i = _mm256_cvtps_epi32(vec_exp_number);
+        __m256i vec_two_pow_n_i = _mm256_add_epi32(vec_exp_number_i, vec_127);
+        vec_two_pow_n_i = _mm256_slli_epi32(vec_two_pow_n_i, n_mantissa_bits);
+        __m256 vec_two_pow_n = _mm256_castsi256_ps(vec_two_pow_n_i);
+        vec_two_pow_n = _mm256_blendv_ps(vec_two_pow_n, vec_zero, less_ln_flt_min_mask);
+
+        vec_res = _mm256_mul_ps(vec_res, vec_two_pow_n);
+        return _mm256_mul_ps(vec_res, vec_two);
+    }
+
     Vectorized expm1() const {
         return Sleef_expm1f8_u10(values_);
     }
