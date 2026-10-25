@@ -23,7 +23,9 @@
 // the same source file may be compiled multiple times with different ISA flags
 // (e.g. -mavx2, -mavx512f, -march=armv8-a). A constexpr value cannot vary
 // per translation unit the way a #define can.
-#if defined(__aarch64__)
+#if defined(CPU_CAPABILITY_AVX512)
+#define VECTOR_WIDTH 64
+#elif defined(__aarch64__)
 #define VECTOR_WIDTH 16
 #else
 #define VECTOR_WIDTH 32
@@ -224,7 +226,8 @@ public:
         return map([](T x) -> T { return static_cast<T>(std::exp(static_cast<double>(x))); });
     }
 
-    // A faster exp with a looser error bound (20 ULP); specialized for AVX2 float
+    // A faster exp with a looser error bound (20 ULP); specialized for AVX2 and
+    // AVX512 float
     Vectorized exp_u20() const {
         return exp();
     }
