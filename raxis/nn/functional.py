@@ -81,6 +81,58 @@ def dropout(input: Tensor, p: float = 0.5, training: bool = True) -> Tensor:
     return raxis.dropout(input, p, training)
 
 
+# -- Attention --
+
+# From: aten/src/ATen/native/transformers/attention.cpp (_safe_softmax)
+def _safe_softmax(input: Tensor, dim: int) -> Tensor:
+    """softmax, but a row that is all -inf (every position masked) gives
+    zeros instead of NaN."""
+    out = raxis.softmax(input, dim)
+    masked_rows = (input == -math.inf).all(dim, keepdim=True)
+    return raxis.where(masked_rows, 0.0, out)
+
+
+# From: aten/src/ATen/native/transformers/attention.cpp (_scaled_dot_product_attention_math)
+def scaled_dot_product_attention(query: Tensor, key: Tensor, value: Tensor, attn_mask: Tensor | None = None,
+                                 dropout_p: float = 0.0, is_causal: bool = False, scale: float | None = None,
+                                 enable_gqa: bool = False) -> Tensor:
+    """softmax(query @ key^T * scale + mask) @ value over the last two dims:
+    query (..., L, E), key (..., S, E), value (..., S, Ev) -> (..., L, Ev).
+
+    attn_mask is a bool mask (True takes part) or an additive float mask;
+    is_causal masks the positions after each query (a lower triangular
+    mask). scale defaults to 1 / sqrt(E).
+
+    This is torch's math backend, a composition of ops that autograd
+    differentiates on its own; it materializes the (L, S) scores. Torch on
+    CPU runs a fused flash attention kernel instead (blocks of keys with an
+    online softmax, no (L, S) matrix): same result up to rounding.
+    """
+    if enable_gqa:
+        raise NotImplementedError("scaled_dot_product_attention: enable_gqa is not supported yet")
+    if scale is None:
+        scale = 1.0 / math.sqrt(query.size(-1))
+    # q and k are each scaled by sqrt(scale) before the matmul, which keeps
+    # the products in range for low precision dtypes
+    scaling_factor = math.sqrt(abs(scale))
+    q = query * (-scaling_factor if scale < 0 else scaling_factor)
+    if is_causal:
+        if attn_mask is not None:
+            raise RuntimeError(
+                "_scaled_dot_product_attention: Explicit attn_mask should not be set when is_causal=True")
+        attn_mask = raxis.ones((query.size(-2), key.size(-2)), dtype=raxis.bool).tril()
+    attn = q.matmul(key.transpose(-2, -1) * scaling_factor)
+    if attn_mask is not None:
+        if attn_mask.dtype == raxis.bool:
+            attn = attn.masked_fill(attn_mask.logical_not(), -math.inf)
+        else:
+            attn = attn + attn_mask
+    attn = _safe_softmax(attn, -1)
+    if dropout_p > 0.0:
+        attn = raxis.dropout(attn, dropout_p, True)
+    return attn.matmul(value)
+
+
 # -- Convolution and pooling --
 
 def _expand(value: int | Sequence[int], n: int) -> list[int]:

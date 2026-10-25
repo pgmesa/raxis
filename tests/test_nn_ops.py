@@ -829,6 +829,68 @@ class TestEmbedding:
 
 
 # ===========================================================================
+# SCALED DOT PRODUCT ATTENTION
+# ===========================================================================
+
+def sdpa_both(q_shape, kv_len=None, seed=0, **kwargs):
+    """Output and q/k/v gradients of raxis and torch for the same inputs;
+    numpy arrays in kwargs become tensors of each library."""
+    rng = np.random.RandomState(seed)
+    *batch, L, E = q_shape
+    S = kv_len or L
+    q = rng.randn(*q_shape).astype(np.float32)
+    k, v = (rng.randn(*batch, S, E).astype(np.float32) for _ in range(2))
+    grad = rng.randn(*q_shape).astype(np.float32)
+    results = []
+    for lib in (raxis, torch):
+        tensors = [lib.tensor(a, requires_grad=True) for a in (q, k, v)]
+        kw = {name: lib.tensor(val) if isinstance(val, np.ndarray) else val for name, val in kwargs.items()}
+        out = lib.nn.functional.scaled_dot_product_attention(*tensors, **kw)
+        out.backward(lib.tensor(grad))
+        results.append([out] + [t.grad for t in tensors])
+    return results
+
+
+class TestScaledDotProductAttention:
+
+    @pytest.mark.parametrize("q_shape, kv_len", [((2, 4, 16, 8), None), ((3, 7, 5), 9), ((1, 2, 64, 32), None)])
+    @pytest.mark.parametrize("is_causal", [False, True])
+    def test_forward_backward(self, q_shape, kv_len, is_causal):
+        # torch runs its CPU flash attention kernel: same math, other rounding
+        for r, t in zip(*sdpa_both(q_shape, kv_len, is_causal=is_causal)):
+            check_match(r, t, atol=1e-5)
+
+    def test_masks_and_scale(self):
+        T = 10
+        rng = np.random.RandomState(1)
+        cases = [
+            dict(scale=0.3), dict(scale=-0.5),
+            # The first row is fully masked: zeros, not NaN (_safe_softmax)
+            dict(attn_mask=np.tril(np.ones((T, T), dtype=bool), -1)),
+            dict(attn_mask=rng.randn(T, T).astype(np.float32)),
+            dict(attn_mask=rng.rand(2, 1, T, T) > 0.3),
+        ]
+        for kwargs in cases:
+            for r, t in zip(*sdpa_both((2, 3, T, 4), **kwargs)):
+                check_match(r, t, atol=1e-5)
+
+    def test_dropout(self):
+        q = raxis.randn(2, 2, 8, 4, requires_grad=True)
+        F_ = raxis.nn.functional
+        out = F_.scaled_dot_product_attention(q, q, q, dropout_p=0.5, is_causal=True)
+        out.sum().backward()
+        assert q.grad is not None
+        # p=1 drops every weight
+        zero = F_.scaled_dot_product_attention(q, q, q, dropout_p=1.0)
+        assert np.all(np.array(zero.detach()) == 0)
+
+    def test_errors(self):
+        q = raxis.randn(1, 4, 3)
+        with pytest.raises(RuntimeError, match="Explicit attn_mask should not be set when is_causal=True"):
+            raxis.nn.functional.scaled_dot_product_attention(q, q, q, raxis.ones(4, 4), is_causal=True)
+
+
+# ===========================================================================
 # LAYER NORM
 # ===========================================================================
 
