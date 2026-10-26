@@ -51,6 +51,69 @@ print(graph.to_mermaid(loss, dict(model.named_parameters()), view="forward"))
 graph.render(loss, "loss.svg")  # needs pip install 'raxis[viz]' and Graphviz
 ```
 
+## Performance
+
+Measured on a Ryzen 7 9700X (Zen 5, 8 cores, AVX512) with Windows 11, 8
+threads, PyTorch 2.14.1 and Intel MKL in both libraries. The scripts and
+notebooks to reproduce them are in the repo (see [Build from source](#build-from-source)).
+
+**Training the examples.** Time of `trainer.fit` in each notebook (training
+plus the validation pass of every epoch) with Raxis, PyTorch and the two
+earlier projects of the same author:
+[synapx](https://github.com/pgmesa/synapx) (autograd in C++ on top of libtorch)
+and [synapgrad](https://github.com/pgmesa/synapgrad) (autograd in pure Python
+on top of NumPy).
+
+| Notebook | Raxis | PyTorch | synapx | synapgrad | Params | Train set | Batch | Epochs |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|
+| basic_mlp.ipynb | 0.20 s | 1.4 s | 0.53 s | 0.26 s | 337 | 150 | 4 | 50 |
+| mnist_mlp.ipynb | 2.9 s | 4.5 s | 5.6 s | 10.0 s | 178,110 | 48,000 | 64 | 10 |
+| mnist_cnn.ipynb | 10.8 s | 37.8 s | - | 4 min 55 s | 20,538 | 48,000 | 128 | 5 |
+
+The models reach the same accuracy with every library (MNIST: ~97.6% val with
+the MLP, ~98.6% with the CNN). Most of PyTorch's time in the CNN is Dropout:
+its CPU random numbers come from a serial mt19937, Raxis draws them from
+Philox in parallel. synapx has no Conv2d.
+
+**nanoGPT.** [nanoGPT](https://github.com/karpathy/nanoGPT)'s
+character-level Shakespeare model, trained with `examples/nanogpt/train.py`
+(nanoGPT's `model.py` with only the imports changed):
+
+| Config | Raxis step | PyTorch step | Raxis val loss | PyTorch val loss |
+|---|--:|--:|--:|--:|
+| nanoGPT README's CPU run: 4 layers, n_embd 128, block 64, batch 12, 2000 iters | 13.2 ms | 14.2 ms | 1.9065 | 1.9121 |
+| `train_shakespeare_char.py`: 6 layers, n_embd 384, block 256, batch 64, dropout 0.2 | 2.61 s | 4.00 s | 1.4553 | 1.4680 |
+
+Median time of a training step (forward, backward, gradient clipping and
+AdamW). The full config would take ~5.1 h with Raxis and ~7.2 h with
+PyTorch on this CPU for its 5000 iterations, but the val loss stops
+improving around iteration 2000 and the model overfits afterwards, so both
+were stopped early: the table has the best val loss up to iteration 2000
+(1750 for Raxis, 2000 for PyTorch), against 1.4697 in nanoGPT's README.
+Random numbers differ between the libraries, so the losses do too.
+
+**Ops.** A selection of `scripts/bench_ops.py` (float32, forward only unless
+noted). Over its 388 cases the median ratio Raxis/PyTorch is 0.85x; the only
+case beyond 2x is the large 3x3 convolution, where PyTorch uses oneDNN's
+direct convolution and Raxis im2col plus an MKL gemm.
+
+| Op | Shape | Raxis (ms) | PyTorch (ms) |
+|---|---|--:|--:|
+| add | 1000 x 1000 | 0.017 | 0.017 |
+| exp | 1000 x 1000 | 0.123 | 0.130 |
+| sum(dim=1) | 1000 x 1000 | 0.010 | 0.018 |
+| mm | 512 x 512 @ 512 x 512 | 0.459 | 0.464 |
+| softmax | 16384 x 384 | 0.872 | 0.885 |
+| layer_norm | 16384 x 384 | 0.726 | 1.182 |
+| gelu | 16384 x 384 | 0.814 | 0.800 |
+| sdpa (causal) | 64 x 6 x 256 x 64 | 13.98 | 15.23 |
+| sort | 1000 x 1000 | 5.98 | 11.03 |
+| x[idx] backward | 1000 x 1000 | 0.050 | 0.317 |
+| normal_ | 1000 x 1000 | 0.548 | 3.111 |
+| dropout | 1000 x 1000 | 0.123 | 6.880 |
+| conv2d 3x3, 32 -> 64 ch | 64 x 32 x 26 x 26 | 2.98 | 1.49 |
+| conv2d 3x3, 64 -> 64 ch | 64 x 64 x 32 x 32 | 8.94 | 4.32 |
+
 ## Inside
 
 | Path | What it holds |
