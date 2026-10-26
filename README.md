@@ -114,6 +114,14 @@ direct convolution and Raxis im2col plus an MKL gemm.
 | conv2d 3x3, 32 -> 64 ch | 64 x 32 x 26 x 26 | 2.98 | 1.49 |
 | conv2d 3x3, 64 -> 64 ch | 64 x 64 x 32 x 32 | 8.94 | 4.32 |
 
+**Against NumPy.** Raxis wheels are 8-10 MB, smaller than NumPy's (13-17 MB),
+while PyTorch's CPU wheels take 110-180 MB. On 1000 x 1000 elementwise ops
+Raxis runs 3 to 30x faster than NumPy (`add` 0.017 vs 0.565 ms, `exp` 0.123 vs
+0.944 ms), mostly because it splits the work between threads: NumPy's own
+functions are
+[single-threaded by design](https://numpy.org/doc/stable/reference/global_state.html),
+only its BLAS calls use several. On 100 x 100 arrays they are on par.
+
 ## Inside
 
 | Path | What it holds |
