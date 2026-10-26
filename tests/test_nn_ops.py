@@ -515,7 +515,11 @@ class TestConvolution:
     def test_conv2d_float32(self, x_shape, w_shape, kwargs):
         pairs = conv_both(x_shape, w_shape, True, np.float32, raxis.conv2d, F.conv2d, **kwargs)
         for (r, t), name in zip(pairs, ["output", "input grad", "weight grad", "bias grad"]):
-            check_match(r, t, atol=1e-4, context=f"conv2d float32 {name}")
+            # The weight grad sums thousands of products and reaches ~1e3: the
+            # rounding error scales with that, and the gemm kernel MKL picks
+            # (so the summation order) depends on the CPU
+            scale = max(1.0, float(t.abs().max()))
+            check_match(r, t, atol=1e-5 * scale, context=f"conv2d float32 {name}")
 
     @pytest.mark.parametrize("x_shape, w_shape, kwargs", [
         ((2, 3, 10), (5, 3, 4), dict(padding=2, stride=2)),
