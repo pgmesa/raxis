@@ -20,8 +20,10 @@ read end to end, while running at PyTorch speed on CPU.
 pip install raxis
 ```
 
-Wheels for Windows and Linux (x86-64), Python 3.10 to 3.14. Raxis has no
-runtime dependencies; numpy is optional (`.numpy()`, `raxis.from_numpy`).
+Wheels for Windows (x86-64), Linux (x86-64 and aarch64, e.g. a 64-bit
+Raspberry Pi OS) and macOS (Apple silicon, macOS 14+), Python 3.10 to 3.14.
+Raxis has no runtime dependencies; numpy is optional (`.numpy()`,
+`raxis.from_numpy`).
 
 ```python
 import raxis
@@ -113,6 +115,10 @@ direct convolution and Raxis im2col plus an MKL gemm.
 | dropout | 1000 x 1000 | 0.123 | 6.880 |
 | conv2d 3x3, 32 -> 64 ch | 64 x 32 x 26 x 26 | 2.98 | 1.49 |
 | conv2d 3x3, 64 -> 64 ch | 64 x 64 x 32 x 32 | 8.94 | 4.32 |
+
+**ARM.** On GitHub's ARM runners (Apple M1 and Neoverse, shared machines,
+so no table) the median ratio Raxis/PyTorch over the same cases is 0.79x to
+0.88x in float32 and float64.
 
 **Against NumPy.** Raxis wheels are 8-10 MB, smaller than NumPy's (13-17 MB),
 while PyTorch's CPU wheels take 110-180 MB. On 1000 x 1000 elementwise ops
