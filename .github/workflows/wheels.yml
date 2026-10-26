@@ -15,6 +15,9 @@ on:
       os:
         description: Runners to build on, as a JSON list (manual runs only)
         default: '["windows-2022", "ubuntu-24.04", "ubuntu-24.04-arm"]'
+      build:
+        description: Wheels to build, as CIBW_BUILD (empty builds every Python version)
+        default: ""
 
 permissions:
   contents: read
@@ -52,6 +55,14 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
+
+      # Set only when given: an empty CIBW_BUILD means "*", not the list in
+      # pyproject.toml
+      - if: inputs.build
+        shell: bash
+        env:
+          BUILD: ${{ inputs.build }}
+        run: echo "CIBW_BUILD=${BUILD}" >> "$GITHUB_ENV"
 
       # Configured in [tool.cibuildwheel] in pyproject.toml. Each wheel is
       # tested right after it is built, and the first failure stops the run
