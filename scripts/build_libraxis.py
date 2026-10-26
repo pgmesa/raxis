@@ -68,7 +68,9 @@ def main():
     # SLEEF generates headers shared by several of its targets, which races
     # under Visual Studio's parallel project builds: build it serially first
     run(*build, '--target', 'sleef')
-    run(*build, '--target', 'install', '--parallel')
+    # A bare --parallel is `make -j` without a limit under Makefiles (the
+    # manylinux images have no Ninja): every compile at once runs CI out of memory
+    run(*build, '--target', 'install', '--parallel', str(os.cpu_count() or 1))
 
     if not args.no_stubs:
         run(sys.executable, project_path / 'scripts' / 'generate_pyi.py')
