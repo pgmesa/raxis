@@ -82,3 +82,6 @@ docs/_build/
 examples/mnist/
 examples/nanogpt/data/
 examples/nanogpt/out-*/
+
+# Output of examples/autograd_graph.py
+examples/autograd_graph_out/
