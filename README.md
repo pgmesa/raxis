@@ -53,6 +53,40 @@ print(graph.to_mermaid(loss, dict(model.named_parameters()), view="forward"))
 graph.render(loss, "loss.svg")  # needs pip install 'raxis[viz]' and Graphviz
 ```
 
+For the model above the first line prints this flowchart, which GitHub draws
+from a ` ```mermaid ` block (`examples/autograd_graph.py` shows every view
+and format side by side):
+
+```mermaid
+flowchart TB
+    out0["output<br/>() float32"]:::output
+    n0("nll_loss"):::op
+    n1("log_softmax"):::op
+    n2("addmm"):::op
+    n5("transpose"):::op
+    n6["2.weight<br/>(10, 128) float32"]:::leaf
+    n4("relu"):::op
+    n7("addmm"):::op
+    n9("transpose"):::op
+    n10["0.weight<br/>(128, 784) float32"]:::leaf
+    n8["0.bias<br/>(128,) float32"]:::leaf
+    n3["2.bias<br/>(10,) float32"]:::leaf
+    n0 --> out0
+    n1 --> n0
+    n2 --> n1
+    n3 --> n2
+    n4 --> n2
+    n5 --> n2
+    n6 --> n5
+    n7 --> n4
+    n8 --> n7
+    n9 --> n7
+    n10 --> n9
+    classDef op fill:#d3d3d3,stroke:#555,color:#000
+    classDef leaf fill:#add8e6,stroke:#555,color:#000
+    classDef output fill:#caff70,stroke:#555,color:#000
+```
+
 ## Performance
 
 Measured on a Ryzen 7 9700X (Zen 5, 8 cores, AVX512) with Windows 11, 8
