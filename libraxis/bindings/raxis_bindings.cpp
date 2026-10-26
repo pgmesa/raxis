@@ -195,7 +195,12 @@ PYBIND11_MODULE(_C, c) {
             py::list out;
             for (const SavedVariable* saved : self.saved_variables()) {
                 if (!saved->was_saved()) continue;
-                py::object t = saved->is_released() ? py::none() : py::cast(saved->unpack());
+                // None also for an optional tensor saved undefined (nll_loss weight)
+                py::object t = py::none();
+                if (!saved->is_released()) {
+                    const raxis::Tensor& tensor = saved->unpack();
+                    if (tensor.defined()) t = py::cast(tensor);
+                }
                 out.append(py::make_tuple(saved->name(), t, saved->is_released()));
             }
             return out;

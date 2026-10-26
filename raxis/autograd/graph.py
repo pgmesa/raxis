@@ -100,6 +100,8 @@ def _build(outputs, params, view, show_saved):
             for name, tensor, released in fn._saved_variables():
                 if released:
                     lines.append(f"{name}: released")
+                elif tensor is None:
+                    lines.append(f"{name}: None")
                 else:
                     param = names.get(tensor._cdata)
                     lines.append(f"{name}: {param + ' ' if param else ''}{_describe(tensor)}")

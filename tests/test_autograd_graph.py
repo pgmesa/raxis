@@ -132,6 +132,14 @@ class TestGraphExport:
         self.out.backward()
         assert "result: released" in graph.to_dot(self.out)
 
+    def test_undefined_saved_tensor(self):
+        # nll_loss saves its optional class weight even without one
+        logits = raxis.rand((5, 3), requires_grad=True)
+        loss = raxis.nn.functional.cross_entropy(logits, raxis.tensor([0, 1, 2, 0, 1]))
+        assert ("weight", None, False) in loss.grad_fn._saved_variables()
+        assert "weight: None" in graph.to_dot(loss)
+        assert "weight: None" in graph.to_mermaid(loss)
+
     def test_leaf_names_from_named_parameters(self):
         layer = raxis.nn.Linear(4, 2)
         dot = graph.to_dot(layer(self.x).sum(), dict(layer.named_parameters()))
