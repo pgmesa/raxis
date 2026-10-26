@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <memory>
 #include <mutex>
 #include <utility>
 
@@ -31,11 +32,28 @@ int num_pool_threads(int nthreads) {
     return nthreads - 1;
 }
 
+// The pool is created on first use and replaced when set_num_threads asks
+// for another size. Every task enqueue reads it, so the fast path is an
+// atomic load; creating or replacing it takes the mutex
+std::mutex pool_mutex;
+std::unique_ptr<ThreadPool> owned_pool;
+std::atomic<ThreadPool*> intraop_pool{nullptr};
+
+std::unique_ptr<ThreadPool> make_pool(int nthreads) {
+    return std::make_unique<ThreadPool>(
+        num_pool_threads(nthreads), []() { raxis::init_num_threads(); });
+}
+
 ThreadPool& get_intraop_pool() {
-    static ThreadPool pool(
-        num_pool_threads(num_intraop_threads.exchange(CONSUMED)),
-        []() { raxis::init_num_threads(); });
-    return pool;
+    if (ThreadPool* pool = intraop_pool.load(std::memory_order_acquire)) {
+        return *pool;
+    }
+    std::lock_guard<std::mutex> lock(pool_mutex);
+    if (!owned_pool) {
+        owned_pool = make_pool(num_intraop_threads.exchange(CONSUMED));
+        intraop_pool.store(owned_pool.get(), std::memory_order_release);
+    }
+    return *owned_pool;
 }
 
 void run_with_pool(const std::function<void(size_t)>& fn, size_t range) {
@@ -135,19 +153,27 @@ void init_num_threads() {
     // Nothing to do for now. The pool is created lazily.
 }
 
+// From: aten/src/ATen/ParallelNative.cpp (set_num_threads)
+// PyTorch's native backend only warns once the pool exists and keeps its
+// size. Here an idle pool is replaced by one of the new size, so the thread
+// count can change at any time, as with OpenMP (the backend of the macOS
+// wheels, where Apple's clang has no OpenMP). Calling it while another
+// thread runs parallel work is not supported, as in PyTorch.
 void set_num_threads(int nthreads) {
     RAXIS_CHECK(nthreads > 0, "Expected positive number of threads, got ", nthreads);
-    int no_value = NOT_SET;
-    if (!num_intraop_threads.compare_exchange_strong(no_value, nthreads)) {
-        int stored = num_intraop_threads.load();
-        if (stored <= 0) {
-            // Pool already created, report actual size
-            stored = static_cast<int>(get_intraop_pool().size()) + 1;
-        }
-        RAXIS_CHECK(stored == nthreads,
-            "Cannot change thread count after parallel work has started "
-            "(current=", stored, ", requested=", nthreads, ")");
+    RAXIS_CHECK(!in_parallel_region(), "set_num_threads cannot be called inside a parallel region");
+    std::lock_guard<std::mutex> lock(pool_mutex);
+    if (!owned_pool) {
+        num_intraop_threads.store(nthreads);
+        return;
     }
+    if (static_cast<int>(owned_pool->size()) + 1 == nthreads) {
+        return;
+    }
+    owned_pool->wait_work_complete();
+    std::unique_ptr<ThreadPool> old_pool = std::exchange(owned_pool, make_pool(nthreads));
+    intraop_pool.store(owned_pool.get(), std::memory_order_release);
+    // old_pool joins its idle threads here
 }
 
 int get_num_threads() {
