@@ -33,8 +33,13 @@ target_compile_definitions(raxis PRIVATE RAXIS_BUILD)
 if(NOT WIN32)
     target_compile_options(raxis PRIVATE -fvisibility=hidden)
     string(APPEND RAXIS_TARGET_CXX_FLAGS " -fvisibility=hidden")
-    # Installed next to its runtime dependencies (libiomp5.so) in raxis/lib
-    set_target_properties(raxis PROPERTIES INSTALL_RPATH "$ORIGIN")
+    # Installed next to its runtime dependencies (libiomp5.so) in raxis/lib.
+    # macOS spells $ORIGIN as @loader_path
+    if(APPLE)
+        set_target_properties(raxis PROPERTIES INSTALL_RPATH "@loader_path")
+    else()
+        set_target_properties(raxis PROPERTIES INSTALL_RPATH "$ORIGIN")
+    endif()
 endif()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
@@ -97,6 +102,25 @@ if(RAXIS_USE_BLAS)
         endif()
     elseif(RAXIS_USE_MKL)
         message(STATUS "MKL: skipped (not x86, processor: ${CMAKE_SYSTEM_PROCESSOR})")
+    endif()
+
+    # Accelerate on macOS, as PyTorch's macOS wheels (BLAS=vecLib): it ships
+    # with the system and its sgemm runs on Apple's matrix units. cblas.h is in
+    # the vecLib framework nested inside it
+    # From: cmake/Modules/FindvecLib.cmake
+    if(NOT RAXIS_BLAS_FOUND AND APPLE)
+        find_library(ACCELERATE_FRAMEWORK Accelerate)
+        find_path(CBLAS_INCLUDE_DIR cblas.h
+            PATHS "${ACCELERATE_FRAMEWORK}/Frameworks/vecLib.framework/Headers"
+            NO_DEFAULT_PATH
+        )
+        if(ACCELERATE_FRAMEWORK AND CBLAS_INCLUDE_DIR)
+            target_include_directories(raxis PRIVATE ${CBLAS_INCLUDE_DIR})
+            target_link_libraries(raxis PRIVATE "-framework Accelerate")
+            target_compile_definitions(raxis PRIVATE RAXIS_BUILD_WITH_BLAS=1 RAXIS_BUILD_WITH_MKL=0)
+            set(RAXIS_BLAS_INFO "Accelerate")
+            set(RAXIS_BLAS_FOUND TRUE)
+        endif()
     endif()
 
     if(NOT RAXIS_BLAS_FOUND)

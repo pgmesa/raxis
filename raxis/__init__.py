@@ -27,7 +27,7 @@ else:
         if not any(s in lib.stem for s in skip):
             ctypes.CDLL(str(lib), mode=ctypes.RTLD_GLOBAL)
 
-    core_lib_path = raxis_lib_dirs / 'libraxis.so'
+    core_lib_path = raxis_lib_dirs / ('libraxis.dylib' if sys.platform == 'darwin' else 'libraxis.so')
     ctypes.CDLL(str(core_lib_path), mode=ctypes.RTLD_GLOBAL)
     extension = '.so'
 

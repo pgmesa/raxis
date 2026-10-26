@@ -42,5 +42,8 @@ set_target_properties(raxis_bindings PROPERTIES
     CXX_VISIBILITY_PRESET "hidden"
     INSTALL_RPATH "$ORIGIN"
 )
+if(APPLE)
+    set_target_properties(raxis_bindings PROPERTIES INSTALL_RPATH "@loader_path")
+endif()
 
 target_link_libraries(raxis_bindings PRIVATE Raxis::Raxis)
