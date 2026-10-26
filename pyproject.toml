@@ -160,3 +160,14 @@ archs = ["AMD64"]
 # raxis/lib already has every DLL it needs (iomp5 and the MSVC runtime):
 # delvewheel would add renamed copies of raxis.dll and libiomp5md.dll
 repair-wheel-command = ""
+
+[tool.cibuildwheel.macos]
+archs = ["arm64"]
+# No MKL on ARM: Accelerate ships with macOS. Apple's clang has no OpenMP, so
+# libraxis falls back to its native thread pool. 14.0 as PyTorch's macOS
+# wheels: the C++20 library needs at least 13.3
+before-build = [
+    "pip install \"pybind11>=2.13.0,<3.0.0\" \"pybind11-stubgen>=2.5.0,<3.0.0\" numpy",
+    "python {project}/scripts/build_libraxis.py",
+]
+environment = { MACOSX_DEPLOYMENT_TARGET = "14.0" }
