@@ -162,6 +162,11 @@ if(RAXIS_USE_MIMALLOC)
     set(MI_BUILD_SHARED OFF CACHE BOOL "" FORCE)
     set(MI_BUILD_OBJECT OFF CACHE BOOL "" FORCE)
     set(MI_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    # libraxis is loaded with dlopen (by Python): its thread locals cannot use
+    # mimalloc's default initial-exec TLS model, which takes them from the
+    # small static TLS block glibc reserves at startup. On aarch64 it does not
+    # fit ("cannot allocate memory in static TLS block")
+    set(MI_LOCAL_DYNAMIC_TLS ON CACHE BOOL "" FORCE)
 
     add_subdirectory(third_party/mimalloc ${CMAKE_BINARY_DIR}/mimalloc EXCLUDE_FROM_ALL)
     set_property(TARGET mimalloc-static PROPERTY FOLDER "dependencies")
