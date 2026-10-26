@@ -131,7 +131,8 @@ test-command = "pytest {project}/tests -q -x"
 test-environment = { PIP_EXTRA_INDEX_URL = "https://download.pytorch.org/whl/cpu" }
 
 [tool.cibuildwheel.linux]
-archs = ["x86_64"]
+# x86_64 on ubuntu-24.04, aarch64 on ubuntu-24.04-arm (no emulation)
+archs = ["native"]
 # MKL takes ~2.5 GB once installed: install it once per container and share
 # it across Python versions (build_libraxis.py reads RAXIS_MKL_PREFIX), or
 # the runner runs out of disk
@@ -145,6 +146,14 @@ environment = { RAXIS_MKL_PREFIX = "/opt/mkl" }
 # $ORIGIN), and raxis/__init__.py loads that copy: a second, renamed copy
 # would mean two OpenMP runtimes in the process
 repair-wheel-command = "auditwheel repair --exclude libiomp5.so -w {dest_dir} {wheel}"
+
+# No MKL on ARM: OpenBLAS built with OpenMP, linked statically. auditwheel
+# bundles libgomp, as in PyTorch's aarch64 wheels
+[[tool.cibuildwheel.overrides]]
+select = "*-manylinux_aarch64"
+before-all = "bash {project}/scripts/install_openblas.sh /opt/OpenBLAS"
+environment = { BLA_VENDOR = "OpenBLAS", CMAKE_PREFIX_PATH = "/opt/OpenBLAS" }
+repair-wheel-command = "auditwheel repair -w {dest_dir} {wheel}"
 
 [tool.cibuildwheel.windows]
 archs = ["AMD64"]
