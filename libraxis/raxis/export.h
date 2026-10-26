@@ -13,3 +13,14 @@
   #define RAXIS_API __attribute__((visibility("default")))
 
 #endif
+
+// Header-only classes thrown by libraxis and caught in another library (the
+// bindings): their typeinfo must stay visible, or each library keeps a hidden
+// copy and macOS's libc++ fails the catch (it compares typeinfo addresses).
+// MSVC compares type names, and dllexport on a class derived from a std::
+// type only adds warning C4275
+#if defined(_WIN32) || defined(_WIN64)
+  #define RAXIS_VISIBLE
+#else
+  #define RAXIS_VISIBLE __attribute__((visibility("default")))
+#endif

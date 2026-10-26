@@ -6,6 +6,7 @@
 #include <utility>
 
 #include <raxis/core/types.h>
+#include <raxis/export.h>
 
 
 namespace raxis::detail {
@@ -59,14 +60,14 @@ namespace raxis {
 // From: c10/util/Exception.h (IndexError)
 // An index out of range: Python sees an IndexError, which also ends the
 // sequence protocol (iterating a tensor through __getitem__)
-class IndexError : public std::runtime_error {
+class RAXIS_VISIBLE IndexError : public std::runtime_error {
 public:
     using std::runtime_error::runtime_error;
 };
 
 // From: c10/util/Exception.h (NotImplementedError)
 // A valid request raxis does not support: Python sees a NotImplementedError
-class NotImplementedError : public std::runtime_error {
+class RAXIS_VISIBLE NotImplementedError : public std::runtime_error {
 public:
     using std::runtime_error::runtime_error;
 };
