@@ -736,6 +736,33 @@ def run_forward_benchmarks(runner):
         lambda t: torch.batch_norm(t, None, None, None, None, True, 0.1, 1e-5, False)),
     ])
 
+    # -- Transformer layers (nanoGPT sized: batch 64 x block 256 rows of n_embd 384) --
+    S_ROWS = [(16384, 384), (1024, 4096)]
+    S_ATTN = [(12, 4, 64, 32), (64, 6, 256, 64)]
+
+    _run_section(runner, "Transformer layers", [
+        ("softmax", FLOAT, S_ROWS,
+        lambda t: raxis.nn.functional.softmax(t, -1),
+        lambda t: torch.nn.functional.softmax(t, -1)),
+        ("log_softmax", FLOAT, S_ROWS,
+        lambda t: raxis.nn.functional.log_softmax(t, -1),
+        lambda t: torch.nn.functional.log_softmax(t, -1)),
+        ("layer_norm", FLOAT, S_ROWS,
+        lambda t: raxis.nn.functional.layer_norm(t, t.shape[-1:]),
+        lambda t: torch.nn.functional.layer_norm(t, t.shape[-1:])),
+        ("gelu", FLOAT, S_ROWS,
+        lambda t: raxis.nn.functional.gelu(t),
+        lambda t: torch.nn.functional.gelu(t)),
+        ("sdpa causal", FLOAT, S_ATTN,
+        lambda t: raxis.nn.functional.scaled_dot_product_attention(t, t, t, is_causal=True),
+        lambda t: torch.nn.functional.scaled_dot_product_attention(t, t, t, is_causal=True)),
+    ])
+
+    _run_section(runner, "Sorting", [
+        ("sort", FLOAT, S2D, lambda t: raxis.sort(t, -1), lambda t: torch.sort(t, -1)),
+        ("topk", FLOAT, S2D, lambda t: raxis.topk(t, 10), lambda t: torch.topk(t, 10)),
+    ])
+
     S_RANDOM = S2D + [(128, 16, 28, 28)]
 
     _run_section(runner, "Random", [
