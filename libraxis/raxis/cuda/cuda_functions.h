@@ -19,6 +19,11 @@ void set_device(DeviceIndex index);
 /// Waits for all the work queued on the current device
 void device_synchronize();
 
+/// Properties of the current device (SM count, threads per SM, ...), queried
+/// once per device. From: aten/src/ATen/cuda/CUDAContext.h
+/// (getCurrentDeviceProperties)
+const cudaDeviceProp& current_device_properties();
+
 /// The stream every op enqueues its work on.
 ///
 /// raxis has a single stream per device for now: the legacy default stream,

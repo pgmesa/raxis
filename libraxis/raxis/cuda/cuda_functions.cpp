@@ -1,5 +1,8 @@
 #include <raxis/cuda/cuda_functions.h>
 
+#include <mutex>
+#include <vector>
+
 #include <raxis/cuda/cuda_exception.h>
 
 
@@ -36,6 +39,20 @@ void set_device(DeviceIndex index) {
 
 void device_synchronize() {
     RAXIS_CUDA_CHECK(cudaDeviceSynchronize());
+}
+
+const cudaDeviceProp& current_device_properties() {
+    static std::mutex mutex;
+    // Leaked, as the allocator: references handed out stay valid at exit
+    static auto* props = new std::vector<cudaDeviceProp>(device_count());
+    static auto* queried = new std::vector<bool>(device_count(), false);
+    const DeviceIndex device = current_device();
+    std::lock_guard<std::mutex> lock(mutex);
+    if (!(*queried)[device]) {
+        RAXIS_CUDA_CHECK(cudaGetDeviceProperties(&(*props)[device], device));
+        (*queried)[device] = true;
+    }
+    return (*props)[device];
 }
 
 void memcpy_and_sync(void* dst, const void* src, size_t nbytes, cudaMemcpyKind kind, cudaStream_t stream) {
