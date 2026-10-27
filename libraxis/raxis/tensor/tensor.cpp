@@ -124,6 +124,8 @@ TensorOptions Tensor::options() const {
 
 Scalar Tensor::item() const {
     RAXIS_CHECK(numel() == 1, "a Tensor with ", numel(), " elements cannot be converted to Scalar");
+    // Waits for the device: the copy to the CPU synchronizes
+    if (!is_cpu()) return cpu().item();
     return dtype().dispatch_all_types(
         [&]<typename scalar_t>(std::type_identity<scalar_t>) -> Scalar {
             return Scalar(data_ptr<scalar_t>()[0]);
@@ -406,21 +408,29 @@ Tensor Tensor::clone(MemoryFormat memory_format) const {
 }
 
 Tensor Tensor::to(Dtype new_dtype) const {
-    if (dtype() == new_dtype) return *this;
-    return ::raxis::to_copy(*this, new_dtype);
+    return to(device(), new_dtype);
 }
 
 Tensor Tensor::to(Device new_device) const {
-    if (device() == new_device) return *this;
+    return to(new_device, dtype());
+}
 
-    RAXIS_CHECK(false, 
-        "Cross-device transfer not yet implemented: ",
-        device(), " -> ", new_device);
-    return *this;
+// From: aten/src/ATen/native/TensorConversions.cpp (to_will_alias)
+// Returns self when nothing changes; a device without index (cuda) matches
+// any index of its type, as torch's x.to("cuda") on a cuda:1 tensor
+Tensor Tensor::to(Device new_device, Dtype new_dtype) const {
+    bool same_device = device().type() == new_device.type() &&
+        (!new_device.has_index() || device().index() == new_device.index());
+    if (same_device && dtype() == new_dtype) return *this;
+    return ::raxis::to_copy(*this, new_dtype, same_device ? device() : new_device);
 }
 
 Tensor Tensor::cpu() const {
-    return *this;
+    return to(Device(DeviceType::CPU));
+}
+
+Tensor Tensor::cuda() const {
+    return to(Device(DeviceType::CUDA));
 }
 
 Tensor& Tensor::fill_(Scalar value) const {

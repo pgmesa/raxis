@@ -10,14 +10,22 @@
 
 namespace raxis {
 
+// From: aten/src/ATen/native/Copy.cpp (copy_impl)
+// The only op whose operands may live on different devices: a copy between
+// CPU and CUDA runs the CUDA kernel, which moves the bytes with cudaMemcpy
 Tensor& copy(const Tensor& a, Tensor& out) {
     auto iter = TensorIteratorConfig()
         .check_all_same_dtype(false)
+        .check_all_same_device(false)
         .add_output(out)
         .add_input(a)
         .build();
-    
-    copy_stub(iter.device_type(), iter);
+
+    DeviceType device_type = iter.device_type(0);
+    if (iter.device_type(1) == DeviceType::CUDA) {
+        device_type = DeviceType::CUDA;
+    }
+    copy_stub(device_type, iter);
     out = iter.get_output(0);
     return out;
 }
@@ -30,8 +38,8 @@ Tensor clone(const Tensor& self, MemoryFormat memory_format) {
     return out;
 }
 
-Tensor to_copy(const Tensor& self, Dtype dtype) {
-    Tensor out = empty_like(self, dtype);
+Tensor to_copy(const Tensor& self, Dtype dtype, Device device) {
+    Tensor out = empty_like(self, TensorOptions().dtype(dtype).device(device));
     copy(self, out);
     return out;
 }

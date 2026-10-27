@@ -17,12 +17,13 @@ RAXIS_API Tensor& copy(const Tensor& a, Tensor& out);
 RAXIS_API Tensor& copy_(Tensor& self, const Tensor& src);
 
 RAXIS_API Tensor clone(const Tensor& self, MemoryFormat memory_format = MemoryFormat::Preserve);
-RAXIS_API Tensor to_copy(const Tensor& self, Dtype dtype);
+// self.to(dtype, device) with autograd (ToCopyBackward0)
+RAXIS_API Tensor to_copy(const Tensor& self, Dtype dtype, Device device);
 
 namespace ops {
 
 RAXIS_API Tensor clone(const Tensor& self, MemoryFormat memory_format = MemoryFormat::Preserve);
-RAXIS_API Tensor to_copy(const Tensor& self, Dtype dtype);
+RAXIS_API Tensor to_copy(const Tensor& self, Dtype dtype, Device device);
 
 } // namespace ops
 

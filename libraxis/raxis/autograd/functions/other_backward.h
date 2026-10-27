@@ -342,6 +342,7 @@ public:
 
 private:
     Dtype self_dtype_;
+    Device self_device_;
 };
 
 } // namespace raxis::autograd

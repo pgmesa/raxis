@@ -520,12 +520,13 @@ TensorList CloneBackward0::apply(const TensorList& grads) {
     return {grads[0]};
 }
 
-ToCopyBackward0::ToCopyBackward0(const Tensor& self) : self_dtype_(self.dtype()) {}
+ToCopyBackward0::ToCopyBackward0(const Tensor& self)
+    : self_dtype_(self.dtype()), self_device_(self.device()) {}
 
 std::string ToCopyBackward0::name() const { return "ToCopyBackward0"; }
 
 TensorList ToCopyBackward0::apply(const TensorList& grads) {
-    return {grads[0].to(self_dtype_)};
+    return {grads[0].to(self_device_).to(self_dtype_)};
 }
 
 } // namespace raxis::autograd

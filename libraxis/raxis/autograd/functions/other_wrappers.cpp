@@ -515,8 +515,8 @@ Tensor clone(const Tensor& self, MemoryFormat memory_format) {
     return result;
 }
 
-Tensor to_copy(const Tensor& self, Dtype dtype) {
-    Tensor result = ops::to_copy(self, dtype);
+Tensor to_copy(const Tensor& self, Dtype dtype, Device device) {
+    Tensor result = ops::to_copy(self, dtype, device);
     if (autograd::requires_autograd(self)) {
         auto grad_fn = std::make_shared<autograd::ToCopyBackward0>(self);
         grad_fn->set_num_inputs(1);

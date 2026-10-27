@@ -84,6 +84,7 @@ public:
     T item() const {
         RAXIS_CHECK(numel() == 1, 
             "a Tensor with ", numel(), " elements cannot be converted to Scalar");
+        if (!is_cpu()) return cpu().template item<T>();
         return data_ptr<T>()[0];
     }
     Scalar item() const;
@@ -184,7 +185,10 @@ public:
     Tensor& copy_(const Tensor& other) const;
     Tensor to(Dtype dtype) const;
     Tensor to(Device device) const;
+    Tensor to(Device device, Dtype dtype) const;
     Tensor cpu() const;
+    /// To the current CUDA device
+    Tensor cuda() const;
 
     Tensor& fill_(Scalar value) const;
     Tensor& zero_() const;
