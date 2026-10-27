@@ -18,8 +18,8 @@ def backward_both(r_out, t_out, seed=7):
     """Backward with the same random upstream gradient on both sides."""
     grad = randf_centered(*t_out.shape, seed=seed) if t_out.dim() > 0 else np.float32(1.0)
     grad = np.asarray(grad, dtype=np.float32)
-    t_out.backward(torch.from_numpy(grad.copy()))
-    r_out.backward(raxis.from_numpy(grad.copy()))
+    t_out.backward(torch.from_numpy(grad.copy()).to(t_out.device))
+    r_out.backward(raxis.from_numpy(grad.copy()).to(r_out.device))
 
 
 # ===========================================================================
@@ -491,8 +491,8 @@ def conv_both(x_shape, w_shape, bias, dtype, conv_r, conv_t, **kwargs):
     r_out = conv_r(r_x, r_w, r_b, **kwargs)
     t_out = conv_t(t_x, t_w, t_b, **kwargs)
     grad = randf_centered(*t_out.shape, seed=4).astype(dtype)
-    t_out.backward(torch.from_numpy(grad.copy()))
-    r_out.backward(raxis.from_numpy(grad.copy()))
+    t_out.backward(torch.from_numpy(grad.copy()).to(t_out.device))
+    r_out.backward(raxis.from_numpy(grad.copy()).to(r_out.device))
     pairs = [(r_out, t_out), (r_x.grad, t_x.grad), (r_w.grad, t_w.grad)]
     if bias:
         pairs.append((r_b.grad, t_b.grad))
@@ -958,8 +958,8 @@ def layer_norm_both(shape, normalized_shape, dtype=np.float32, affine=True, seed
     r_out = raxis.nn.functional.layer_norm(r_x, normalized_shape, r_w, r_b)
     t_out = F.layer_norm(t_x, normalized_shape, t_w, t_b)
     grad = rng.randn(*shape).astype(dtype)
-    t_out.backward(torch.from_numpy(grad.copy()))
-    r_out.backward(raxis.from_numpy(grad.copy()))
+    t_out.backward(torch.from_numpy(grad.copy()).to(t_out.device))
+    r_out.backward(raxis.from_numpy(grad.copy()).to(r_out.device))
     pairs = {"output": (r_out, t_out), "input grad": (r_x.grad, t_x.grad)}
     if affine:
         pairs["weight grad"] = (r_w.grad, t_w.grad)

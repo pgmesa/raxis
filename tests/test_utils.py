@@ -12,11 +12,12 @@ import numpy as np
 # ---------------------------------------------------------------------------
 
 def get_devices():
-    # Opt-in until most ops have CUDA kernels: an op without one raises, but
-    # a CPU loop that reads a CUDA pointer would crash the whole run.
-    # tests/test_cuda.py covers what the CUDA backend has
+    # cuda whenever raxis and torch see a GPU (RAXIS_TEST_CUDA=0 turns it
+    # off). An op without a CUDA kernel raises NotImplementedError, which
+    # conftest.py reports as xfail, so the cuda results map what is missing
     devices = ["cpu"]
-    if os.environ.get("RAXIS_TEST_CUDA") == "1" and raxis.cuda.is_available():
+    if (os.environ.get("RAXIS_TEST_CUDA") != "0"
+            and raxis.cuda.is_available() and torch.cuda.is_available()):
         devices.append("cuda")
     return devices
 
@@ -58,7 +59,7 @@ def check_match(r_out, t_out, atol=1e-5, rtol=1e-4, context=""):
         f"Shape mismatch {context}: raxis={r_out.shape}, torch={t_out.shape}"
     )
 
-    r_np = np.array(r_out)
+    r_np = np.array(r_out.detach().cpu())
     t_np = t_out.detach().cpu().numpy()
 
     if r_np.dtype != t_np.dtype:

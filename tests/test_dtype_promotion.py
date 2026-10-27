@@ -60,8 +60,8 @@ def assert_dtype_eq(raxis_tensor, torch_tensor, context=""):
 
 def assert_values_close(raxis_tensor, torch_tensor, atol=1e-6, rtol=1e-5, context=""):
     """Assert that values match between raxis and torch tensors."""
-    r_np = np.array(raxis_tensor)
-    t_np = torch_tensor.detach().numpy()
+    r_np = np.array(raxis_tensor.detach().cpu())
+    t_np = torch_tensor.detach().cpu().numpy()
 
     # Cast to same numpy type for comparison (use torch's type as reference)
     if r_np.dtype != t_np.dtype:

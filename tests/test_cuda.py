@@ -241,6 +241,61 @@ class TestBinary:
         raxis.cuda.empty_cache()
 
 
+class TestCat:
+
+    @pytest.mark.parametrize("dim", [0, 1])
+    @pytest.mark.parametrize("n", [3, 300_000])
+    def test_cat(self, dim, n):
+        # n = 3 takes the serial path on the CPU, which reads on the host
+        a, b = make((n, 4), seed=0), make((n, 4), seed=1)
+        r = raxis.cat([raxis.from_numpy(a).cuda(), raxis.from_numpy(b).cuda()], dim)
+        t = torch.cat([torch.from_numpy(a).cuda(), torch.from_numpy(b).cuda()], dim)
+        check(r, t)
+
+    def test_cat_mixed_layouts_and_dtypes(self):
+        a, b = make((4, 3), seed=0), make((3, 4), "float64", seed=1)
+        r = raxis.cat([raxis.from_numpy(a).cuda(), raxis.from_numpy(b).cuda().transpose(0, 1)])
+        t = torch.cat([torch.from_numpy(a).cuda(), torch.from_numpy(b).cuda().transpose(0, 1)])
+        check(r, t)
+
+    @pytest.mark.parametrize("dim", [0, 1, 2])
+    def test_stack(self, dim):
+        xs = [make((5, 6), seed=i) for i in range(3)]
+        r = raxis.stack([raxis.from_numpy(x).cuda() for x in xs], dim)
+        t = torch.stack([torch.from_numpy(x).cuda() for x in xs], dim)
+        check(r, t)
+
+
+class TestHostOnlyOps:
+    """Ops whose only implementation reads the data on the host must raise
+    on CUDA tensors instead of dereferencing device pointers (a crash)."""
+
+    @pytest.mark.parametrize("op", [
+        lambda x: x @ x,
+        lambda x: raxis.mm(x, x),
+        lambda x: raxis.addmm(x, x, x),
+        lambda x: raxis.bmm(x[None], x[None]),
+        lambda x: raxis.mv(x, x[0]),
+        lambda x: raxis.dot(x[0], x[0]),
+        lambda x: raxis.tril(x),
+        lambda x: raxis.nonzero(x),
+        lambda x: raxis.index_select(x, 0, raxis.tensor([0, 1]).cuda()),
+        lambda x: raxis.multinomial(x.abs(), 2),
+        lambda x: raxis.nn.functional.conv2d(x[None, None], x[None, None, :2, :2]),
+        lambda x: raxis.nn.functional.nll_loss(x, raxis.tensor([0, 1, 2, 3]).cuda()),
+        lambda x: x.var(),
+        lambda x: raxis.where(x > 0, x, 0.0),
+    ])
+    def test_raises(self, op):
+        x = raxis.from_numpy(make((4, 4))).cuda()
+        with pytest.raises(NotImplementedError, match="CUDA|cuda"):
+            op(x)
+
+    def test_stub_name_in_message(self):
+        with pytest.raises(NotImplementedError, match="exp_stub"):
+            raxis.ones((3,), device="cuda").exp()
+
+
 class TestCachingAllocator:
 
     def test_memory_allocated(self):
