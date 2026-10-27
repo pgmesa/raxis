@@ -104,15 +104,23 @@ TensorList ConvolutionBackward0::apply(const TensorList& grads) {
 }
 
 
-MaxPool2DWithIndicesBackward0::MaxPool2DWithIndicesBackward0(const Tensor& self, const Tensor& indices)
-    : self_shape_(self.shape().begin(), self.shape().end())
+MaxPool2DWithIndicesBackward0::MaxPool2DWithIndicesBackward0(
+    const Tensor& self, IntArrayRef kernel_size, IntArrayRef stride, IntArrayRef padding,
+    IntArrayRef dilation, bool ceil_mode, const Tensor& indices)
+    : self_shape_(self.shape().begin(), self.shape().end()),
+      kernel_size_(kernel_size.begin(), kernel_size.end()),
+      stride_(stride.begin(), stride.end()),
+      padding_(padding.begin(), padding.end()),
+      dilation_(dilation.begin(), dilation.end()),
+      ceil_mode_(ceil_mode)
 {
     result1_.save(indices);
 }
 std::string MaxPool2DWithIndicesBackward0::name() const { return "MaxPool2DWithIndicesBackward0"; }
 
 TensorList MaxPool2DWithIndicesBackward0::apply(const TensorList& grads) {
-    return {max_pool2d_with_indices_backward(grads[0], self_shape_, result1_.unpack())};
+    return {max_pool2d_with_indices_backward(
+        grads[0], self_shape_, kernel_size_, stride_, padding_, dilation_, ceil_mode_, result1_.unpack())};
 }
 
 

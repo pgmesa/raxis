@@ -154,11 +154,15 @@ std::tuple<Tensor, Tensor> max_pool2d_with_indices(
 }
 
 Tensor max_pool2d_with_indices_backward(
-    const Tensor& grad_output, IntArrayRef input_shape, const Tensor& indices
+    const Tensor& grad_output, IntArrayRef input_shape, IntArrayRef kernel_size, IntArrayRef stride,
+    IntArrayRef padding, IntArrayRef dilation, bool ceil_mode, const Tensor& indices
 ) {
+    const Pool2dParams p = make_pool2d_params(
+        "max_pool2d", input_shape, kernel_size, stride, padding, dilation, ceil_mode);
     Tensor grad_input = empty(input_shape, grad_output.options());
     if (grad_input.numel() > 0) {
-        max_pool2d_backward_stub(grad_output.device().type(), grad_input, grad_output.contiguous(), indices.contiguous());
+        max_pool2d_backward_stub(
+            grad_output.device().type(), grad_input, grad_output.contiguous(), indices.contiguous(), p);
     }
     return grad_input;
 }

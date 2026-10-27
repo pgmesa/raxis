@@ -106,7 +106,8 @@ void max_pool2d_kernel(const Tensor& output, const Tensor& indices, const Tensor
     });
 }
 
-void max_pool2d_backward_kernel(const Tensor& grad_input, const Tensor& grad_output, const Tensor& indices) {
+void max_pool2d_backward_kernel(const Tensor& grad_input, const Tensor& grad_output, const Tensor& indices,
+                                const Pool2dParams& /*params*/) {
     const int64_t input_plane = grad_input.shape()[grad_input.ndim() - 2] * grad_input.shape()[grad_input.ndim() - 1];
     const int64_t output_plane = grad_output.shape()[grad_output.ndim() - 2] * grad_output.shape()[grad_output.ndim() - 1];
     const int64_t planes = grad_input.numel() / input_plane;

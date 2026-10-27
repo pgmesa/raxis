@@ -109,16 +109,23 @@ private:
 };
 
 
-// Saves the input shape, not the input (PyTorch saves self): the scatter only
-// needs the indices of the maxima
+// Saves the input shape, not the input (PyTorch saves self): the backward
+// only needs the indices of the maxima and the window geometry
 class RAXIS_API MaxPool2DWithIndicesBackward0 : public Node {
 public:
-    MaxPool2DWithIndicesBackward0(const Tensor& self, const Tensor& indices);
+    MaxPool2DWithIndicesBackward0(
+        const Tensor& self, IntArrayRef kernel_size, IntArrayRef stride, IntArrayRef padding,
+        IntArrayRef dilation, bool ceil_mode, const Tensor& indices);
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 
 private:
     DimVector self_shape_;
+    DimVector kernel_size_;
+    DimVector stride_;
+    DimVector padding_;
+    DimVector dilation_;
+    bool ceil_mode_;
     SavedVariable result1_{this, "result1"};
 };
 

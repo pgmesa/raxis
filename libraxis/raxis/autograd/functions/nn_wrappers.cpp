@@ -130,7 +130,8 @@ std::tuple<Tensor, Tensor> max_pool2d_with_indices(
     auto [result, indices] = ops::max_pool2d_with_indices(
         input, kernel_size, stride, padding, dilation, ceil_mode);
     if (autograd::requires_autograd(input)) {
-        auto grad_fn = std::make_shared<autograd::MaxPool2DWithIndicesBackward0>(input, indices);
+        auto grad_fn = std::make_shared<autograd::MaxPool2DWithIndicesBackward0>(
+            input, kernel_size, stride, padding, dilation, ceil_mode, indices);
         grad_fn->set_num_inputs(1);
         autograd::set_next_edges(grad_fn, input);
         autograd::set_autograd_meta(result, grad_fn);
@@ -375,9 +376,11 @@ Tensor nll_loss_backward(
 }
 
 Tensor max_pool2d_with_indices_backward(
-    const Tensor& grad_output, IntArrayRef input_shape, const Tensor& indices
+    const Tensor& grad_output, IntArrayRef input_shape, IntArrayRef kernel_size, IntArrayRef stride,
+    IntArrayRef padding, IntArrayRef dilation, bool ceil_mode, const Tensor& indices
 ) {
-    Tensor result = ops::max_pool2d_with_indices_backward(grad_output, input_shape, indices);
+    Tensor result = ops::max_pool2d_with_indices_backward(
+        grad_output, input_shape, kernel_size, stride, padding, dilation, ceil_mode, indices);
     if (autograd::requires_autograd(grad_output)) {
         auto grad_fn = std::make_shared<autograd::MaxPool2DWithIndicesBackwardBackward0>(indices);
         grad_fn->set_num_inputs(1);

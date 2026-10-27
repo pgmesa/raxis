@@ -27,7 +27,7 @@ struct Pool2dParams {
 using max_pool2d_fn = void(*)(
     const Tensor& output, const Tensor& indices, const Tensor& input, const Pool2dParams& params);
 using max_pool2d_backward_fn = void(*)(
-    const Tensor& grad_input, const Tensor& grad_output, const Tensor& indices);
+    const Tensor& grad_input, const Tensor& grad_output, const Tensor& indices, const Pool2dParams& params);
 using avg_pool2d_fn = void(*)(
     const Tensor& output, const Tensor& input, const Pool2dParams& params,
     bool count_include_pad, std::optional<int64_t> divisor_override);
@@ -54,7 +54,8 @@ RAXIS_API Tensor avg_pool2d(
     IntArrayRef padding = {0}, bool ceil_mode = false, bool count_include_pad = true,
     std::optional<int64_t> divisor_override = std::nullopt);
 RAXIS_API Tensor max_pool2d_with_indices_backward(
-    const Tensor& grad_output, IntArrayRef input_shape, const Tensor& indices);
+    const Tensor& grad_output, IntArrayRef input_shape, IntArrayRef kernel_size, IntArrayRef stride,
+    IntArrayRef padding, IntArrayRef dilation, bool ceil_mode, const Tensor& indices);
 RAXIS_API Tensor avg_pool2d_backward(
     const Tensor& grad_output, IntArrayRef input_shape, IntArrayRef kernel_size,
     IntArrayRef stride, IntArrayRef padding, bool ceil_mode, bool count_include_pad,
@@ -68,9 +69,11 @@ RAXIS_API std::tuple<Tensor, Tensor> max_pool2d_with_indices(
     IntArrayRef padding, IntArrayRef dilation, bool ceil_mode);
 
 // grad_input has the shape of the forward input: each output gradient goes
-// to the position of its max
+// to the position of its max. The window geometry lets a kernel gather, for
+// each input position, the outputs whose window covers it (the CUDA one)
 RAXIS_API Tensor max_pool2d_with_indices_backward(
-    const Tensor& grad_output, IntArrayRef input_shape, const Tensor& indices);
+    const Tensor& grad_output, IntArrayRef input_shape, IntArrayRef kernel_size, IntArrayRef stride,
+    IntArrayRef padding, IntArrayRef dilation, bool ceil_mode, const Tensor& indices);
 
 // From: aten/src/ATen/native/AveragePool2d.cpp
 RAXIS_API Tensor avg_pool2d(
