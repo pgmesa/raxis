@@ -175,7 +175,8 @@ void* DispatchStubImpl::get_call_ptr(
         }
 
         case DeviceType::CUDA:
-            RAXIS_CHECK(cuda_dispatch_ptr, "DispatchStub: missing CUDA kernel");
+            RAXIS_CHECK_NOT_IMPLEMENTED(cuda_dispatch_ptr,
+                "This op has no CUDA kernel yet (or raxis was loaded without its CUDA backend)");
             return cuda_dispatch_ptr;
 
         default:

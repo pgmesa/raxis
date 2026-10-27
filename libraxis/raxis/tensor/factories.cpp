@@ -8,6 +8,7 @@
 #include <raxis/core/scalar.h>
 #include <raxis/core/device.h>
 #include <raxis/core/allocator.h>
+#include <raxis/core/device_guard.h>
 
 #include <raxis/util/data_ptr.h>
 #include <raxis/util/exception.h>
@@ -120,6 +121,8 @@ static void set_requires_grad(Tensor& t, const TensorOptions& options) {
 Tensor empty(IntArrayRef shape, TensorOptions options) {
     Dtype dtype = options.dtype();
     size_t nbytes = static_cast<size_t>(compute_numel(shape)) * dtype.itemsize();
+    // The CUDA allocator allocates on the current device
+    DeviceGuard guard(options.device());
     auto data_ptr = get_allocator(options.device().type())->allocate(nbytes);
     Tensor t(std::make_shared<detail::TensorImpl>(
         std::move(data_ptr), nbytes, shape, std::nullopt, dtype)
@@ -133,6 +136,7 @@ Tensor empty_strided(IntArrayRef shape, IntArrayRef strides, TensorOptions optio
         "Shape and strides must have the same number of dimensions");
     Dtype dtype = options.dtype();
     size_t nbytes = compute_numel_from_strides(shape, strides) * dtype.itemsize();
+    DeviceGuard guard(options.device());
     auto data_ptr = get_allocator(options.device().type())->allocate(nbytes);
     Tensor t(std::make_shared<detail::TensorImpl>(
         std::move(data_ptr), nbytes, shape, strides, dtype)

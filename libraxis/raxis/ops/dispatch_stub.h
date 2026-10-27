@@ -110,6 +110,10 @@ struct RegisterCUDADispatch {
 
 } // anonymous namespace
 
+// Run when libraxis_cuda is loaded: fills the stub's CUDA slot
+#define REGISTER_CUDA_DISPATCH(name, fn) \
+    static RegisterCUDADispatch<struct name##_DECLARE_DISPATCH_type> name##__register(name, fn);
+
 
 #define DECLARE_DISPATCH(fn, name)                                                         \
     struct name##_DECLARE_DISPATCH_type : DispatchStub<fn, name##_DECLARE_DISPATCH_type> {  \
