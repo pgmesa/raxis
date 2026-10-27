@@ -11,6 +11,7 @@
 #include <pybind11/pybind11.h>
 
 #include <raxis/raxis.h>
+#include <raxis/core/context.h>
 #include <raxis/core/cuda_hooks.h>
 #include <raxis/core/philox.h>
 #include <raxis/util/build_config.h>
@@ -71,6 +72,12 @@ PYBIND11_MODULE(_C, c) {
         raxis::get_cuda_hooks().reset_peak_memory_stats(static_cast<raxis::DeviceIndex>(index));
     }, py::arg("index"));
     c.def("_cuda_empty_cache", [] { raxis::get_cuda_hooks().empty_cache(); });
+    // raxis.backends: torch.backends.cuda.matmul.allow_tf32 and
+    // torch.backends.cudnn.allow_tf32 (core/context.h)
+    c.def("_get_allow_tf32_matmul", &raxis::allow_tf32_matmul);
+    c.def("_set_allow_tf32_matmul", &raxis::set_allow_tf32_matmul, py::arg("allow"));
+    c.def("_get_allow_tf32_conv", &raxis::allow_tf32_conv);
+    c.def("_set_allow_tf32_conv", &raxis::set_allow_tf32_conv, py::arg("allow"));
     // Function.apply (raxis/autograd/function.py): the history of the outputs
     c.def("_wrap_function_outputs", &raxis::python::wrap_function_outputs,
           py::arg("ctx"), py::arg("backward"), py::arg("name"), py::arg("inputs"),

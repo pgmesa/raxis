@@ -23,7 +23,6 @@ cublasHandle_t current_handle() {
         cublasHandle_t& slot = (*handles)[device];
         if (!slot) {
             RAXIS_CUBLAS_CHECK(cublasCreate(&slot));
-            RAXIS_CUBLAS_CHECK(cublasSetMathMode(slot, CUBLAS_DEFAULT_MATH));
         }
         handle = slot;
     }
@@ -35,6 +34,13 @@ namespace {
 
 cublasOperation_t to_cublas_op(char trans) {
     return (trans == 't' || trans == 'T') ? CUBLAS_OP_T : CUBLAS_OP_N;
+}
+
+// PyTorch sets the mode when it hands out the handle, from the global flag;
+// here each gemm sets it, because a convolution and a matmul read different
+// flags. A host-side setter: no GPU work, no sync
+void set_math_mode(cublasHandle_t handle, bool allow_tf32) {
+    RAXIS_CUBLAS_CHECK(cublasSetMathMode(handle, allow_tf32 ? CUBLAS_TF32_TENSOR_OP_MATH : CUBLAS_DEFAULT_MATH));
 }
 
 int to_int(int64_t value, const char* name) {
@@ -87,10 +93,12 @@ template <> struct CublasFns<double> {
 template <typename T>
 void gemm(char transa, char transb, int64_t m, int64_t n, int64_t k,
           T alpha, const T* a, int64_t lda, const T* b, int64_t ldb,
-          T beta, T* c, int64_t ldc) {
+          T beta, T* c, int64_t ldc, bool allow_tf32) {
     adjust_ld(transa, transb, m, n, k, &lda, &ldb, &ldc);
+    cublasHandle_t handle = current_handle();
+    set_math_mode(handle, allow_tf32);
     RAXIS_CUBLAS_CHECK(CublasFns<T>::gemm(
-        current_handle(), to_cublas_op(transa), to_cublas_op(transb),
+        handle, to_cublas_op(transa), to_cublas_op(transb),
         to_int(m, "m"), to_int(n, "n"), to_int(k, "k"),
         &alpha, a, to_int(lda, "lda"), b, to_int(ldb, "ldb"),
         &beta, c, to_int(ldc, "ldc")));
@@ -100,10 +108,12 @@ template <typename T>
 void bgemm(char transa, char transb, int64_t m, int64_t n, int64_t k,
            T alpha, const T* a, int64_t lda, int64_t stridea,
            const T* b, int64_t ldb, int64_t strideb,
-           T beta, T* c, int64_t ldc, int64_t stridec, int64_t num_batches) {
+           T beta, T* c, int64_t ldc, int64_t stridec, int64_t num_batches, bool allow_tf32) {
     adjust_ld(transa, transb, m, n, k, &lda, &ldb, &ldc);
+    cublasHandle_t handle = current_handle();
+    set_math_mode(handle, allow_tf32);
     RAXIS_CUBLAS_CHECK(CublasFns<T>::bgemm(
-        current_handle(), to_cublas_op(transa), to_cublas_op(transb),
+        handle, to_cublas_op(transa), to_cublas_op(transb),
         to_int(m, "m"), to_int(n, "n"), to_int(k, "k"),
         &alpha, a, to_int(lda, "lda"), stridea, b, to_int(ldb, "ldb"), strideb,
         &beta, c, to_int(ldc, "ldc"), stridec, to_int(num_batches, "num_batches")));
@@ -116,8 +126,10 @@ void gemv(char trans, int64_t m, int64_t n, T alpha, const T* a, int64_t lda,
     if (n <= 1) {
         lda = std::max<int64_t>(m, 1);
     }
+    cublasHandle_t handle = current_handle();
+    set_math_mode(handle, false);
     RAXIS_CUBLAS_CHECK(CublasFns<T>::gemv(
-        current_handle(), to_cublas_op(trans), to_int(m, "m"), to_int(n, "n"),
+        handle, to_cublas_op(trans), to_int(m, "m"), to_int(n, "n"),
         &alpha, a, to_int(lda, "lda"), x, to_int(incx, "incx"), &beta, y, to_int(incy, "incy")));
 }
 
@@ -128,6 +140,7 @@ void gemv(char trans, int64_t m, int64_t n, T alpha, const T* a, int64_t lda,
 template <typename T>
 void dot(int64_t n, const T* x, int64_t incx, const T* y, int64_t incy, T* result) {
     cublasHandle_t handle = current_handle();
+    set_math_mode(handle, false);
     RAXIS_CUBLAS_CHECK(cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_DEVICE));
     const cublasStatus_t status = CublasFns<T>::dot(
         handle, to_int(n, "n"), x, to_int(incx, "incx"), y, to_int(incy, "incy"), result);
@@ -142,12 +155,12 @@ template void gemv<double>(char, int64_t, int64_t, double, const double*, int64_
 template void dot<float>(int64_t, const float*, int64_t, const float*, int64_t, float*);
 template void dot<double>(int64_t, const double*, int64_t, const double*, int64_t, double*);
 template void gemm<float>(char, char, int64_t, int64_t, int64_t, float, const float*, int64_t,
-                          const float*, int64_t, float, float*, int64_t);
+                          const float*, int64_t, float, float*, int64_t, bool);
 template void gemm<double>(char, char, int64_t, int64_t, int64_t, double, const double*, int64_t,
-                           const double*, int64_t, double, double*, int64_t);
+                           const double*, int64_t, double, double*, int64_t, bool);
 template void bgemm<float>(char, char, int64_t, int64_t, int64_t, float, const float*, int64_t, int64_t,
-                           const float*, int64_t, int64_t, float, float*, int64_t, int64_t, int64_t);
+                           const float*, int64_t, int64_t, float, float*, int64_t, int64_t, int64_t, bool);
 template void bgemm<double>(char, char, int64_t, int64_t, int64_t, double, const double*, int64_t, int64_t,
-                            const double*, int64_t, int64_t, double, double*, int64_t, int64_t, int64_t);
+                            const double*, int64_t, int64_t, double, double*, int64_t, int64_t, int64_t, bool);
 
 } // namespace raxis::cuda::blas

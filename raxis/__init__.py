@@ -201,5 +201,19 @@ class enable_grad(_GradModeDecorator):
         _C.set_grad_enabled(self._prev)
 
 
-from raxis import autograd, cuda, nn, optim
+def set_float32_matmul_precision(precision: str) -> None:
+    """torch.set_float32_matmul_precision: "highest" keeps float32 matmuls
+    in float32; "high" and "medium" let them use TF32 on the GPU (the same
+    switch as raxis.backends.cuda.matmul.allow_tf32; torch's "medium" may
+    also use bfloat16, raxis treats it as "high")."""
+    if precision not in ("highest", "high", "medium"):
+        raise RuntimeError(f"Invalid precision: {precision!r}, expected 'highest', 'high' or 'medium'")
+    _C._set_allow_tf32_matmul(precision != "highest")
+
+
+def get_float32_matmul_precision() -> str:
+    return "high" if _C._get_allow_tf32_matmul() else "highest"
+
+
+from raxis import autograd, backends, cuda, nn, optim
 from raxis.serialization import save, load

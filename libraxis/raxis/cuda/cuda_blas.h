@@ -21,8 +21,7 @@ namespace raxis::cuda::blas {
 /// The cuBLAS handle of the current device, bound to the current stream.
 /// One handle per device, created on first use and never destroyed (as the
 /// caching allocator: destroying it at exit could run after the driver is
-/// gone). TF32 stays off: float32 matmuls run in full fp32, the default of
-/// torch.backends.cuda.matmul.allow_tf32.
+/// gone). Its math mode is set by each gemm (see allow_tf32 below).
 /// From: aten/src/ATen/cuda/CublasHandlePool.cpp (getCurrentCUDABlasHandle)
 cublasHandle_t current_handle();
 
@@ -33,7 +32,7 @@ cublasHandle_t current_handle();
 template <typename T>
 void gemm(char transa, char transb, int64_t m, int64_t n, int64_t k,
           T alpha, const T* a, int64_t lda, const T* b, int64_t ldb,
-          T beta, T* c, int64_t ldc);
+          T beta, T* c, int64_t ldc, bool allow_tf32);
 
 /// Column-major y = alpha * op(A) @ x + beta * y
 template <typename T>
@@ -44,11 +43,16 @@ void gemv(char trans, int64_t m, int64_t n, T alpha, const T* a, int64_t lda,
 template <typename T>
 void dot(int64_t n, const T* x, int64_t incx, const T* y, int64_t incy, T* result);
 
+/// allow_tf32: float32 products on the tensor cores with inputs rounded
+/// to TF32 (CUBLAS_TF32_TENSOR_OP_MATH); ignored for double. Callers pass
+/// allow_tf32_matmul() or allow_tf32_conv() (core/context.h).
+///
 /// gemm on num_batches matrices, each `stride` elements after the previous
+/// (a stride of 0 reuses one matrix for every batch)
 template <typename T>
 void bgemm(char transa, char transb, int64_t m, int64_t n, int64_t k,
            T alpha, const T* a, int64_t lda, int64_t stridea,
            const T* b, int64_t ldb, int64_t strideb,
-           T beta, T* c, int64_t ldc, int64_t stridec, int64_t num_batches);
+           T beta, T* c, int64_t ldc, int64_t stridec, int64_t num_batches, bool allow_tf32);
 
 } // namespace raxis::cuda::blas

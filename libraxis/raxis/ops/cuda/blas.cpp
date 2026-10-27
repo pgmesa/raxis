@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cstdint>
 
+#include <raxis/core/context.h>
 #include <raxis/core/device_guard.h>
 #include <raxis/cuda/cuda_blas.h>
 #include <raxis/ops/device_check.h>
@@ -105,7 +106,8 @@ void addmm_kernel_cuda(
         cuda::blas::gemm<scalar_t>(
             transpose_a ? 't' : 'n', transpose_b ? 't' : 'n', m, n, k,
             alpha.to<scalar_t>(), a.data_ptr<scalar_t>(), lda, b.data_ptr<scalar_t>(), ldb,
-            beta_is_zero ? scalar_t(0) : beta.to<scalar_t>(), c.mutable_data_ptr<scalar_t>(), ldc);
+            beta_is_zero ? scalar_t(0) : beta.to<scalar_t>(), c.mutable_data_ptr<scalar_t>(), ldc,
+            allow_tf32_matmul());
     });
     if (!c.is_same(result)) {
         result.copy_(c);
@@ -199,13 +201,14 @@ void baddbmm_kernel_cuda(
             cuda::blas::gemm<scalar_t>(
                 transa, transb, m, n, k, alpha_val,
                 batch1_.data_ptr<scalar_t>(), lda, batch2_.data_ptr<scalar_t>(), ldb,
-                beta_val, result_.mutable_data_ptr<scalar_t>(), ldc);
+                beta_val, result_.mutable_data_ptr<scalar_t>(), ldc, allow_tf32_matmul());
         } else {
             cuda::blas::bgemm<scalar_t>(
                 transa, transb, m, n, k, alpha_val,
                 batch1_.data_ptr<scalar_t>(), lda, batch1_.strides()[0],
                 batch2_.data_ptr<scalar_t>(), ldb, batch2_.strides()[0],
-                beta_val, result_.mutable_data_ptr<scalar_t>(), ldc, result_.strides()[0], num_batches);
+                beta_val, result_.mutable_data_ptr<scalar_t>(), ldc, result_.strides()[0], num_batches,
+                allow_tf32_matmul());
         }
     });
     if (!result_.is_same(result)) {
