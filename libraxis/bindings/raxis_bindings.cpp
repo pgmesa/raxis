@@ -1074,11 +1074,13 @@ PYBIND11_MODULE(_C, c) {
     c.def("tensor", [](py::object data, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
         raxis::Tensor t;
         if (raxis::python::is_numpy_array(data)) {
-            RAXIS_CHECK(!device || device->is_cpu(),
-                "tensor(): only CPU tensors can be created from a numpy array");
-            // tensor() always copies (from_numpy is the aliasing variant)
+            // tensor() always copies (from_numpy is the aliasing variant);
+            // a dtype change happens on the CPU, before the transfer
             raxis::Tensor src = raxis::python::tensor_from_numpy(data.cast<py::array>());
-            t = dtype && *dtype != src.dtype() ? src.to(*dtype) : src.clone();
+            t = src.to(device.value_or(src.device()), dtype.value_or(src.dtype()));
+            if (t.is_same(src)) {
+                t = src.clone();
+            }
         } else {
             t = raxis::python::tensor_from_python(data, dtype, device);
         }
