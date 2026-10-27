@@ -1,10 +1,11 @@
 """
-Trains the shakespeare_char GPT of karpathy/nanoGPT on the CPU, with raxis or
-with PyTorch, to compare loss curves and time per iteration.
+Trains the shakespeare_char GPT of karpathy/nanoGPT with raxis or with
+PyTorch, on the CPU or a GPU, to compare loss curves and time per iteration.
 
-The training loop is nanoGPT's train.py without what only matters on GPUs
-(DDP, torch.compile, autocast, GradScaler) or for logging (wandb). The
-defaults are the CPU run of the nanoGPT README:
+The training loop is nanoGPT's train.py without DDP, torch.compile,
+autocast / GradScaler (raxis has no float16 / bfloat16) and wandb; on a GPU
+it sets TF32 for matmuls and convolutions as nanoGPT does. The defaults are
+the CPU run of the nanoGPT README:
 
     python train.py config/train_shakespeare_char.py --device=cpu --compile=False
         --eval_iters=20 --log_interval=1 --block_size=64 --batch_size=12
@@ -16,6 +17,7 @@ Usage (after python prepare.py):
     python train.py --backend raxis
     python train.py --backend torch
     python train.py --backend raxis --full    # the full shakespeare_char config
+    python train.py --backend raxis --full --device cuda
 
 As nanoGPT, the model is saved to <out_dir>/ckpt.pt whenever the val loss
 improves (out-raxis or out-torch by default), for sample.py. Both backends
@@ -34,6 +36,7 @@ import numpy as np
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--backend", choices=["raxis", "torch"], default="raxis")
+parser.add_argument("--device", default="cpu", help="cpu or cuda")
 parser.add_argument("--full", action="store_true",
                     help="6 layers, n_embd 384, block 256, batch 64, dropout 0.2, 5000 iters")
 parser.add_argument("--max_iters", type=int)
@@ -73,7 +76,12 @@ globals().update(config)
 if args.threads:
     lib.set_num_threads(args.threads)
 lib.manual_seed(args.seed)
-print(f"backend {args.backend}, {lib.get_num_threads()} threads")
+device = args.device
+if device.startswith("cuda"):
+    # As nanoGPT: float32 matmuls and convolutions on TF32 tensor cores
+    lib.backends.cuda.matmul.allow_tf32 = True
+    lib.backends.cudnn.allow_tf32 = True
+print(f"backend {args.backend}, device {device}, {lib.get_num_threads()} threads")
 print(f"tokens per iteration will be: {batch_size * block_size:,}")
 
 data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "shakespeare_char")
@@ -91,13 +99,14 @@ def get_batch(split):
     ix = batch_rng.integers(len(data) - block_size, size=batch_size)
     x = np.stack([data[i:i + block_size] for i in ix]).astype(np.int64)
     y = np.stack([data[i + 1:i + 1 + block_size] for i in ix]).astype(np.int64)
-    return lib.from_numpy(x), lib.from_numpy(y)
+    return lib.from_numpy(x).to(device), lib.from_numpy(y).to(device)
 
 
 model_args = dict(n_layer=n_layer, n_head=n_head, n_embd=n_embd, block_size=block_size,
                   bias=bias, vocab_size=vocab_size, dropout=dropout)
 model = GPT(GPTConfig(**model_args))
-optimizer = model.configure_optimizers(weight_decay, learning_rate, (beta1, beta2), "cpu")
+model.to(device)
+optimizer = model.configure_optimizers(weight_decay, learning_rate, (beta1, beta2), device.split(":")[0])
 
 
 @lib.no_grad()
@@ -130,7 +139,7 @@ out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), args.out_dir 
 os.makedirs(out_dir, exist_ok=True)
 best_val_loss = 1e9
 
-history = {"backend": args.backend, "config": config, "threads": lib.get_num_threads(),
+history = {"backend": args.backend, "device": device, "config": config, "threads": lib.get_num_threads(),
            "train_loss": [], "eval": [], "step_ms": []}
 X, Y = get_batch("train")
 start = time.perf_counter()
