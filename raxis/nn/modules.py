@@ -361,9 +361,10 @@ class Module:
                 param._set_data(fn(param))
                 if param.grad is not None:
                     param.grad._set_data(fn(param.grad))
-        for name, buf in self._buffers.items():
+        # Through __setattr__: a buffer lives in _buffers and as an attribute
+        for name, buf in list(self._buffers.items()):
             if buf is not None:
-                self._buffers[name] = fn(buf)
+                setattr(self, name, fn(buf))
         return self
 
     # From: torch/nn/modules/module.py (Module.to)
