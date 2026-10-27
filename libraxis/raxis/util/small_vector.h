@@ -257,6 +257,14 @@ public:
         return p;
     }
 
+    iterator erase(const_iterator pos) {
+        T* p = data() + (pos - data());
+        std::move(p + 1, data() + size_, p);
+        --size_;
+        data()[size_].~T();
+        return p;
+    }
+
     bool operator==(const SmallVector& other) const {
         return size_ == other.size_ && std::equal(begin(), end(), other.begin());
     }

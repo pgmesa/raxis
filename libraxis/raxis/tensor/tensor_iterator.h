@@ -6,6 +6,7 @@
 #include <optional>
 #include <cassert>
 #include <bitset>
+#include <memory>
 
 #include <raxis/export.h>
 #include <raxis/core/dtype.h>
@@ -397,6 +398,35 @@ public:
     StrideVector get_strides() const;
 
     void narrow(int dim, int64_t start, int64_t size);
+
+    // ---- Used by the CUDA loops ----
+
+    /// Operand `arg` has a single element (stride 0 or size 1 in every dim)
+    bool is_scalar(int64_t arg) const;
+    /// A single-element CPU operand of a CUDA op (a wrapped Python number):
+    /// the CUDA kernel reads it on the host and passes it by value
+    bool is_cpu_scalar(int64_t arg) const;
+
+    /// Value of the single-element operand `arg`, read on the host
+    template <typename T>
+    T scalar_value(int64_t arg) const {
+        const Operand& op = operands_[arg];
+        return op.current_dtype.dispatch_all_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+            return static_cast<T>(*static_cast<const scalar_t*>(op.data));
+        });
+    }
+
+    /// Drops input `arg`, after its value was captured by the kernel
+    void remove_operand(int64_t arg);
+
+    /// Every element offset (in bytes) of every operand fits in int32, so the
+    /// kernels can index with 32-bit integers
+    bool can_use_32bit_indexing() const;
+    /// The dim whose split most reduces the largest offset
+    int get_dim_to_split() const;
+    /// Splits dim `dim` in two: this iterator keeps the second half, the
+    /// returned one covers the first
+    std::unique_ptr<TensorIterator> split(int dim);
 
     void build(TensorIteratorConfig& config);
     void print_state(std::ostream& os = std::cout) const;

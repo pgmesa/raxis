@@ -1,6 +1,8 @@
 
 #include <raxis/tensor/tensor_iterator.h>
 
+#include <cstdlib>
+#include <limits>
 #include <ostream>
 #include <stdexcept>
 #include <type_traits>
@@ -29,6 +31,11 @@
 namespace raxis {
 
 namespace {
+
+// An output is allocated on the device computed for it (the common device)
+TensorOptions output_options(const Operand& op) {
+    return TensorOptions(op.target_dtype).device(op.device);
+}
 
 void get_base_ptrs(char** ptrs, ArrayRef<Operand> operands);
 void get_strides(int64_t* strides, ArrayRef<Operand> operands, int ndim);
@@ -502,7 +509,7 @@ bool TensorIterator::fast_setup() {
     for (int i = 0; i < num_outputs_; i++) {
         Operand& op = operands_[i];
         if (!op.tensor().defined()) {
-            op.set_tensor(MaybeOwned<Tensor>::owned(empty(shape_, op.target_dtype)));
+            op.set_tensor(MaybeOwned<Tensor>::owned(empty(shape_, output_options(op))));
         }
         op.current_dtype = op.target_dtype;
     }
@@ -619,9 +626,9 @@ void TensorIterator::set_output(int64_t output_idx, IntArrayRef shape, IntArrayR
     if (op.tensor().defined()) return;
     
     if (strides.empty()) {
-        op.set_tensor(MaybeOwned<Tensor>::owned(empty(shape, op.target_dtype)));
+        op.set_tensor(MaybeOwned<Tensor>::owned(empty(shape, output_options(op))));
     } else {
-        op.set_tensor(MaybeOwned<Tensor>::owned(empty_strided(shape, strides, op.target_dtype)));
+        op.set_tensor(MaybeOwned<Tensor>::owned(empty_strided(shape, strides, output_options(op))));
     }
 
 }
@@ -782,6 +789,79 @@ void TensorIterator::narrow(int dim, int64_t start, int64_t size) {
     if (size == 1 && !is_reduction_) {
         coalesce_dimensions();
     }
+}
+
+// From: aten/src/ATen/TensorIterator.cpp
+bool TensorIterator::is_scalar(int64_t arg) const {
+    const auto& strides = operands_[arg].stride_bytes;
+    for (int dim = 0; dim < ndim(); dim++) {
+        if (strides[dim] != 0 && shape_[dim] != 1) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool TensorIterator::is_cpu_scalar(int64_t arg) const {
+    return is_scalar(arg) && device(arg).is_cpu();
+}
+
+void TensorIterator::remove_operand(int64_t arg) {
+    RAXIS_INTERNAL_ASSERT(arg >= num_outputs_);
+    operands_.erase(operands_.begin() + arg);
+}
+
+bool TensorIterator::can_use_32bit_indexing() const {
+    constexpr int64_t max_value = std::numeric_limits<int32_t>::max();
+    if (numel() > max_value) {
+        return false;
+    }
+    for (const auto& op : operands_) {
+        int64_t max_offset = 1;
+        for (int dim = 0; dim < ndim(); dim++) {
+            // abs: flip walks with negative strides
+            max_offset += (shape_[dim] - 1) * std::abs(op.stride_bytes[dim]);
+        }
+        if (max_offset > max_value) {
+            return false;
+        }
+    }
+    return true;
+}
+
+int TensorIterator::get_dim_to_split() const {
+    RAXIS_INTERNAL_ASSERT(ndim() >= 1);
+    int64_t max_extent = -1;
+    int dim_to_split = -1;
+    for (int dim = ndim() - 1; dim >= 0; dim--) {
+        const int64_t size = shape_[dim];
+        if (size == 0) {
+            continue;
+        }
+        for (const auto& op : operands_) {
+            const int64_t extent = (size - 1) * std::abs(op.stride_bytes[dim]);
+            if (extent > max_extent) {
+                max_extent = extent;
+                dim_to_split = dim;
+            }
+        }
+    }
+    RAXIS_INTERNAL_ASSERT(max_extent >= 0);
+    return dim_to_split;
+}
+
+std::unique_ptr<TensorIterator> TensorIterator::split(int dim) {
+    RAXIS_INTERNAL_ASSERT(dim >= 0 && dim < ndim() && shape_[dim] >= 2);
+    // Splitting a reduced dim needs the halves to accumulate into the same
+    // output (torch's accumulate_ / final_output_), which the CUDA
+    // reductions will bring
+    RAXIS_INTERNAL_ASSERT(!is_dim_reduced(dim));
+    auto copy = std::make_unique<TensorIterator>(*this);
+    int64_t copy_size = shape_[dim] / 2;
+    int64_t this_size = shape_[dim] - copy_size;
+    copy->narrow(dim, 0, copy_size);
+    narrow(dim, copy_size, this_size);
+    return copy;
 }
 
 
