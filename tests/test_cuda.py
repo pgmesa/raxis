@@ -1,7 +1,11 @@
 """The CUDA backend, compared with PyTorch on CUDA: transfers, the caching
 allocator, the kernels and paths the device-parametrized suites may not
-reach, and training the MNIST MLP on the GPU."""
+reach, TF32, checkpoints of GPU tensors, and training the MNIST MLP, a CNN
+and a small GPT on the GPU."""
 import gc
+import io
+import subprocess
+import sys
 
 import numpy as np
 import pytest
@@ -272,13 +276,10 @@ class TestHostOnlyOps:
     on CUDA tensors instead of dereferencing device pointers (a crash)."""
 
     @pytest.mark.parametrize("op", [
-        lambda x: raxis.tril(x),
         lambda x: raxis.nonzero(x),
-        lambda x: raxis.index_select(x, 0, raxis.tensor([0, 1]).cuda()),
         lambda x: raxis.multinomial(x.abs(), 2),
-        lambda x: raxis.nn.functional.conv2d(x[None, None], x[None, None, :2, :2]),
         lambda x: x.var(),
-        lambda x: raxis.where(x > 0, x, 0.0),
+        lambda x: x.index_add_(0, raxis.tensor([0, 1]).cuda(), x[:2]),
     ])
     def test_raises(self, op):
         x = raxis.from_numpy(make((4, 4))).cuda()
@@ -288,6 +289,157 @@ class TestHostOnlyOps:
     def test_stub_name_in_message(self):
         with pytest.raises(NotImplementedError, match="cumsum_stub"):
             raxis.ones((3,), device="cuda").cumsum(0)
+
+
+class TestKernels:
+    """GPU paths the shared suites do not reach."""
+
+    def test_conv_chunks(self):
+        # Images whose columns exceed the 128 MB budget are unfolded in
+        # several chunks; the weight gradient accumulates over them. Checked
+        # against float64: each weight gradient sums 24500 float32 products,
+        # and torch's cuDNN float32 result is ~100x further from it than
+        # raxis's
+        x = make((5, 64, 70, 70))
+        w = make((8, 64, 3, 3), seed=1)
+        out = []
+        for lib, dtype in ((raxis, "float32"), (torch, "float64")):
+            xd = lib.tensor(x.astype(dtype), device="cuda", requires_grad=True)
+            wd = lib.tensor(w.astype(dtype), device="cuda", requires_grad=True)
+            y = lib.nn.functional.conv2d(xd, wd, padding=1)
+            y.backward(lib.ones_like(y))
+            out.append([np.array(t.detach().cpu(), dtype=np.float64) for t in (y, xd.grad, wd.grad)])
+        for r, ref in zip(*out):
+            np.testing.assert_allclose(r, ref, rtol=0, atol=1e-6 * np.abs(ref).max())
+
+    def test_index_select(self):
+        x = make((5, 7, 3))
+        idx = np.array([6, 0, 2, 2])
+        for dim in range(3):
+            i = idx[idx < x.shape[dim]]
+            r = raxis.tensor(x, device="cuda").index_select(dim, raxis.tensor(i, device="cuda"))
+            t = torch.tensor(x, device="cuda").index_select(dim, torch.tensor(i, device="cuda"))
+            check(r, t, atol=0)
+
+    @pytest.mark.parametrize("op", ["tril", "triu"])
+    @pytest.mark.parametrize("k", [-2, 0, 3])
+    def test_triangular(self, op, k):
+        x = make((2, 5, 6))
+        r = getattr(raxis.tensor(x, device="cuda"), op)(k)
+        t = getattr(torch.tensor(x, device="cuda"), op)(k)
+        check(r, t, atol=0)
+        # A transposed matrix is read through its strides
+        r = getattr(raxis.tensor(x[0], device="cuda").transpose(0, 1), op)(k)
+        t = getattr(torch.tensor(x[0], device="cuda").transpose(0, 1), op)(k)
+        check(r, t, atol=0)
+
+    def test_masked_fill_where_clamp(self):
+        x = make((4, 9))
+        x[1, 2] = np.nan
+        r, t = raxis.tensor(x, device="cuda"), torch.tensor(x, device="cuda")
+        check(r.masked_fill(r > 0, -1.0), t.masked_fill(t > 0, -1.0), atol=0)
+        check(raxis.where(r > 0, r, r * 2), torch.where(t > 0, t, t * 2), atol=0)
+        check(r.clamp(-1, 1), t.clamp(-1, 1), atol=0)
+        check(r.clamp(min=0.5), t.clamp(min=0.5), atol=0)
+        lo, hi = make((4, 9), seed=1) - 2, make((4, 9), seed=2) + 2
+        check(r.clamp(raxis.tensor(lo, device="cuda"), raxis.tensor(hi, device="cuda")),
+              t.clamp(torch.tensor(lo, device="cuda"), torch.tensor(hi, device="cuda")), atol=0)
+
+    @pytest.mark.parametrize("args", [(10,), (0, 1, 0.1), (-3, 7, 2)])
+    def test_arange(self, args):
+        # Same values as torch on each device: CUDA computes in float, the CPU in double
+        check(raxis.arange(*args, device="cuda"), torch.arange(*args, device="cuda"), atol=0, rtol=0)
+
+
+class TestTF32:
+
+    def test_defaults(self):
+        # As torch: matmuls in full float32, convolutions in TF32. A fresh
+        # process, since conftest.py turns the convolution flag off
+        code = ("import raxis; b = raxis.backends; "
+                "print(b.cuda.matmul.allow_tf32, b.cudnn.allow_tf32, raxis.get_float32_matmul_precision())")
+        out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+        assert out.stdout.split() == ["False", "True", "highest"]
+
+    def test_flags(self):
+        matmul = raxis.backends.cuda.matmul
+        try:
+            matmul.allow_tf32 = True
+            assert matmul.allow_tf32 and raxis.get_float32_matmul_precision() == "high"
+            raxis.set_float32_matmul_precision("highest")
+            assert not matmul.allow_tf32
+            with pytest.raises(AttributeError):
+                matmul.allow_tf33 = True
+            with pytest.raises(RuntimeError, match="Invalid precision"):
+                raxis.set_float32_matmul_precision("low")
+        finally:
+            matmul.allow_tf32 = False
+
+    def test_matmul_and_conv_use_tf32(self):
+        a, b = make((256, 256)), make((256, 256), seed=1)
+        x, w = make((4, 32, 16, 16)), make((32, 32, 3, 3), seed=1)
+        ra, rb = raxis.tensor(a, device="cuda"), raxis.tensor(b, device="cuda")
+        rx, rw = raxis.tensor(x, device="cuda"), raxis.tensor(w, device="cuda")
+        exact_mm = (ra @ rb).cpu().numpy()
+        exact_conv = raxis.nn.functional.conv2d(rx, rw).cpu().numpy()
+        try:
+            raxis.backends.cuda.matmul.allow_tf32 = True
+            raxis.backends.cudnn.allow_tf32 = True
+            tf32_mm = (ra @ rb).cpu().numpy()
+            tf32_conv = raxis.nn.functional.conv2d(rx, rw).cpu().numpy()
+            # float64 never uses TF32
+            exact64 = (ra.to(raxis.float64) @ rb.to(raxis.float64)).cpu().numpy()
+        finally:
+            raxis.backends.cuda.matmul.allow_tf32 = False
+            raxis.backends.cudnn.allow_tf32 = False
+        for exact, tf32 in [(exact_mm, tf32_mm), (exact_conv, tf32_conv)]:
+            assert not np.array_equal(exact, tf32)
+            # 10-bit mantissa inputs: about 1e-3 relative error per product
+            np.testing.assert_allclose(tf32, exact, rtol=0, atol=2e-3 * np.abs(exact).max())
+        np.testing.assert_allclose(exact64, a.astype(np.float64) @ b, rtol=1e-12)
+
+
+class TestSerialization:
+
+    def test_roundtrip(self):
+        x = raxis.tensor(make((3, 4)), device="cuda")
+        state = {"x": x, "view": x[1:], "cpu": raxis.ones((2,))}
+        buf = io.BytesIO()
+        raxis.save(state, buf)
+        buf.seek(0)
+        loaded = raxis.load(buf)
+        # Back on the device each one was saved from, views still sharing
+        assert loaded["x"].is_cuda and loaded["view"].is_cuda and not loaded["cpu"].is_cuda
+        np.testing.assert_array_equal(loaded["x"].cpu().numpy(), x.cpu().numpy())
+        loaded["x"][1, 0] = 5.0
+        assert loaded["view"][0, 0].item() == 5.0
+        for map_location in ["cpu", raxis.device("cpu"), {"cuda:0": "cpu"}]:
+            buf.seek(0)
+            assert not raxis.load(buf, map_location=map_location)["x"].is_cuda
+        buf.seek(0)
+        assert raxis.load(buf, map_location="cuda")["cpu"].is_cuda
+
+    def test_torch_reads_and_writes(self):
+        data = make((5,))
+        buf = io.BytesIO()
+        raxis.save({"x": raxis.tensor(data, device="cuda")}, buf)
+        buf.seek(0)
+        t = torch.load(buf, weights_only=True)["x"]
+        assert t.is_cuda
+        np.testing.assert_array_equal(t.cpu().numpy(), data)
+        buf = io.BytesIO()
+        torch.save({"x": torch.tensor(data, device="cuda")}, buf)
+        buf.seek(0)
+        r = raxis.load(buf)["x"]
+        assert r.is_cuda
+        np.testing.assert_array_equal(r.cpu().numpy(), data)
+
+    def test_cuda_storage_has_no_buffer(self):
+        # numpy would read GPU memory from the host (pybind11 turns the
+        # error into a BufferError)
+        storage = raxis.ones((3,), device="cuda").untyped_storage()
+        with pytest.raises(BufferError):
+            memoryview(storage)
 
 
 class TestCachingAllocator:
@@ -448,6 +600,13 @@ class TestModule:
         optimizer.step()
         assert not np.array_equal(params[0].cpu().numpy(), before)
 
+    def test_buffers_move_with_the_model(self):
+        bn = raxis.nn.BatchNorm2d(3).cuda()
+        assert bn.running_mean.is_cuda and bn.num_batches_tracked.is_cuda
+        assert bn.running_mean is bn._buffers["running_mean"]
+        bn(raxis.ones((2, 3, 4, 4), device="cuda"))
+        assert bn.num_batches_tracked.item() == 1
+
     def test_grads_move_with_the_model(self):
         model = raxis.nn.Linear(3, 2)
         model(raxis.ones((1, 3))).sum().backward()
@@ -489,3 +648,87 @@ class TestTraining:
         cpu, _ = self.train("cpu", 10)
         gpu, _ = self.train("cuda", 10)
         np.testing.assert_allclose(gpu, cpu, rtol=1e-4)
+
+
+def cnn():
+    nn = raxis.nn
+    return nn.Sequential(
+        nn.Conv2d(1, 8, 3, padding=1), nn.BatchNorm2d(8), nn.ReLU(), nn.MaxPool2d(2),
+        nn.Conv2d(8, 16, 3, padding=1), nn.BatchNorm2d(16), nn.ReLU(), nn.AvgPool2d(2),
+        nn.Flatten(), nn.Dropout(0.25), nn.Linear(16 * 7 * 7, 10))
+
+
+class TinyGPT(raxis.nn.Module):
+    """The layers of nanoGPT's model: embeddings, layer norm, causal
+    attention, GELU MLP and a tied output head."""
+
+    def __init__(self, vocab=17, block=12, dim=16, heads=2):
+        super().__init__()
+        nn = raxis.nn
+        self.heads = heads
+        self.wte = nn.Embedding(vocab, dim)
+        self.wpe = nn.Embedding(block, dim)
+        self.ln1, self.ln2, self.ln_f = nn.LayerNorm(dim), nn.LayerNorm(dim), nn.LayerNorm(dim)
+        self.attn = nn.Linear(dim, 3 * dim)
+        self.proj = nn.Linear(dim, dim)
+        self.mlp = nn.Sequential(nn.Linear(dim, 4 * dim), nn.GELU(), nn.Linear(4 * dim, dim))
+        self.head = nn.Linear(dim, vocab, bias=False)
+        self.head.weight = self.wte.weight
+
+    def forward(self, idx):
+        B, T = idx.shape
+        pos = raxis.arange(0, T, device=idx.device)
+        x = self.wte(idx) + self.wpe(pos)
+        q, k, v = self.attn(self.ln1(x)).split(x.shape[-1], dim=2)
+        q, k, v = (t.view(B, T, self.heads, -1).transpose(1, 2) for t in (q, k, v))
+        y = raxis.nn.functional.scaled_dot_product_attention(q, k, v, is_causal=True)
+        x = x + self.proj(y.transpose(1, 2).contiguous().view(B, T, -1))
+        x = x + self.mlp(self.ln2(x))
+        return self.head(self.ln_f(x))
+
+
+class TestTrainingModels:
+
+    def train(self, make_model, make_batch, loss_fn, device, steps, optimizer_cls):
+        raxis.manual_seed(0)
+        model = make_model().to(device)
+        optimizer = optimizer_cls(model.parameters())
+        rng = np.random.default_rng(0)
+        losses, allocated = [], []
+        for _ in range(steps):
+            x, y = (raxis.tensor(a, device=device) for a in make_batch(rng))
+            loss = loss_fn(model(x), y)
+            optimizer.zero_grad(set_to_none=True)
+            loss.backward()
+            raxis.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            optimizer.step()
+            losses.append(loss.item())
+            if device == "cuda":
+                allocated.append(raxis.cuda.memory_allocated())
+        return losses, allocated
+
+    def cnn_run(self, device, steps):
+        return self.train(
+            cnn, lambda rng: (rng.random((32, 1, 28, 28), dtype=np.float32), rng.integers(0, 10, 32)),
+            raxis.nn.functional.cross_entropy, device, steps,
+            lambda params: raxis.optim.SGD(params, lr=0.05, momentum=0.9))
+
+    def gpt_run(self, device, steps):
+        def batch(rng):
+            tokens = rng.integers(0, 17, (4, 13))
+            return tokens[:, :-1], tokens[:, 1:]
+        return self.train(
+            TinyGPT, batch, lambda logits, y: raxis.nn.functional.cross_entropy(logits.view(-1, 17), y.reshape(-1)),
+            device, steps, lambda params: raxis.optim.AdamW(params, lr=1e-2))
+
+    @pytest.mark.parametrize("model", ["cnn", "gpt"])
+    def test_matches_cpu(self, model):
+        run = getattr(self, f"{model}_run")
+        cpu, _ = run("cpu", 8)
+        gpu, _ = run("cuda", 8)
+        np.testing.assert_allclose(gpu, cpu, rtol=1e-4)
+
+    @pytest.mark.parametrize("model", ["cnn", "gpt"])
+    def test_memory_stays_flat(self, model):
+        _, allocated = getattr(self, f"{model}_run")("cuda", 20)
+        assert len(set(allocated[5:])) == 1, allocated

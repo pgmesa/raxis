@@ -125,5 +125,3 @@ class TestRoundTrip:
     def test_errors(self):
         with pytest.raises(RuntimeError, match="not a zip checkpoint"):
             raxis.load(io.BytesIO(b"not a checkpoint"))
-        with pytest.raises(ValueError, match="only has CPU tensors"):
-            raxis.load(io.BytesIO(saved_by_raxis({})), map_location="cuda")

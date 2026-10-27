@@ -480,14 +480,14 @@ CONV2D_CASES = [
 ]
 
 
-def conv_both(x_shape, w_shape, bias, dtype, conv_r, conv_t, **kwargs):
+def conv_both(x_shape, w_shape, bias, dtype, conv_r, conv_t, device="cpu", **kwargs):
     """Runs the convolution and its backward on both sides; returns the
     (raxis, torch) pairs of output, input grad, weight grad and bias grad."""
     x = randf_centered(*x_shape, seed=1).astype(dtype)
     w = randf_centered(*w_shape, seed=2).astype(dtype)
-    r_x, t_x = make_grad_pair(x)
-    r_w, t_w = make_grad_pair(w)
-    r_b, t_b = make_grad_pair(randf_centered(w_shape[0], seed=3).astype(dtype)) if bias else (None, None)
+    r_x, t_x = make_grad_pair(x, device)
+    r_w, t_w = make_grad_pair(w, device)
+    r_b, t_b = make_grad_pair(randf_centered(w_shape[0], seed=3).astype(dtype), device) if bias else (None, None)
     r_out = conv_r(r_x, r_w, r_b, **kwargs)
     t_out = conv_t(t_x, t_w, t_b, **kwargs)
     grad = randf_centered(*t_out.shape, seed=4).astype(dtype)
@@ -503,8 +503,8 @@ class TestConvolution:
 
     @pytest.mark.parametrize("x_shape, w_shape, kwargs", CONV2D_CASES)
     @pytest.mark.parametrize("bias", [True, False])
-    def test_conv2d(self, x_shape, w_shape, kwargs, bias):
-        pairs = conv_both(x_shape, w_shape, bias, np.float64, raxis.conv2d, F.conv2d, **kwargs)
+    def test_conv2d(self, x_shape, w_shape, kwargs, bias, device):
+        pairs = conv_both(x_shape, w_shape, bias, np.float64, raxis.conv2d, F.conv2d, device, **kwargs)
         for (r, t), name in zip(pairs, ["output", "input grad", "weight grad", "bias grad"]):
             check_match(r, t, atol=1e-10, rtol=1e-10, context=f"conv2d {name}")
 
@@ -512,8 +512,8 @@ class TestConvolution:
         ((20, 3, 12, 12), (8, 3, 5, 5), dict(padding=2)),
         ((4, 16, 10, 10), (16, 4, 3, 3), dict(groups=4, stride=2)),
     ])
-    def test_conv2d_float32(self, x_shape, w_shape, kwargs):
-        pairs = conv_both(x_shape, w_shape, True, np.float32, raxis.conv2d, F.conv2d, **kwargs)
+    def test_conv2d_float32(self, x_shape, w_shape, kwargs, device):
+        pairs = conv_both(x_shape, w_shape, True, np.float32, raxis.conv2d, F.conv2d, device, **kwargs)
         for (r, t), name in zip(pairs, ["output", "input grad", "weight grad", "bias grad"]):
             # The weight grad sums thousands of products and reaches ~1e3: the
             # rounding error scales with that, and the gemm kernel MKL picks
@@ -526,22 +526,22 @@ class TestConvolution:
         ((2, 4, 9), (4, 2, 3), dict(groups=2, dilation=2)),
         ((3, 2, 7), (3, 2, 1), {}),
     ])
-    def test_conv1d(self, x_shape, w_shape, kwargs):
-        pairs = conv_both(x_shape, w_shape, True, np.float64, raxis.conv1d, F.conv1d, **kwargs)
+    def test_conv1d(self, x_shape, w_shape, kwargs, device):
+        pairs = conv_both(x_shape, w_shape, True, np.float64, raxis.conv1d, F.conv1d, device, **kwargs)
         for (r, t), name in zip(pairs, ["output", "input grad", "weight grad", "bias grad"]):
             check_match(r, t, atol=1e-10, rtol=1e-10, context=f"conv1d {name}")
 
-    def test_unbatched(self):
+    def test_unbatched(self, device):
         for x_shape, w_shape, conv_r, conv_t in [
             ((3, 9, 9), (2, 3, 3, 3), raxis.conv2d, F.conv2d),
             ((3, 9), (2, 3, 3), raxis.conv1d, F.conv1d),
         ]:
-            pairs = conv_both(x_shape, w_shape, True, np.float64, conv_r, conv_t)
+            pairs = conv_both(x_shape, w_shape, True, np.float64, conv_r, conv_t, device)
             for r, t in pairs:
                 check_match(r, t, atol=1e-10, rtol=1e-10, context=f"unbatched {x_shape}")
 
-    def test_empty_batch(self):
-        pairs = conv_both((0, 2, 5, 5), (3, 2, 3, 3), True, np.float64, raxis.conv2d, F.conv2d)
+    def test_empty_batch(self, device):
+        pairs = conv_both((0, 2, 5, 5), (3, 2, 3, 3), True, np.float64, raxis.conv2d, F.conv2d, device)
         for r, t in pairs:
             check_match(r, t, context="empty batch")
 
@@ -608,8 +608,8 @@ AVG_POOL_CASES = [
 ]
 
 
-def pool_both(x, r_fn, t_fn, **kwargs):
-    r_x, t_x = make_grad_pair(x)
+def pool_both(x, r_fn, t_fn, device="cpu", **kwargs):
+    r_x, t_x = make_grad_pair(x, device)
     r_out, t_out = r_fn(r_x, **kwargs), t_fn(t_x, **kwargs)
     backward_both(r_out, t_out)
     return (r_out, t_out), (r_x.grad, t_x.grad)
@@ -618,40 +618,40 @@ def pool_both(x, r_fn, t_fn, **kwargs):
 class TestMaxPool2d:
 
     @pytest.mark.parametrize("x_shape, kwargs", MAX_POOL_CASES)
-    def test_forward_backward(self, x_shape, kwargs):
-        out, grad = pool_both(randf_centered(*x_shape), raxis.max_pool2d, F.max_pool2d, **kwargs)
+    def test_forward_backward(self, x_shape, kwargs, device):
+        out, grad = pool_both(randf_centered(*x_shape), raxis.max_pool2d, F.max_pool2d, device, **kwargs)
         check_match(*out, atol=0, context="max_pool2d")
         check_match(*grad, atol=0, context="max_pool2d grad")
 
-    def test_overlapping_windows_accumulate(self):
+    def test_overlapping_windows_accumulate(self, device):
         # stride < kernel: an element can be the max of several windows
         x = np.zeros((1, 1, 5, 5), dtype=np.float32)
         x[0, 0, 2, 2] = 1.0
-        out, grad = pool_both(x, raxis.max_pool2d, F.max_pool2d, kernel_size=3, stride=1)
+        out, grad = pool_both(x, raxis.max_pool2d, F.max_pool2d, device, kernel_size=3, stride=1)
         check_match(*grad, atol=0, context="overlapping grad")
 
-    def test_return_indices(self):
-        r, t = make_pair(randf_centered(2, 3, 9, 7))
+    def test_return_indices(self, device):
+        r, t = make_pair(randf_centered(2, 3, 9, 7), device)
         r_out, r_idx = raxis.max_pool2d_with_indices(r, 3, stride=2, padding=1)
         t_out, t_idx = F.max_pool2d(t, 3, stride=2, padding=1, return_indices=True)
         check_match(r_out, t_out, atol=0)
         check_match(r_idx, t_idx, atol=0)
         assert r_idx.dtype == raxis.int64
 
-    def test_nan_propagates(self):
+    def test_nan_propagates(self, device):
         x = randf_centered(1, 1, 4, 4)
         x[0, 0, 1, 2] = np.nan
-        r, t = make_pair(x)
+        r, t = make_pair(x, device)
         check_match(raxis.max_pool2d(r, 2), F.max_pool2d(t, 2), atol=0)
 
     @pytest.mark.parametrize("dtype", ["int32", "int64", "float64"])
-    def test_dtypes(self, dtype):
+    def test_dtypes(self, dtype, device):
         data = (randf_centered(2, 2, 6, 6) * 100).astype(dtype)
-        r, t = make_pair(data)
+        r, t = make_pair(data, device)
         check_match(raxis.max_pool2d(r, 3, stride=2), F.max_pool2d(t, 3, stride=2), atol=0)
 
-    def test_empty_batch(self):
-        r, t = make_pair(np.zeros((0, 2, 4, 4), dtype=np.float32))
+    def test_empty_batch(self, device):
+        r, t = make_pair(np.zeros((0, 2, 4, 4), dtype=np.float32), device)
         check_match(raxis.max_pool2d(r, 2), F.max_pool2d(t, 2))
 
     def test_grad_fn(self):
@@ -677,8 +677,8 @@ class TestMaxPool2d:
 class TestAvgPool2d:
 
     @pytest.mark.parametrize("x_shape, kwargs", AVG_POOL_CASES)
-    def test_forward_backward(self, x_shape, kwargs):
-        out, grad = pool_both(randf_centered(*x_shape), raxis.avg_pool2d, F.avg_pool2d, **kwargs)
+    def test_forward_backward(self, x_shape, kwargs, device):
+        out, grad = pool_both(randf_centered(*x_shape), raxis.avg_pool2d, F.avg_pool2d, device, **kwargs)
         check_match(*out, atol=1e-6, context="avg_pool2d")
         check_match(*grad, atol=1e-6, context="avg_pool2d grad")
 
@@ -702,16 +702,16 @@ class TestAvgPool2d:
 BATCH_NORM_SHAPES = [(8, 4, 5, 5), (6, 3, 7), (64, 5), (3, 5), (2, 3, 1, 1)]
 
 
-def batch_norm_both(shape, training, affine=True, running=True, seed=0):
+def batch_norm_both(shape, training, affine=True, running=True, seed=0, device="cpu"):
     rng = np.random.RandomState(seed)
     channels = shape[1]
     x = (rng.randn(*shape) * 3 + 1).astype(np.float32)
-    r_x, t_x = make_grad_pair(x)
-    r_w, t_w = make_grad_pair(rng.randn(channels).astype(np.float32)) if affine else (None, None)
-    r_b, t_b = make_grad_pair(rng.randn(channels).astype(np.float32)) if affine else (None, None)
+    r_x, t_x = make_grad_pair(x, device)
+    r_w, t_w = make_grad_pair(rng.randn(channels).astype(np.float32), device) if affine else (None, None)
+    r_b, t_b = make_grad_pair(rng.randn(channels).astype(np.float32), device) if affine else (None, None)
     if running:
-        r_rm, t_rm = make_pair(rng.randn(channels).astype(np.float32))
-        r_rv, t_rv = make_pair((rng.rand(channels) + 0.5).astype(np.float32))
+        r_rm, t_rm = make_pair(rng.randn(channels).astype(np.float32), device)
+        r_rv, t_rv = make_pair((rng.rand(channels) + 0.5).astype(np.float32), device)
     else:
         r_rm = t_rm = r_rv = t_rv = None
     r_out = raxis.nn.functional.batch_norm(r_x, r_rm, r_rv, r_w, r_b, training, 0.1, 1e-5)
@@ -731,13 +731,13 @@ class TestBatchNorm:
 
     @pytest.mark.parametrize("shape", BATCH_NORM_SHAPES)
     @pytest.mark.parametrize("training", [True, False])
-    def test_forward_backward(self, shape, training):
-        for name, (r, t) in batch_norm_both(shape, training).items():
+    def test_forward_backward(self, shape, training, device):
+        for name, (r, t) in batch_norm_both(shape, training, device=device).items():
             check_match(r, t, atol=1e-5, context=f"batch_norm {shape} training={training} {name}")
 
     @pytest.mark.parametrize("shape", [(8, 4, 5, 5), (64, 5)])
-    def test_no_affine_no_running_stats(self, shape):
-        for name, (r, t) in batch_norm_both(shape, True, affine=False, running=False).items():
+    def test_no_affine_no_running_stats(self, shape, device):
+        for name, (r, t) in batch_norm_both(shape, True, affine=False, running=False, device=device).items():
             check_match(r, t, atol=1e-5, context=f"batch_norm {name}")
 
     def test_float64(self):
@@ -786,16 +786,20 @@ EMBEDDING_CASES = [
 class TestEmbedding:
 
     @pytest.mark.parametrize("num, dim, shape, padding_idx, freq", EMBEDDING_CASES)
-    def test_forward_backward(self, num, dim, shape, padding_idx, freq):
+    def test_forward_backward(self, num, dim, shape, padding_idx, freq, device):
         rng = np.random.RandomState(0)
-        r_w, t_w = make_grad_pair(rng.randn(num, dim).astype(np.float32))
-        idx = rng.randint(0, num, size=shape)
-        r_out = raxis.nn.functional.embedding(raxis.tensor(idx), r_w, padding_idx, scale_grad_by_freq=freq)
-        t_out = F.embedding(torch.tensor(idx), t_w, padding_idx, scale_grad_by_freq=freq)
+        r_w, t_w = make_grad_pair(rng.randn(num, dim).astype(np.float32), device)
+        idx = rng.randint(0, num, size=shape).astype(np.int64)
+        r_out = raxis.nn.functional.embedding(raxis.tensor(idx, device=device), r_w, padding_idx,
+                                              scale_grad_by_freq=freq)
+        t_out = F.embedding(torch.tensor(idx, device=device), t_w, padding_idx, scale_grad_by_freq=freq)
         check_match(r_out, t_out, atol=0)
         backward_both(r_out, t_out)
-        # Each row is summed by one thread in index order: same order as torch
-        check_match(r_w.grad, t_w.grad, atol=0)
+        # Each row is summed in index order: the order of torch's CPU kernel
+        # and of its CUDA feature kernel. With scale_grad_by_freq or more than
+        # 3072 indices torch's CUDA kernel sorts the indices instead
+        exact = device == "cpu" or (not freq and idx.size <= 3072)
+        check_match(r_w.grad, t_w.grad, atol=0 if exact else 1e-6)
         assert r_out.grad_fn.name() == "EmbeddingBackward0"
 
     def test_int32_indices_and_float64(self):
@@ -836,7 +840,7 @@ class TestEmbedding:
 # SCALED DOT PRODUCT ATTENTION
 # ===========================================================================
 
-def sdpa_both(q_shape, kv_len=None, seed=0, dtype=np.float32, heads_last=False, **kwargs):
+def sdpa_both(q_shape, kv_len=None, seed=0, dtype=np.float32, heads_last=False, device="cpu", **kwargs):
     """Output and q/k/v gradients of raxis and torch for the same inputs;
     numpy arrays in kwargs become tensors of each library. heads_last
     stores q, k and v as [B, L, H, E] and passes the [B, H, L, E] view, as
@@ -850,13 +854,15 @@ def sdpa_both(q_shape, kv_len=None, seed=0, dtype=np.float32, heads_last=False, 
     results = []
     for lib in (raxis, torch):
         if heads_last:
-            leaves = [lib.tensor(np.ascontiguousarray(a.swapaxes(1, 2)), requires_grad=True) for a in (q, k, v)]
+            leaves = [lib.tensor(np.ascontiguousarray(a.swapaxes(1, 2)), device=device, requires_grad=True)
+                      for a in (q, k, v)]
             tensors = [t.transpose(1, 2) for t in leaves]
         else:
-            leaves = tensors = [lib.tensor(a, requires_grad=True) for a in (q, k, v)]
-        kw = {name: lib.tensor(val) if isinstance(val, np.ndarray) else val for name, val in kwargs.items()}
+            leaves = tensors = [lib.tensor(a, device=device, requires_grad=True) for a in (q, k, v)]
+        kw = {name: lib.tensor(val, device=device) if isinstance(val, np.ndarray) else val
+              for name, val in kwargs.items()}
         out = lib.nn.functional.scaled_dot_product_attention(*tensors, **kw)
-        out.backward(lib.tensor(grad))
+        out.backward(lib.tensor(grad, device=device))
         results.append([out] + [t.grad for t in leaves])
     return results
 
@@ -865,10 +871,12 @@ class TestScaledDotProductAttention:
 
     @pytest.mark.parametrize("q_shape, kv_len", [((2, 4, 16, 8), None), ((3, 7, 5), 9), ((1, 2, 64, 32), None)])
     @pytest.mark.parametrize("is_causal", [False, True])
-    def test_forward_backward(self, q_shape, kv_len, is_causal):
-        # 4-D inputs run the flash kernel in both libraries, 3-D the math path
-        r, t = sdpa_both(q_shape, kv_len, is_causal=is_causal)
-        assert r[0].grad_fn.name() == t[0].grad_fn.name()
+    def test_forward_backward(self, q_shape, kv_len, is_causal, device):
+        # On the CPU 4-D inputs run the flash kernel in both libraries and 3-D
+        # ones the math path; on CUDA raxis always takes the math path
+        r, t = sdpa_both(q_shape, kv_len, is_causal=is_causal, device=device)
+        if device == "cpu":
+            assert r[0].grad_fn.name() == t[0].grad_fn.name()
         for r_val, t_val in zip(r, t):
             check_match(r_val, t_val, atol=1e-5)
 
@@ -907,7 +915,7 @@ class TestScaledDotProductAttention:
         for r_val, t_val in zip(*grads):
             check_match(r_val, t_val, atol=1e-5)
 
-    def test_masks_and_scale(self):
+    def test_masks_and_scale(self, device):
         T = 10
         rng = np.random.RandomState(1)
         cases = [
@@ -919,7 +927,7 @@ class TestScaledDotProductAttention:
             dict(attn_mask=rng.randn(1, 3, 1, T).astype(np.float32)),
         ]
         for kwargs in cases:
-            for r, t in zip(*sdpa_both((2, 3, T, 4), **kwargs)):
+            for r, t in zip(*sdpa_both((2, 3, T, 4), device=device, **kwargs)):
                 check_match(r, t, atol=1e-5)
 
     def test_dropout(self):
@@ -949,12 +957,12 @@ LAYER_NORM_CASES = [
 ]
 
 
-def layer_norm_both(shape, normalized_shape, dtype=np.float32, affine=True, seed=0):
+def layer_norm_both(shape, normalized_shape, dtype=np.float32, affine=True, seed=0, device="cpu"):
     rng = np.random.RandomState(seed)
     x = (rng.randn(*shape) * 3 + 2).astype(dtype)
-    r_x, t_x = make_grad_pair(x)
-    r_w, t_w = make_grad_pair(rng.randn(*normalized_shape).astype(dtype)) if affine else (None, None)
-    r_b, t_b = make_grad_pair(rng.randn(*normalized_shape).astype(dtype)) if affine else (None, None)
+    r_x, t_x = make_grad_pair(x, device)
+    r_w, t_w = make_grad_pair(rng.randn(*normalized_shape).astype(dtype), device) if affine else (None, None)
+    r_b, t_b = make_grad_pair(rng.randn(*normalized_shape).astype(dtype), device) if affine else (None, None)
     r_out = raxis.nn.functional.layer_norm(r_x, normalized_shape, r_w, r_b)
     t_out = F.layer_norm(t_x, normalized_shape, t_w, t_b)
     grad = rng.randn(*shape).astype(dtype)
@@ -971,12 +979,12 @@ class TestLayerNorm:
 
     @pytest.mark.parametrize("shape, normalized_shape", LAYER_NORM_CASES)
     @pytest.mark.parametrize("affine", [True, False])
-    def test_forward_backward(self, shape, normalized_shape, affine):
-        for name, (r, t) in layer_norm_both(shape, normalized_shape, affine=affine).items():
+    def test_forward_backward(self, shape, normalized_shape, affine, device):
+        for name, (r, t) in layer_norm_both(shape, normalized_shape, affine=affine, device=device).items():
             check_match(r, t, atol=1e-4, context=f"layer_norm {shape} {name}")
 
-    def test_float64(self):
-        for name, (r, t) in layer_norm_both((3, 5, 37), (5, 37), dtype=np.float64).items():
+    def test_float64(self, device):
+        for name, (r, t) in layer_norm_both((3, 5, 37), (5, 37), dtype=np.float64, device=device).items():
             check_match(r, t, atol=1e-10, context=f"layer_norm float64 {name}")
 
     def test_weight_without_bias(self):
