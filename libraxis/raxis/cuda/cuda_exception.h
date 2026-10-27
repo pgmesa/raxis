@@ -17,3 +17,21 @@
 // threads, too much shared memory) only shows up in cudaGetLastError. Errors
 // inside the kernel surface later, at the next synchronizing call
 #define RAXIS_CUDA_KERNEL_LAUNCH_CHECK() RAXIS_CUDA_CHECK(cudaGetLastError())
+
+#if defined(__CUDACC__)
+#include <cstdio>
+
+// From: c10/macros/Macros.h (CUDA_KERNEL_ASSERT)
+// An exception cannot leave a kernel: a failed check prints and traps, which
+// aborts the kernel and leaves the CUDA context in an error state, as
+// PyTorch's device-side asserts (the process cannot use the GPU afterwards).
+// Unlike assert(), it stays in release builds
+#define RAXIS_CUDA_KERNEL_ASSERT(cond)                                        \
+    do {                                                                      \
+        if (!(cond)) {                                                        \
+            printf("%s:%d: device-side assertion `%s` failed.\n",             \
+                   __FILE__, __LINE__, #cond);                                \
+            __trap();                                                         \
+        }                                                                     \
+    } while (0)
+#endif

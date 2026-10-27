@@ -3,6 +3,9 @@
 #include <array>
 #include <cstdint>
 
+#include <raxis/util/host_device.h>
+
+
 namespace raxis {
 
 // Philox4x32-10 (Salmon et al., "Parallel random numbers: as easy as 1, 2, 3",
@@ -29,7 +32,7 @@ inline constexpr uint32_t kPhilox10B = 0xBB67AE85;
 inline constexpr uint32_t kPhiloxSA = 0xD2511F53;
 inline constexpr uint32_t kPhiloxSB = 0xCD9E8D57;
 
-inline PhiloxBlock philox_round(const PhiloxBlock& ctr, uint32_t key0, uint32_t key1) {
+RAXIS_HOST_DEVICE inline PhiloxBlock philox_round(const PhiloxBlock& ctr, uint32_t key0, uint32_t key1) {
     const uint64_t product0 = static_cast<uint64_t>(kPhiloxSA) * ctr[0];
     const uint64_t product1 = static_cast<uint64_t>(kPhiloxSB) * ctr[2];
     const auto hi0 = static_cast<uint32_t>(product0 >> 32);
@@ -44,7 +47,7 @@ inline PhiloxBlock philox_round(const PhiloxBlock& ctr, uint32_t key0, uint32_t 
 
 } // namespace detail
 
-inline PhiloxBlock philox4x32_10(PhiloxBlock ctr, uint64_t key) {
+RAXIS_HOST_DEVICE inline PhiloxBlock philox4x32_10(PhiloxBlock ctr, uint64_t key) {
     auto key0 = static_cast<uint32_t>(key);
     auto key1 = static_cast<uint32_t>(key >> 32);
     for (int round = 0; round < 9; ++round) {
@@ -56,7 +59,7 @@ inline PhiloxBlock philox4x32_10(PhiloxBlock ctr, uint64_t key) {
 }
 
 // Block `counter` of the stream of `key` (the upper 64 counter bits are 0)
-inline PhiloxBlock philox4x32_10(uint64_t counter, uint64_t key) {
+RAXIS_HOST_DEVICE inline PhiloxBlock philox4x32_10(uint64_t counter, uint64_t key) {
     return philox4x32_10(
         PhiloxBlock{static_cast<uint32_t>(counter), static_cast<uint32_t>(counter >> 32), 0, 0}, key);
 }
