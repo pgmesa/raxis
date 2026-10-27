@@ -26,7 +26,7 @@ using detail::StorageImpl;
 // The raw bytes behind one or more tensors (a view shares its base's
 // storage). Exposed for serialization: raxis.save writes each storage once
 // and every tensor as (storage, offset, shape, strides), as torch does.
-// The buffer protocol gives numpy a zero-copy view of the bytes.
+// The buffer protocol gives numpy a zero-copy view of the bytes (CPU only).
 inline void bind_untyped_storage(py::module_& c) {
     py::class_<StorageImpl, std::shared_ptr<StorageImpl>>(c, "UntypedStorage", py::buffer_protocol())
         .def(py::init([](int64_t nbytes) {
@@ -45,6 +45,9 @@ inline void bind_untyped_storage(py::module_& c) {
             return reinterpret_cast<uintptr_t>(&self);
         })
         .def_buffer([](StorageImpl& self) {
+            // numpy would read device memory from the host
+            RAXIS_CHECK(self.device().is_cpu(),
+                "UntypedStorage: only a CPU storage exposes its bytes, this one is on ", self.device());
             const auto nbytes = static_cast<py::ssize_t>(self.nbytes());
             return py::buffer_info(self.mutable_data(), 1, py::format_descriptor<uint8_t>::format(), 1,
                                    {nbytes}, {py::ssize_t(1)});

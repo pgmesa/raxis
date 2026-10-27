@@ -18,9 +18,12 @@ reads raxis checkpoints (also with weights_only=True) and raxis.load reads
 torch's. Loading is restricted to an allowlist of globals, as
 torch.load(weights_only=True): a checkpoint cannot run arbitrary code.
 
+Each storage records its device ("cpu", "cuda:0"); its bytes are always
+written from a CPU copy. load puts every storage back on its device, or
+where map_location says, as torch.load.
+
 Not supported: the legacy (non-zip) format from before torch 1.6, dtypes
 raxis does not have (float16, bfloat16, ...), whole pickled Modules.
-Storages saved from a GPU are loaded on the CPU.
 """
 
 import io
@@ -75,12 +78,33 @@ _STORAGE_GLOBALS = {dtype: _TorchGlobal("torch", name) for dtype, name in _STORA
 
 class _StorageRef:
     """A storage as a tensor's pickle references it: becomes the persistent
-    id ("storage", torch.<Type>Storage, key, "cpu", numel)."""
+    id ("storage", torch.<Type>Storage, key, location, numel)."""
 
-    def __init__(self, key: str, dtype_name: str, numel: int):
+    def __init__(self, key: str, dtype_name: str, location: str, numel: int):
         self.key = key
         self.dtype_name = dtype_name
+        self.location = location
         self.numel = numel
+
+
+# torch's location strings: "cpu", "cuda:0"
+def _location(device) -> str:
+    return "cpu" if device.type == "cpu" else f"{device.type}:{device.index}"
+
+
+def _storage_bytes(storage: UntypedStorage):
+    """The bytes of a storage on any device, as a buffer on the CPU."""
+    if storage.device.type == "cpu":
+        return memoryview(storage)
+    as_bytes = _tensor_from_storage(storage, raxis.uint8, 0, (storage.nbytes(),), (1,))
+    return memoryview(as_bytes.cpu().untyped_storage())
+
+
+def _storage_to(storage: UntypedStorage, device) -> UntypedStorage:
+    if device.type == "cpu":
+        return storage
+    as_bytes = _tensor_from_storage(storage, raxis.uint8, 0, (storage.nbytes(),), (1,))
+    return as_bytes.to(device).untyped_storage()
 
 
 # From: torch/serialization.py (_save, persistent_id) and torch/_tensor.py (_reduce_ex_internal)
@@ -113,7 +137,7 @@ class _TorchPickler(pickle._Pickler):
     def persistent_id(self, obj: Any):
         if type(obj) is not _StorageRef:
             return None
-        return ("storage", _STORAGE_GLOBALS[obj.dtype_name], obj.key, "cpu", obj.numel)
+        return ("storage", _STORAGE_GLOBALS[obj.dtype_name], obj.key, obj.location, obj.numel)
 
     def reducer_override(self, obj: Any):
         if not isinstance(obj, Tensor):
@@ -129,7 +153,7 @@ class _TorchPickler(pickle._Pickler):
         if self._dtypes.setdefault(key, dtype_name) != dtype_name:
             raise RuntimeError("Cannot save multiple tensors or storages that view the same data as different types")
         self.storages[key] = storage
-        ref = _StorageRef(key, dtype_name, storage.nbytes() // obj.dtype.itemsize)
+        ref = _StorageRef(key, dtype_name, _location(storage.device), storage.nbytes() // obj.dtype.itemsize)
         args = (ref, obj.storage_offset(), tuple(obj.shape), tuple(obj.strides), obj.requires_grad, OrderedDict())
         return _REBUILD_TENSOR_V2, args
 
@@ -181,7 +205,7 @@ def _write_archive(file: BinaryIO, archive_name: str, data_pkl: bytes, storages:
         record(".storage_alignment", str(STORAGE_ALIGNMENT).encode())
         record("byteorder", sys.byteorder.encode())
         for key, storage in storages.items():
-            record(f"data/{key}", memoryview(storage))
+            record(f"data/{key}", _storage_bytes(storage))
         record("version", b"3\n")
 
 
@@ -243,11 +267,12 @@ _SAFE_GLOBALS = {
 
 class _TorchUnpickler(pickle.Unpickler):
 
-    def __init__(self, file: BinaryIO, zf: zipfile.ZipFile, prefix: str, weights_only: bool):
+    def __init__(self, file: BinaryIO, zf: zipfile.ZipFile, prefix: str, weights_only: bool, map_location):
         super().__init__(file)
         self.zf = zf
         self.prefix = prefix
         self.weights_only = weights_only
+        self.map_location = map_location
         self.storages: dict[str, UntypedStorage] = {}
 
     def find_class(self, module: str, name: str):
@@ -281,17 +306,32 @@ class _TorchUnpickler(pickle.Unpickler):
                 raise RuntimeError(f"raxis.load: storage {key} has {len(data)} bytes, expected {expected}")
             storage = UntypedStorage(len(data))
             memoryview(storage)[:] = data
+            storage = _storage_to(storage, _map_location(location, self.map_location))
             self.storages[key] = storage
         return _TypedStorage(storage, storage_type.dtype)
 
 
+# From: torch/serialization.py (_get_restore_location)
+def _map_location(location: str, map_location):
+    if map_location is None:
+        target = location
+    elif isinstance(map_location, dict):
+        target = map_location.get(location, location)
+    else:
+        target = map_location
+    device = raxis.device(target) if isinstance(target, str) else target
+    if device.type == "cuda" and not raxis.cuda.is_available():
+        raise RuntimeError(f"raxis.load: the checkpoint has tensors on {location} but CUDA is not available; "
+                           "load them with map_location='cpu'")
+    return device
+
+
 def load(f, map_location=None, weights_only: bool = True) -> Any:
     """Loads an object saved by raxis.save or torch.save from the path or
-    binary file f. Every tensor is loaded on the CPU (map_location may only
-    be None or "cpu"). weights_only=False also allows non-torch globals,
-    which can run arbitrary code: only for trusted files."""
-    if map_location is not None and str(map_location) != "cpu":
-        raise ValueError(f"raxis.load: raxis only has CPU tensors, got map_location={map_location!r}")
+    binary file f. Tensors go back to the device they were saved from, or
+    to map_location: a device (or its name) for all of them, or a dict
+    {saved location: device name}. weights_only=False also allows non-torch
+    globals, which can run arbitrary code: only for trusted files."""
     start = f.tell() if hasattr(f, "tell") else None
     if not zipfile.is_zipfile(f):
         raise RuntimeError("raxis.load: not a zip checkpoint (the legacy format from before torch 1.6 "
@@ -306,4 +346,4 @@ def load(f, map_location=None, weights_only: bool = True) -> Any:
         if f"{prefix}byteorder" in names and zf.read(f"{prefix}byteorder").decode() != sys.byteorder:
             raise RuntimeError("raxis.load: the checkpoint was saved with another byte order")
         with zf.open(f"{prefix}data.pkl") as data_pkl:
-            return _TorchUnpickler(data_pkl, zf, prefix, weights_only).load()
+            return _TorchUnpickler(data_pkl, zf, prefix, weights_only, map_location).load()
