@@ -185,7 +185,7 @@ def scaled_dot_product_attention(query: Tensor, key: Tensor, value: Tensor, attn
     scaling_factor = math.sqrt(abs(scale))
     q = query * (-scaling_factor if scale < 0 else scaling_factor)
     if is_causal:
-        attn_mask = raxis.ones((query.size(-2), key.size(-2)), dtype=raxis.bool).tril()
+        attn_mask = raxis.ones((query.size(-2), key.size(-2)), dtype=raxis.bool, device=query.device).tril()
     attn = q.matmul(key.transpose(-2, -1) * scaling_factor)
     if attn_mask is not None:
         if attn_mask.dtype == raxis.bool:
