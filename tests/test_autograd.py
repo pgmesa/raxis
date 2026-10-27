@@ -1574,14 +1574,14 @@ class TestRetainGraph:
         t_out.backward(retain_graph=True)
         check_match(r.grad, t.grad, context="first backward")
 
-        r_grad1 = np.array(r.grad).copy()
+        r_grad1 = np.array(r.grad.cpu()).copy()
         r.grad = None
         t.grad = None
 
         r_out.backward(retain_graph=True)
         t_out.backward(retain_graph=True)
         check_match(r.grad, t.grad, context="second backward")
-        np.testing.assert_allclose(np.array(r.grad), r_grad1, atol=1e-6,
+        np.testing.assert_allclose(np.array(r.grad.cpu()), r_grad1, atol=1e-6,
                                     err_msg="Two backward passes should give same grad")
 
     def test_backward_without_retain_graph_twice_errors(self, device):

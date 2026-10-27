@@ -137,7 +137,7 @@ class TestSoftmax:
         data = np.array([[1000.0, 0.0, -1000.0], [88.0, 89.0, 90.0]], dtype=np.float32)
         r, t = make_pair(data, device)
         r_out = getattr(raxis, op)(r, 1)
-        assert np.isfinite(np.array(r_out)).all()
+        assert np.isfinite(np.array(r_out.cpu())).all()
         check_match(r_out, getattr(torch, op)(t, 1), context=f"{op} large")
 
     # A non-uniform incoming gradient (after sum() the softmax gradient is ~0).
@@ -148,8 +148,8 @@ class TestSoftmax:
     def test_backward_random_grad(self, op, shape, dim, device):
         r, t = make_grad_pair(randf_centered(*shape), device)
         w = randf_centered(*shape, seed=7)
-        (getattr(raxis, op)(r, dim) * raxis.from_numpy(w)).sum().backward()
-        (getattr(torch, op)(t, dim) * torch.from_numpy(w)).sum().backward()
+        (getattr(raxis, op)(r, dim) * raxis.from_numpy(w).to(device)).sum().backward()
+        (getattr(torch, op)(t, dim) * torch.from_numpy(w).to(device)).sum().backward()
         check_match(r.grad, t.grad, atol=1e-5, context=f"{op} grad")
 
     def test_float64(self, device):
