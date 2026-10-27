@@ -1,4 +1,6 @@
 
+import os
+
 import pytest
 import raxis
 import torch
@@ -10,8 +12,11 @@ import numpy as np
 # ---------------------------------------------------------------------------
 
 def get_devices():
+    # Opt-in until most ops have CUDA kernels: an op without one raises, but
+    # a CPU loop that reads a CUDA pointer would crash the whole run.
+    # tests/test_cuda.py covers what the CUDA backend has
     devices = ["cpu"]
-    if hasattr(raxis, "cuda") and hasattr(raxis.cuda, "is_available") and raxis.cuda.is_available():
+    if os.environ.get("RAXIS_TEST_CUDA") == "1" and raxis.cuda.is_available():
         devices.append("cuda")
     return devices
 
