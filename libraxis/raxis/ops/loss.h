@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include <raxis/export.h>
+#include <raxis/ops/dispatch_stub.h>
 #include <raxis/tensor/tensor.h>
 
 
@@ -42,15 +43,16 @@ RAXIS_API Tensor binary_cross_entropy_with_logits(
 // The backward kernel, differentiable in grad (NllLossBackwardBackward0)
 RAXIS_API Tensor nll_loss_backward(
     const Tensor& grad, const Tensor& self, const Tensor& target, const Tensor& weight,
-    Reduction reduction, int64_t ignore_index, double total_weight);
+    Reduction reduction, int64_t ignore_index, const Tensor& total_weight);
 
 namespace ops {
 
 struct NllLossResult {
     Tensor output;
     // Sum of the weights of the targets not equal to ignore_index (their
-    // count without weight): the mean divisor. Holds a scalar_t value.
-    double total_weight;
+    // count without weight): the mean divisor. A 0-d tensor on self's
+    // device, as in PyTorch, so a GPU forward never waits to read it.
+    Tensor total_weight;
 };
 
 // self: [N, C] or [C] log-probabilities, target: [N] or [] class indices,
@@ -62,8 +64,19 @@ RAXIS_API NllLossResult nll_loss_forward(
 
 RAXIS_API Tensor nll_loss_backward(
     const Tensor& grad, const Tensor& self, const Tensor& target, const Tensor& weight,
-    Reduction reduction, int64_t ignore_index, double total_weight);
+    Reduction reduction, int64_t ignore_index, const Tensor& total_weight);
 
 } // namespace ops
+
+// The kernels, on contiguous tensors: output is [N] for reduction None on
+// a 2-D input, else 0-d; grad_input comes zeroed.
+using nll_loss_forward_fn = void(*)(
+    const Tensor& output, const Tensor& total_weight, const Tensor& self, const Tensor& target,
+    const Tensor& weight, Reduction reduction, int64_t ignore_index);
+using nll_loss_backward_fn = void(*)(
+    const Tensor& grad_input, const Tensor& grad, const Tensor& target, const Tensor& weight,
+    const Tensor& total_weight, Reduction reduction, int64_t ignore_index);
+DECLARE_DISPATCH(nll_loss_forward_fn, nll_loss_forward_stub);
+DECLARE_DISPATCH(nll_loss_backward_fn, nll_loss_backward_stub);
 
 } // namespace raxis

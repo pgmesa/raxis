@@ -70,10 +70,6 @@ void check_target(int64_t cls, int64_t num_classes) {
         "nll_loss: target ", cls, " is out of bounds for ", num_classes, " classes");
 }
 
-} // namespace
-
-namespace ops {
-
 // From: aten/src/ATen/native/LossNLL.cpp (nll_loss_out_frame)
 //
 // The reduced loss is summed in scalar_t with a cascade: element b goes into
@@ -81,30 +77,21 @@ namespace ops {
 // (j = 0..7). Each partial sum adds up values of similar magnitude, so the
 // rounding error grows with log(n) instead of n, without a double
 // accumulator. p >= 4 grows with the batch so that 8 levels always suffice.
-NllLossResult nll_loss_forward(
-    const Tensor& self, const Tensor& target, const Tensor& weight,
-    Reduction reduction, int64_t ignore_index
+void nll_loss_forward_cpu(
+    const Tensor& output, const Tensor& total_weight, const Tensor& self, const Tensor& target,
+    const Tensor& weight, Reduction reduction, int64_t ignore_index
 ) {
-    check_cpu_only("nll_loss", self, target, weight);
-    check_nll_loss_inputs(self, target, weight);
     const int64_t batch_size = self.ndim() == 2 ? self.shape()[0] : 1;
     const int64_t num_classes = self.shape()[self.ndim() - 1];
-
-    const Tensor input = self.contiguous();
-    const Tensor target_c = target.contiguous();
-    const Tensor weight_c = weight.defined() ? weight.contiguous() : weight;
-    const int64_t* t = target_c.data_ptr<int64_t>();
-
+    const int64_t* t = target.data_ptr<int64_t>();
     const bool per_sample = reduction == Reduction::None && self.ndim() == 2;
-    Tensor output = per_sample
-        ? empty({batch_size}, self.options())
-        : empty({}, self.options());
 
-    double total_weight = 0.0;
     self.dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
-        const scalar_t* x = input.data_ptr<scalar_t>();
-        const scalar_t* w = weight_c.defined() ? weight_c.data_ptr<scalar_t>() : nullptr;
+        const scalar_t* x = self.data_ptr<scalar_t>();
+        const scalar_t* w = weight.defined() ? weight.data_ptr<scalar_t>() : nullptr;
         scalar_t* out = output.mutable_data_ptr<scalar_t>();
+        scalar_t* tw = total_weight.mutable_data_ptr<scalar_t>();
+        *tw = 0;
 
         if (per_sample) {
             parallel_for(0, batch_size, 0, [&](int64_t begin, int64_t end) {
@@ -168,35 +155,28 @@ NllLossResult nll_loss_forward(
             loss /= weight_total;
         }
         out[0] = loss;
-        total_weight = static_cast<double>(weight_total);
+        *tw = weight_total;
     });
-    return {output, total_weight};
 }
 
 // d loss / d self is zero everywhere except at [i, target[i]], where it is
 // -weight[target[i]] * grad_i (grad / total_weight for the mean)
 // From: aten/src/ATen/native/LossNLL.cpp (nll_loss_backward_out_frame)
-Tensor nll_loss_backward(
-    const Tensor& grad, const Tensor& self, const Tensor& target, const Tensor& weight,
-    Reduction reduction, int64_t ignore_index, double total_weight
+void nll_loss_backward_cpu(
+    const Tensor& grad_input, const Tensor& grad, const Tensor& target, const Tensor& weight,
+    const Tensor& total_weight, Reduction reduction, int64_t ignore_index
 ) {
-    check_cpu_only("nll_loss_backward", grad, self, target, weight);
-    const int64_t batch_size = self.ndim() == 2 ? self.shape()[0] : 1;
-    const int64_t num_classes = self.shape()[self.ndim() - 1];
-    const bool per_sample = reduction == Reduction::None && self.ndim() == 2;
+    const int64_t batch_size = grad_input.ndim() == 2 ? grad_input.shape()[0] : 1;
+    const int64_t num_classes = grad_input.shape()[grad_input.ndim() - 1];
+    const bool per_sample = reduction == Reduction::None && grad_input.ndim() == 2;
+    const int64_t* t = target.data_ptr<int64_t>();
 
-    Tensor grad_input = zeros(self.shape(), self.options());
-    const Tensor target_c = target.contiguous();
-    const Tensor grad_c = grad.contiguous();
-    const Tensor weight_c = weight.defined() ? weight.contiguous() : weight;
-    const int64_t* t = target_c.data_ptr<int64_t>();
-
-    self.dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+    grad_input.dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
         scalar_t* gi = grad_input.mutable_data_ptr<scalar_t>();
-        const scalar_t* g = grad_c.data_ptr<scalar_t>();
-        const scalar_t* w = weight_c.defined() ? weight_c.data_ptr<scalar_t>() : nullptr;
+        const scalar_t* g = grad.data_ptr<scalar_t>();
+        const scalar_t* w = weight.defined() ? weight.data_ptr<scalar_t>() : nullptr;
         const scalar_t reduced_grad = reduction == Reduction::Mean
-            ? -(g[0] / static_cast<scalar_t>(total_weight))
+            ? -(g[0] / *total_weight.data_ptr<scalar_t>())
             : -g[0];
 
         parallel_for(0, batch_size, 0, [&](int64_t begin, int64_t end) {
@@ -208,6 +188,37 @@ Tensor nll_loss_backward(
             }
         });
     });
+}
+
+} // namespace
+
+namespace ops {
+
+NllLossResult nll_loss_forward(
+    const Tensor& self, const Tensor& target, const Tensor& weight,
+    Reduction reduction, int64_t ignore_index
+) {
+    check_nll_loss_inputs(self, target, weight);
+    check_same_device("nll_loss", self, target, weight);
+    const int64_t batch_size = self.ndim() == 2 ? self.shape()[0] : 1;
+    const bool per_sample = reduction == Reduction::None && self.ndim() == 2;
+    Tensor output = per_sample ? empty({batch_size}, self.options()) : empty({}, self.options());
+    Tensor total_weight = empty({}, self.options());
+    nll_loss_forward_stub(
+        self.device().type(), output, total_weight, self.contiguous(), target.contiguous(),
+        weight.defined() ? weight.contiguous() : weight, reduction, ignore_index);
+    return {output, total_weight};
+}
+
+Tensor nll_loss_backward(
+    const Tensor& grad, const Tensor& self, const Tensor& target, const Tensor& weight,
+    Reduction reduction, int64_t ignore_index, const Tensor& total_weight
+) {
+    check_same_device("nll_loss_backward", self, grad, target, weight, total_weight);
+    Tensor grad_input = zeros(self.shape(), self.options());
+    nll_loss_backward_stub(
+        self.device().type(), grad_input, grad.contiguous(), target.contiguous(),
+        weight.defined() ? weight.contiguous() : weight, total_weight, reduction, ignore_index);
     return grad_input;
 }
 
@@ -243,5 +254,11 @@ Tensor binary_cross_entropy_with_logits(const Tensor& self, const Tensor& target
     Tensor loss = relu(self) - self * target + log1p(exp(-abs(self)));
     return apply_reduction(loss, reduction);
 }
+
+DEFINE_DISPATCH(nll_loss_forward_stub);
+DEFINE_DISPATCH(nll_loss_backward_stub);
+
+REGISTER_ALL_CPU_DISPATCH(nll_loss_forward_stub, &nll_loss_forward_cpu)
+REGISTER_ALL_CPU_DISPATCH(nll_loss_backward_stub, &nll_loss_backward_cpu)
 
 } // namespace raxis

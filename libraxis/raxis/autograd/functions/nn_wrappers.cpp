@@ -361,7 +361,7 @@ Tensor native_dropout_backward(const Tensor& grad, const Tensor& mask, double sc
 
 Tensor nll_loss_backward(
     const Tensor& grad, const Tensor& self, const Tensor& target, const Tensor& weight,
-    Reduction reduction, int64_t ignore_index, double total_weight
+    Reduction reduction, int64_t ignore_index, const Tensor& total_weight
 ) {
     Tensor result = ops::nll_loss_backward(grad, self, target, weight, reduction, ignore_index, total_weight);
     if (autograd::requires_autograd(grad, self)) {

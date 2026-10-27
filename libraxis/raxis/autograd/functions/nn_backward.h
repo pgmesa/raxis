@@ -71,7 +71,7 @@ class RAXIS_API NllLossBackward0 : public Node {
 public:
     NllLossBackward0(
         const Tensor& self, const Tensor& target, const Tensor& weight,
-        Reduction reduction, int64_t ignore_index, double total_weight);
+        Reduction reduction, int64_t ignore_index, const Tensor& total_weight);
     std::string name() const override;
     TensorList apply(const TensorList& grads) override;
 
@@ -79,9 +79,9 @@ private:
     SavedVariable self_{this, "self"};
     SavedVariable target_{this, "target"};
     SavedVariable weight_{this, "weight"};
+    SavedVariable total_weight_{this, "total_weight"};
     Reduction reduction_;
     int64_t ignore_index_;
-    double total_weight_;
 };
 
 
