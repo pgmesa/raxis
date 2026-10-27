@@ -3,6 +3,7 @@
 #include <type_traits>
 
 #include <raxis/export.h>
+#include <raxis/util/host_device.h>
 
 #include <raxis/ops/dispatch_stub.h>
 
@@ -19,7 +20,7 @@ template <
     typename T, std::enable_if_t<std::is_integral_v<T> 
         && !std::is_signed_v<T> 
             && !std::is_same_v<T, bool>, int> = 0>
-inline T powi(T a, T b) {
+RAXIS_HOST_DEVICE inline T powi(T a, T b) {
     T result = 1;
     while (b) {
         if (b & 1) {
@@ -35,7 +36,7 @@ template <
     typename T, std::enable_if_t<std::is_integral_v<T> 
         && std::is_signed_v<T> 
             && !std::is_same_v<T, bool>, int> = 0>
-inline T powi(T a, T b) {
+RAXIS_HOST_DEVICE inline T powi(T a, T b) {
     if (b < 0) {
         if (a == 1) {
             return 1;
