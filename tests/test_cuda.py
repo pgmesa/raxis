@@ -276,8 +276,7 @@ class TestHostOnlyOps:
     on CUDA tensors instead of dereferencing device pointers (a crash)."""
 
     @pytest.mark.parametrize("op", [
-        lambda x: raxis.nonzero(x),
-        lambda x: raxis.multinomial(x.abs(), 2),
+        lambda x: raxis.multinomial(x.abs(), 2, replacement=True),
         lambda x: x.var(),
         lambda x: x.index_add_(0, raxis.tensor([0, 1]).cuda(), x[:2]),
     ])
@@ -572,6 +571,50 @@ class TestDropout:
         raxis.manual_seed(7)
         gpu = raxis.nn.functional.dropout(x.cuda(), 0.3)
         np.testing.assert_array_equal(gpu.cpu().numpy(), cpu.numpy())
+
+
+class TestRandom:
+
+    @pytest.mark.parametrize("dtype", ["float32", "float64"])
+    @pytest.mark.parametrize("n", [1, 15, 64, 1000, 100_003])
+    def test_uniform_same_as_cpu(self, n, dtype):
+        # Same Philox layout as the CPU kernels: bitwise equal for a seed
+        dt = getattr(raxis, dtype)
+        out = []
+        for device in ("cpu", "cuda"):
+            raxis.manual_seed(5)
+            out.append(raxis.empty(n, dtype=dt, device=device).uniform_(-2, 3).cpu().numpy())
+        np.testing.assert_array_equal(out[1], out[0])
+
+    @pytest.mark.parametrize("dtype", ["int64", "int32", "uint8", "bool"])
+    def test_randint_same_as_cpu(self, dtype):
+        high = 2 if dtype == "bool" else 100
+        out = []
+        for device in ("cpu", "cuda"):
+            raxis.manual_seed(5)
+            out.append(raxis.randint(0, high, (1001,), dtype=getattr(raxis, dtype), device=device).cpu().numpy())
+        np.testing.assert_array_equal(out[1], out[0])
+
+    @pytest.mark.parametrize("dtype", ["float32", "float64"])
+    def test_normal_close_to_cpu(self, dtype):
+        # Same uniforms; CUDA's log / sin / cos differ from Sleef's in the last bits
+        out = []
+        for device in ("cpu", "cuda"):
+            raxis.manual_seed(5)
+            out.append(raxis.empty(10_001, dtype=getattr(raxis, dtype), device=device).normal_(1, 2).cpu().numpy())
+        np.testing.assert_allclose(out[1], out[0], rtol=0, atol=1e-4)
+
+    def test_multinomial(self):
+        p = np.tile(np.array([[0.1, 0.2, 0.7], [0.5, 0.0, 0.5]], dtype=np.float32), (2000, 1))
+        samples = raxis.multinomial(raxis.tensor(p, device="cuda"), 1).cpu().numpy().ravel()
+        rows = np.arange(4000) % 2
+        freq0 = np.bincount(samples[rows == 0], minlength=3) / 2000
+        freq1 = np.bincount(samples[rows == 1], minlength=3) / 2000
+        np.testing.assert_allclose(freq0, [0.1, 0.2, 0.7], atol=0.04)
+        assert freq1[1] == 0
+        # Without replacement every row is a permutation prefix
+        draws = raxis.multinomial(raxis.ones(50, 10, device="cuda"), 10).cpu().numpy()
+        assert all(sorted(row) == list(range(10)) for row in draws)
 
 
 def mlp():

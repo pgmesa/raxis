@@ -112,7 +112,6 @@ Tensor& randint_(Tensor& self, int64_t low, int64_t high) {
 // From: aten/src/ATen/native/Distributions.cpp (multinomial_out) and
 // cpu/MultinomialKernel.cpp (multinomial_with_replacement_apply)
 Tensor multinomial(const Tensor& self, int64_t num_samples, bool replacement) {
-    check_cpu_only("multinomial", self);
     RAXIS_CHECK(self.ndim() > 0 && self.ndim() <= 2, "prob_dist must be 1 or 2 dim");
     RAXIS_CHECK(self.dtype().is_floating(),
         "multinomial only supports floating-point dtypes for input, got: ", self.dtype());
@@ -126,7 +125,7 @@ Tensor multinomial(const Tensor& self, int64_t num_samples, bool replacement) {
     const int64_t n_dist = self.ndim() == 2 ? self.shape()[0] : 1;
     DimVector result_shape = self.ndim() == 1 ? DimVector{num_samples} : DimVector{n_dist, num_samples};
     if (n_dist == 0) {
-        return empty(result_shape, TensorOptions().dtype(dtypes::Int64));
+        return empty(result_shape, self.options().dtype(dtypes::Int64));
     }
     // torch checks this asynchronously on this path and row by row in the
     // kernel on the other; NaN fails both comparisons
@@ -152,6 +151,10 @@ Tensor multinomial(const Tensor& self, int64_t num_samples, bool replacement) {
         }
         return std::get<1>(ops::topk(keys, num_samples));
     }
+
+    // The Gumbel path above is made of ops with CUDA kernels; this loop reads
+    // the probabilities on the host
+    check_cpu_only("multinomial with replacement", self);
 
     // With replacement: inverse transform sampling, a binary search of each
     // uniform draw in the row's normalized cumulative distribution. The
