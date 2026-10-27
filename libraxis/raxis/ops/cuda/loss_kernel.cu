@@ -1,9 +1,12 @@
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <limits>
 
 #include <raxis/core/device_guard.h>
 #include <raxis/cuda/cuda_exception.h>
 #include <raxis/cuda/cuda_functions.h>
+#include <raxis/ops/cuda/block_reduce.cuh>
 #include <raxis/ops/loss.h>
 #include <raxis/tensor/tensor.h>
 
@@ -12,30 +15,24 @@
 // From: aten/src/ATen/native/cuda/Loss.cu (nll_loss_forward_reduce_cuda_kernel_2d,
 // nll_loss_forward_no_reduce_cuda_kernel, nll_loss_backward_*_cuda_kernel)
 //
-// A classifier batch has a few hundred samples at most, so the reduced loss
-// is one warp, as in PyTorch: each lane sums a strided share of the samples
-// and the warp adds the 32 partial sums with shuffles. The result and the
-// total weight stay on the GPU (0-d tensors), so neither the forward nor the
-// backward waits for the GPU; .item() on the loss is the only sync.
+// The reduced loss is one block, as in PyTorch: each thread sums a strided
+// share of the samples and the block adds the partial sums. The block grows
+// with the batch (about 16 samples per thread, 32 to 1024 threads): each
+// sample is a dependent pair of loads (target, then input[i, target]), so a
+// single warp over the 16384 targets of a language model batch is latency
+// bound. The result and the total weight stay on the GPU (0-d tensors), so
+// neither the forward nor the backward waits for the GPU; .item() on the
+// loss is the only sync.
 
 namespace raxis {
 namespace {
 
-constexpr int kNllThreads = 32;
 constexpr int kThreads = 256;
 
-__device__ inline float warp_sum(float value) {
-    for (int offset = kNllThreads / 2; offset > 0; offset /= 2) {
-        value += __shfl_down_sync(0xffffffff, value, offset);
-    }
-    return value;
-}
-
-__device__ inline double warp_sum(double value) {
-    for (int offset = kNllThreads / 2; offset > 0; offset /= 2) {
-        value += __shfl_down_sync(0xffffffff, value, offset);
-    }
-    return value;
+// From: aten/src/ATen/native/cuda/Loss.cu (nll_loss_threads)
+int nll_loss_threads(int64_t batch_size) {
+    const auto log2 = static_cast<int64_t>(std::round(std::log2(static_cast<double>(batch_size / 16))));
+    return static_cast<int>(std::clamp<int64_t>(int64_t{1} << std::max<int64_t>(log2, 0), 32, 1024));
 }
 
 template <typename scalar_t>
@@ -43,9 +40,10 @@ __global__ void nll_loss_forward_reduce_kernel(
     scalar_t* output, scalar_t* total_weight, const scalar_t* input, const int64_t* target,
     const scalar_t* weight, int64_t batch_size, int64_t num_classes, bool mean, int64_t ignore_index
 ) {
+    __shared__ scalar_t shared[cuda::kWarpSize];
     scalar_t loss_sum = 0;
     scalar_t weight_sum = 0;
-    for (int64_t i = threadIdx.x; i < batch_size; i += kNllThreads) {
+    for (int64_t i = threadIdx.x; i < batch_size; i += blockDim.x) {
         const int64_t cls = target[i];
         if (cls != ignore_index) {
             RAXIS_CUDA_KERNEL_ASSERT(cls >= 0 && cls < num_classes);
@@ -54,8 +52,8 @@ __global__ void nll_loss_forward_reduce_kernel(
             weight_sum += cls_weight;
         }
     }
-    loss_sum = warp_sum(loss_sum);
-    weight_sum = warp_sum(weight_sum);
+    loss_sum = cuda::block_sum(loss_sum, shared);
+    weight_sum = cuda::block_sum(weight_sum, shared);
     if (threadIdx.x == 0) {
         // Mean over zero valid targets is 0/0 = NaN, as in PyTorch
         *output = mean ? loss_sum / weight_sum : loss_sum;
@@ -88,7 +86,7 @@ __global__ void nll_loss_backward_reduce_kernel(
     const scalar_t* total_weight, int64_t batch_size, int64_t num_classes, bool mean, int64_t ignore_index
 ) {
     const scalar_t reduced_grad = mean ? -(*grad / *total_weight) : -*grad;
-    for (int64_t i = threadIdx.x; i < batch_size; i += kNllThreads) {
+    for (int64_t i = threadIdx.x; i < batch_size; i += blockDim.x) {
         const int64_t cls = target[i];
         if (cls != ignore_index) {
             RAXIS_CUDA_KERNEL_ASSERT(cls >= 0 && cls < num_classes);
@@ -144,7 +142,7 @@ void nll_loss_forward_kernel_cuda(
                 output.mutable_data_ptr<scalar_t>(), self.data_ptr<scalar_t>(), target.data_ptr<int64_t>(),
                 w, batch_size, num_classes, ignore_index);
         } else {
-            nll_loss_forward_reduce_kernel<scalar_t><<<1, kNllThreads, 0, stream>>>(
+            nll_loss_forward_reduce_kernel<scalar_t><<<1, nll_loss_threads(batch_size), 0, stream>>>(
                 output.mutable_data_ptr<scalar_t>(), total_weight.mutable_data_ptr<scalar_t>(),
                 self.data_ptr<scalar_t>(), target.data_ptr<int64_t>(), w, batch_size, num_classes,
                 reduction == Reduction::Mean, ignore_index);
@@ -172,7 +170,7 @@ void nll_loss_backward_kernel_cuda(
                 grad_input.mutable_data_ptr<scalar_t>(), grad.data_ptr<scalar_t>(), target.data_ptr<int64_t>(),
                 w, batch_size, num_classes, ignore_index);
         } else {
-            nll_loss_backward_reduce_kernel<scalar_t><<<1, kNllThreads, 0, stream>>>(
+            nll_loss_backward_reduce_kernel<scalar_t><<<1, nll_loss_threads(batch_size), 0, stream>>>(
                 grad_input.mutable_data_ptr<scalar_t>(), grad.data_ptr<scalar_t>(), target.data_ptr<int64_t>(),
                 w, total_weight.data_ptr<scalar_t>(), batch_size, num_classes,
                 reduction == Reduction::Mean, ignore_index);
