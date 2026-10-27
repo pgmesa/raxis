@@ -11,6 +11,7 @@
 #include <pybind11/pybind11.h>
 
 #include <raxis/raxis.h>
+#include <raxis/core/cuda_hooks.h>
 #include <raxis/core/philox.h>
 #include <raxis/util/build_config.h>
 #include <raxis/ops/dispatch_stub.h>
@@ -45,6 +46,31 @@ PYBIND11_MODULE(_C, c) {
             "Sets the number of threads used for intraop parallelism on CPU.");
 
     c.def("is_grad_enabled", &raxis::autograd::GradMode::is_enabled);
+
+    // raxis.cuda (raxis/cuda/__init__.py), through the hooks that
+    // libraxis_cuda registers when it is loaded
+    c.def("_cuda_is_available", [] { return raxis::get_cuda_hooks().is_available(); });
+    c.def("_cuda_device_count", [] { return raxis::get_cuda_hooks().device_count(); });
+    c.def("_cuda_current_device", [] { return static_cast<int>(raxis::get_cuda_hooks().current_device()); });
+    c.def("_cuda_set_device", [](int index) {
+        raxis::get_cuda_hooks().set_device(static_cast<raxis::DeviceIndex>(index));
+    }, py::arg("index"));
+    c.def("_cuda_synchronize", [](int index) {
+        raxis::get_cuda_hooks().synchronize(static_cast<raxis::DeviceIndex>(index));
+    }, py::arg("index"));
+    c.def("_cuda_memory_stats", [](int index) {
+        raxis::CUDAMemoryStats s = raxis::get_cuda_hooks().memory_stats(static_cast<raxis::DeviceIndex>(index));
+        py::dict d;
+        d["allocated_bytes"] = s.allocated_bytes;
+        d["max_allocated_bytes"] = s.max_allocated_bytes;
+        d["reserved_bytes"] = s.reserved_bytes;
+        d["max_reserved_bytes"] = s.max_reserved_bytes;
+        return d;
+    }, py::arg("index"));
+    c.def("_cuda_reset_peak_memory_stats", [](int index) {
+        raxis::get_cuda_hooks().reset_peak_memory_stats(static_cast<raxis::DeviceIndex>(index));
+    }, py::arg("index"));
+    c.def("_cuda_empty_cache", [] { raxis::get_cuda_hooks().empty_cache(); });
     // Function.apply (raxis/autograd/function.py): the history of the outputs
     c.def("_wrap_function_outputs", &raxis::python::wrap_function_outputs,
           py::arg("ctx"), py::arg("backward"), py::arg("name"), py::arg("inputs"),
@@ -246,6 +272,7 @@ PYBIND11_MODULE(_C, c) {
         })
         .def_property_readonly("dtype", &raxis::Tensor::dtype, "Data type")
         .def_property_readonly("device", &raxis::Tensor::device, "Device")
+        .def_property_readonly("is_cuda", &raxis::Tensor::is_cuda)
         .def("size", [](const raxis::Tensor& self, std::optional<int64_t> dim) -> py::object {
             if (!dim) {
                 return py::cast(self.shape());
@@ -256,7 +283,8 @@ PYBIND11_MODULE(_C, c) {
         .def("dim", &raxis::Tensor::ndim)
         .def_property_readonly("ndim", &raxis::Tensor::ndim)
         .def("tolist", [](const raxis::Tensor& self) -> py::object {
-            return raxis::python::tensor_to_list(self);
+            // One copy to the CPU, not one per element
+            return raxis::python::tensor_to_list(self.is_cpu() ? self : self.cpu());
         })
         .def("item", [](const raxis::Tensor& self) -> py::object {
             raxis::Scalar s = self.item();
@@ -519,9 +547,20 @@ PYBIND11_MODULE(_C, c) {
         .def("to",
             py::overload_cast<raxis::Dtype>(&raxis::Tensor::to, py::const_),
             py::arg("dtype"))
+        .def("to",
+            py::overload_cast<raxis::Device>(&raxis::Tensor::to, py::const_),
+            py::arg("device"))
+        .def("to",
+            py::overload_cast<raxis::Device, raxis::Dtype>(&raxis::Tensor::to, py::const_),
+            py::arg("device"), py::arg("dtype"))
         .def("detach",
             py::overload_cast<>(&raxis::Tensor::detach, py::const_))
         .def("cpu", &raxis::Tensor::cpu)
+        .def("cuda", [](const raxis::Tensor& self, std::optional<raxis::Device> device) {
+            if (!device) return self.cuda();
+            RAXIS_CHECK(device->is_cuda(), "Invalid device, must be cuda device");
+            return self.to(*device);
+        }, py::arg("device") = py::none())
 
         .def("zero_", 
             py::overload_cast<>(&raxis::Tensor::zero_, py::const_))

@@ -31,6 +31,13 @@ else:
     ctypes.CDLL(str(core_lib_path), mode=ctypes.RTLD_GLOBAL)
     extension = '.so'
 
+# The CUDA backend, when it was built (RAXIS_USE_CUDA): loading it registers
+# its kernels, allocator and hooks in libraxis. Without it raxis is CPU only
+# and raxis.cuda.is_available() is False
+_cuda_lib_name = {'Windows': 'raxis_cuda.dll', 'Darwin': 'libraxis_cuda.dylib'}.get(platform.system(), 'libraxis_cuda.so')
+if (raxis_lib_dirs / _cuda_lib_name).exists():
+    ctypes.CDLL(str(raxis_lib_dirs / _cuda_lib_name), mode=ctypes.RTLD_GLOBAL)
+
 # Dynamically identify and load the `_C` module
 _C_module_file = None
 for file in raxis_lib_dirs.iterdir():
@@ -183,5 +190,5 @@ class enable_grad(_GradModeDecorator):
         _C.set_grad_enabled(self._prev)
 
 
-from raxis import autograd, nn, optim
+from raxis import autograd, cuda, nn, optim
 from raxis.serialization import save, load

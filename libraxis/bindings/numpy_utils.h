@@ -74,6 +74,10 @@ Tensor tensor_from_numpy(py::array arr) {
 }
 
 py::array tensor_to_numpy(py::object self, const Tensor& a) {
+    if (!a.is_cpu()) {
+        throw py::type_error("can't convert " + a.device().str() + " device type tensor to "
+            "numpy. Use Tensor.cpu() to copy the tensor to host memory first.");
+    }
     IntArrayRef shape_ = a.shape();
     std::vector<ssize_t> shape(shape_.begin(), shape_.end());
     DimVector strides_ = a.byte_strides();

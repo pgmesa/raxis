@@ -387,6 +387,8 @@ def _str(tensor) -> str:
         if tensor.dim() != 1:
             suffixes.insert(0, f"shape={tuple(tensor.shape)}")
     else:
-        tensor_str = _tensor_str(tensor, indent)
+        # The values of a CUDA tensor are formatted from one copy on the CPU
+        data = tensor if tensor.device.type == "cpu" else tensor.detach().cpu()
+        tensor_str = _tensor_str(data, indent)
 
     return _add_suffixes(prefix + tensor_str, suffixes, indent)
