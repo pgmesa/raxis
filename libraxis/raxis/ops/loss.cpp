@@ -13,6 +13,7 @@
 #include <raxis/tensor/factories.h>
 #include <raxis/ops/activation.h>
 #include <raxis/ops/binary_ops.h>
+#include <raxis/ops/device_check.h>
 #include <raxis/ops/reduce_ops.h>
 #include <raxis/ops/scalar_ops.h>
 #include <raxis/ops/softmax.h>
@@ -84,6 +85,7 @@ NllLossResult nll_loss_forward(
     const Tensor& self, const Tensor& target, const Tensor& weight,
     Reduction reduction, int64_t ignore_index
 ) {
+    check_cpu_only("nll_loss", self, target, weight);
     check_nll_loss_inputs(self, target, weight);
     const int64_t batch_size = self.ndim() == 2 ? self.shape()[0] : 1;
     const int64_t num_classes = self.shape()[self.ndim() - 1];
@@ -178,6 +180,7 @@ Tensor nll_loss_backward(
     const Tensor& grad, const Tensor& self, const Tensor& target, const Tensor& weight,
     Reduction reduction, int64_t ignore_index, double total_weight
 ) {
+    check_cpu_only("nll_loss_backward", grad, self, target, weight);
     const int64_t batch_size = self.ndim() == 2 ? self.shape()[0] : 1;
     const int64_t num_classes = self.shape()[self.ndim() - 1];
     const bool per_sample = reduction == Reduction::None && self.ndim() == 2;

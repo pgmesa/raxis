@@ -14,6 +14,7 @@
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/factories.h>
 #include <raxis/ops/binary_ops.h>
+#include <raxis/ops/device_check.h>
 #include <raxis/ops/copy.h>
 #include <raxis/ops/reduce_ops.h>
 #include <raxis/ops/sorting.h>
@@ -60,7 +61,7 @@ Tensor& uniform_(Tensor& self, double low, double high) {
     if (self.numel() == 0) return self;
 
     fill_contiguous(self, real_words_per_element(self.dtype()), [&](const Tensor& t, uint64_t seed, uint64_t offset) {
-        uniform_stub(DeviceType::CPU, t, low, high, seed, offset);
+        uniform_stub(t.device().type(), t, low, high, seed, offset);
     });
     return self;
 }
@@ -74,7 +75,7 @@ Tensor& normal_(Tensor& self, double mean, double std) {
     if (self.numel() == 0) return self;
 
     fill_contiguous(self, real_words_per_element(self.dtype()), [&](const Tensor& t, uint64_t seed, uint64_t offset) {
-        normal_stub(DeviceType::CPU, t, mean, std, seed, offset);
+        normal_stub(t.device().type(), t, mean, std, seed, offset);
     });
     return self;
 }
@@ -103,7 +104,7 @@ Tensor& randint_(Tensor& self, int64_t low, int64_t high) {
     });
 
     fill_contiguous(self, kRandintWordsPerElement, [&](const Tensor& t, uint64_t seed, uint64_t offset) {
-        randint_stub(DeviceType::CPU, t, low, range, seed, offset);
+        randint_stub(t.device().type(), t, low, range, seed, offset);
     });
     return self;
 }
@@ -111,6 +112,7 @@ Tensor& randint_(Tensor& self, int64_t low, int64_t high) {
 // From: aten/src/ATen/native/Distributions.cpp (multinomial_out) and
 // cpu/MultinomialKernel.cpp (multinomial_with_replacement_apply)
 Tensor multinomial(const Tensor& self, int64_t num_samples, bool replacement) {
+    check_cpu_only("multinomial", self);
     RAXIS_CHECK(self.ndim() > 0 && self.ndim() <= 2, "prob_dist must be 1 or 2 dim");
     RAXIS_CHECK(self.dtype().is_floating(),
         "multinomial only supports floating-point dtypes for input, got: ", self.dtype());

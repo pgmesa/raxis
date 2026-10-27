@@ -5,6 +5,7 @@
 #include <numeric>
 
 #include <raxis/ops/cpu_blas.h>
+#include <raxis/ops/device_check.h>
 
 #include <raxis/util/exception.h>
 #include <raxis/util/parallel.h>
@@ -35,6 +36,7 @@ static void addmm_impl_cpu_(
     const Scalar& beta, 
     const Scalar& alpha
 ) {
+    check_cpu_only("addmm", result, self, m1, m2);
     RAXIS_INTERNAL_ASSERT(self.ndim() == 2 && m1.ndim() == 2 && m2.ndim() == 2);
     RAXIS_CHECK(
         m1.dtype() == m2.dtype(),
@@ -276,6 +278,7 @@ static void bmm_impl_(
     const Scalar& alpha,
     bool is_bmm_out
 ) {
+    check_cpu_only("bmm", self_or_result, batch1, batch2);
     const int64_t bs = batch1.shape()[0];
     const int64_t contraction_size = batch1.shape()[2];
     const int64_t res_rows = batch1.shape()[1];
@@ -691,6 +694,7 @@ Tensor& addmv_out(
     Scalar alpha, 
     Tensor& out
 ) {
+    check_cpu_only("addmv", self, mat, vec, out);
     RAXIS_CHECK(mat.ndim() == 2 && vec.ndim() == 1,
         "matrix + vector expected, got ", mat.ndim(), "D and ", vec.ndim(), "D tensors");
     RAXIS_CHECK(mat.shape()[1] == vec.shape()[0],
@@ -786,6 +790,7 @@ Tensor mv(const Tensor& mat, const Tensor& vec) {
 namespace ops {
 
 Tensor dot(const Tensor& self, const Tensor& other) {
+    check_cpu_only("dot", self, other);
     RAXIS_CHECK(self.ndim() == 1 && other.ndim() == 1,
         "1D tensors expected, but got ", self.ndim(), "D and ", other.ndim(), "D tensors");
     RAXIS_CHECK(self.dtype() == other.dtype(),

@@ -101,7 +101,7 @@ std::tuple<Tensor, Tensor, Tensor> native_batch_norm(
         RAXIS_CHECK(running_mean.defined(),
             "batch_norm: running_mean and running_var are required when not training");
         if (input.numel() > 0) {
-            batch_norm_stub(DeviceType::CPU, output, input, weight, bias, Tensor(), Tensor(),
+            batch_norm_stub(input.device().type(), output, input, weight, bias, Tensor(), Tensor(),
                             running_mean, running_var, false, eps);
         }
         return {output, empty({0}, input.options()), empty({0}, input.options())};
@@ -115,7 +115,7 @@ std::tuple<Tensor, Tensor, Tensor> native_batch_norm(
     Tensor save_mean = empty({channels}, input.options());
     Tensor save_invstd = empty({channels}, input.options());
     Tensor var_sum = empty({channels}, input.options());
-    batch_norm_collect_stats_stub(DeviceType::CPU, save_mean, var_sum, input);
+    batch_norm_collect_stats_stub(input.device().type(), save_mean, var_sum, input);
 
     input.dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
         const scalar_t* mean = save_mean.data_ptr<scalar_t>();
@@ -137,7 +137,7 @@ std::tuple<Tensor, Tensor, Tensor> native_batch_norm(
         }
     });
 
-    batch_norm_stub(DeviceType::CPU, output, input, weight, bias, save_mean, save_invstd,
+    batch_norm_stub(input.device().type(), output, input, weight, bias, save_mean, save_invstd,
                     running_mean, running_var, true, eps);
     return {output, save_mean, save_invstd};
 }
@@ -164,7 +164,7 @@ std::tuple<Tensor, Tensor, Tensor> native_batch_norm_backward(
         grad_bias = empty({channels}, input.options());
     }
     batch_norm_backward_stub(
-        DeviceType::CPU, grad_input, grad_weight, grad_bias, grad_output, input, weight,
+        input.device().type(), grad_input, grad_weight, grad_bias, grad_output, input, weight,
         running_mean, running_var, save_mean, save_invstd, training, eps);
     return {grad_input, grad_weight, grad_bias};
 }
@@ -181,7 +181,7 @@ std::tuple<Tensor, Tensor, Tensor> native_layer_norm(
     Tensor mean = empty({M}, input.options());
     Tensor rstd = empty({M}, input.options());
     if (M > 0) {
-        layer_norm_stub(DeviceType::CPU, output, mean, rstd, input, weight, bias, M, N, eps);
+        layer_norm_stub(input.device().type(), output, mean, rstd, input, weight, bias, M, N, eps);
     }
 
     // [*leading, 1, ..., 1], so mean and rstd broadcast against the input
@@ -215,7 +215,7 @@ std::tuple<Tensor, Tensor, Tensor> native_layer_norm_backward(
     }
     if (M > 0) {
         layer_norm_backward_stub(
-            DeviceType::CPU, grad_input, grad_weight, grad_bias, grad_output.contiguous(), input,
+            input.device().type(), grad_input, grad_weight, grad_bias, grad_output.contiguous(), input,
             mean.contiguous(), rstd.contiguous(), weight, M, N);
     }
     return {grad_input, grad_weight, grad_bias};

@@ -59,7 +59,7 @@ Tensor arange(Scalar start, Scalar end, Scalar step, TensorOptions options) {
     const int64_t size = compute_arange_size(start, end, step, options.dtype());
     Tensor result = empty({size}, options);
     if (size > 0) {
-        arange_stub(DeviceType::CPU, result, start, step);
+        arange_stub(result.device().type(), result, start, step);
     }
     return result;
 }

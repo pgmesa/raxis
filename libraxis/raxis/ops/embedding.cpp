@@ -49,7 +49,7 @@ Tensor embedding_dense_backward(
     Tensor grad_weight = zeros({num_weights, embedding_dim}, grad.options());
     if (numel > 0 && embedding_dim > 0) {
         embedding_dense_backward_stub(
-            DeviceType::CPU, grad_weight, grad.contiguous().view({numel, embedding_dim}),
+            grad_weight.device().type(), grad_weight, grad.contiguous().view({numel, embedding_dim}),
             indices.to(dtypes::Int64).contiguous(), padding_idx, scale_grad_by_freq);
     }
     return grad_weight;

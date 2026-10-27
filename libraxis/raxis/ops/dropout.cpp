@@ -31,7 +31,7 @@ std::tuple<Tensor, Tensor> native_dropout(const Tensor& input_, double p, bool t
     if (input.numel() > 0) {
         const auto [seed, offset] =
             get_default_generator().philox_engine_inputs(philox_blocks(input.numel(), 1));
-        fused_dropout_stub(DeviceType::CPU, output, mask, input, 1.0 - p, seed, offset);
+        fused_dropout_stub(input.device().type(), output, mask, input, 1.0 - p, seed, offset);
     }
     return {output, mask};
 }
@@ -40,7 +40,7 @@ Tensor native_dropout_backward(const Tensor& grad, const Tensor& mask, double sc
     const Tensor grad_c = grad.contiguous();
     Tensor grad_input = empty(grad_c.shape(), grad_c.options());
     if (grad_input.numel() > 0) {
-        dropout_backward_stub(DeviceType::CPU, grad_input, grad_c, mask.contiguous(), scale);
+        dropout_backward_stub(grad_input.device().type(), grad_input, grad_c, mask.contiguous(), scale);
     }
     return grad_input;
 }

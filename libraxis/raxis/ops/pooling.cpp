@@ -148,7 +148,7 @@ std::tuple<Tensor, Tensor> max_pool2d_with_indices(
     Tensor output = empty(shape, input.options());
     Tensor indices = empty(shape, input.options().dtype(dtypes::Int64));
     if (output.numel() > 0) {
-        max_pool2d_stub(DeviceType::CPU, output, indices, input, p);
+        max_pool2d_stub(input.device().type(), output, indices, input, p);
     }
     return {output, indices};
 }
@@ -158,7 +158,7 @@ Tensor max_pool2d_with_indices_backward(
 ) {
     Tensor grad_input = empty(input_shape, grad_output.options());
     if (grad_input.numel() > 0) {
-        max_pool2d_backward_stub(DeviceType::CPU, grad_input, grad_output.contiguous(), indices.contiguous());
+        max_pool2d_backward_stub(grad_output.device().type(), grad_input, grad_output.contiguous(), indices.contiguous());
     }
     return grad_input;
 }
@@ -176,7 +176,7 @@ Tensor avg_pool2d(
     const Tensor input = input_.contiguous();
     Tensor output = empty(pooled_shape(input.shape(), p), input.options());
     if (output.numel() > 0) {
-        avg_pool2d_stub(DeviceType::CPU, output, input, p, count_include_pad, divisor_override);
+        avg_pool2d_stub(input.device().type(), output, input, p, count_include_pad, divisor_override);
     }
     return output;
 }
@@ -191,7 +191,7 @@ Tensor avg_pool2d_backward(
     Tensor grad_input = empty(input_shape, grad_output.options());
     if (grad_input.numel() > 0) {
         avg_pool2d_backward_stub(
-            DeviceType::CPU, grad_input, grad_output.contiguous(), p, count_include_pad, divisor_override);
+            grad_output.device().type(), grad_input, grad_output.contiguous(), p, count_include_pad, divisor_override);
     }
     return grad_input;
 }

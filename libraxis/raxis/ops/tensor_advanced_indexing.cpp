@@ -20,6 +20,7 @@
 #include <raxis/tensor/memory_overlap.h>
 
 #include <raxis/ops/copy.h>
+#include <raxis/ops/device_check.h>
 #include <raxis/ops/binary_ops.h>
 
 
@@ -164,6 +165,7 @@ Tensor scatter_add(const Tensor& self, int64_t dim, const Tensor& index, const T
 // One TensorIterator is built for the copy of one slice and pointed at each
 // (source, destination) pair in turn, so its setup is paid once.
 Tensor index_select(const Tensor& self, int64_t dim, const Tensor& index) {
+    check_cpu_only("index_select", self, index);
     RAXIS_CHECK(index.ndim() <= 1, "index_select(): Index is supposed to be a vector");
     RAXIS_CHECK(index.dtype() == dtypes::Int64 || index.dtype() == dtypes::Int32,
         "index_select(): Expected dtype int32/int64 for index");
@@ -255,6 +257,7 @@ Tensor index_select(const Tensor& self, int64_t dim, const Tensor& index) {
 // self.select(dim, index[i]) += source.select(dim, i), one slice at a time
 // (indices can repeat, so the slices are not split between threads)
 Tensor& index_add_(Tensor& self, int64_t dim, const Tensor& index, const Tensor& source) {
+    check_cpu_only("index_add_", self, index, source);
     RAXIS_CHECK(index.ndim() <= 1, "index_add_(): Index is supposed to be a vector");
     RAXIS_CHECK(index.dtype() == dtypes::Int64 || index.dtype() == dtypes::Int32,
         "index_add_(): Expected dtype int32/int64 for index");
@@ -672,6 +675,7 @@ Tensor index_put(const Tensor& self, ArrayRef<Tensor> indices, const Tensor& val
 // parallel_for; fixing the chunk boundaries here gives the same without
 // relying on how parallel_for splits the range.
 Tensor nonzero(const Tensor& self) {
+    check_cpu_only("nonzero", self);
     const Tensor input = self.contiguous();
     const int64_t numel = input.numel();
     const int64_t ndim = input.ndim();

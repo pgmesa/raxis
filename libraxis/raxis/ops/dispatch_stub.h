@@ -29,6 +29,7 @@ struct DispatchStub;
 struct RAXIS_API DispatchStubImpl {
     void* get_call_ptr(
         DeviceType device_type,
+        const char* stub_name,
         void* DEFAULT
 #ifdef HAVE_AVX2_CPU_DEFINITION
         , void* AVX2
@@ -65,6 +66,7 @@ private:
         return reinterpret_cast<FnPtr>(
             impl.get_call_ptr(
                 device_type,
+                T::stub_name,
                 reinterpret_cast<void*>(DEFAULT)
 #ifdef HAVE_AVX2_CPU_DEFINITION
                 , reinterpret_cast<void*>(AVX2)
@@ -117,6 +119,7 @@ struct RegisterCUDADispatch {
 
 #define DECLARE_DISPATCH(fn, name)                                                         \
     struct name##_DECLARE_DISPATCH_type : DispatchStub<fn, name##_DECLARE_DISPATCH_type> {  \
+        static constexpr const char* stub_name = #name;                                    \
         name##_DECLARE_DISPATCH_type() = default;                                          \
         name##_DECLARE_DISPATCH_type(const name##_DECLARE_DISPATCH_type&) = delete;         \
         name##_DECLARE_DISPATCH_type& operator=(const name##_DECLARE_DISPATCH_type&) = delete; \

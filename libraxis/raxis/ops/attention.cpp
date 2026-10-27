@@ -107,7 +107,7 @@ std::tuple<Tensor, Tensor> scaled_dot_product_flash_attention_for_cpu(
     Tensor logsumexp = empty({batch_size, q_size, num_head}, query.options());
     if (output.numel() > 0) {
         flash_attention_stub(
-            DeviceType::CPU, output, logsumexp, unit_last_stride(query.transpose(1, 2)),
+            query.device().type(), output, logsumexp, unit_last_stride(query.transpose(1, 2)),
             unit_last_stride(key.transpose(1, 2)), unit_last_stride(value.transpose(1, 2)),
             is_causal, mask, calculate_scale(query, scale));
     }
@@ -134,7 +134,7 @@ std::tuple<Tensor, Tensor, Tensor> scaled_dot_product_flash_attention_for_cpu_ba
         // grad_output may come with zero strides (from a sum, a broadcast):
         // a gemm operand must not
         flash_attention_backward_stub(
-            DeviceType::CPU, grad_q, grad_k, grad_v, grad_output.transpose(1, 2).contiguous(),
+            query.device().type(), grad_q, grad_k, grad_v, grad_output.transpose(1, 2).contiguous(),
             q_t, k_t, v_t, unit_last_stride(output.transpose(1, 2)), logsumexp.transpose(1, 2),
             is_causal, attn_mask_to_4d(attn_mask, query, key.shape()[2]), calculate_scale(query, scale));
     }

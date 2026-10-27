@@ -362,7 +362,7 @@ static Tensor std_var(
     auto iter = make_reduction(name, self, result, dim, keepdim, self.dtype());
     if (iter.numel() == 0) {
         result.fill_(std::numeric_limits<double>::quiet_NaN());
-    } else if (result.numel() == 1) {
+    } else if (result.numel() == 1 && self.is_cpu()) {
         result.fill_(std_var_all_cpu(self, correction, take_sqrt));
     } else {
         std_var_stub(iter.device_type(), iter, correction, take_sqrt);

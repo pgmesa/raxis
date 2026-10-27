@@ -46,7 +46,8 @@ void cat_out_impl(
         return;
     }
 
-    bool use_serial_kernel = result.numel() < detail::GRAIN_SIZE || get_num_threads() == 1;
+    // The serial kernels read on the host; a GPU copies input by input below
+    bool use_serial_kernel = result.is_cpu() && (result.numel() < detail::GRAIN_SIZE || get_num_threads() == 1);
     if (use_serial_kernel && all_contiguous && all_same_dtype && result.is_contiguous()) {
         if (dim == 0) {
             // Each input is one contiguous block of the output
@@ -62,7 +63,7 @@ void cat_out_impl(
                 }
             }
         } else {
-            cat_serial_stub(DeviceType::CPU, result, tensors, dim);
+            cat_serial_stub(result.device().type(), result, tensors, dim);
         }
         return;
     }
@@ -223,9 +224,9 @@ Tensor stack(ArrayRef<Tensor> tensors, int64_t dim) {
         all_same_strides = all_same_strides && t.strides() == ref.strides();
     }
     int64_t numel_in_stack = ref.numel() * static_cast<int64_t>(tensors.size());
-    if (all_contiguous && all_same_dtype
+    if (result.is_cpu() && all_contiguous && all_same_dtype
             && (numel_in_stack < detail::GRAIN_SIZE || get_num_threads() == 1)) {
-        stack_serial_stub(DeviceType::CPU, result, tensors, dim);
+        stack_serial_stub(result.device().type(), result, tensors, dim);
         return result;
     }
 

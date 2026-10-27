@@ -148,6 +148,7 @@ void* DispatchStubImpl::choose_cpu_impl(
 
 void* DispatchStubImpl::get_call_ptr(
     DeviceType device_type,
+    const char* stub_name,
     void* DEFAULT
 #ifdef HAVE_AVX2_CPU_DEFINITION
     , void* AVX2
@@ -176,7 +177,7 @@ void* DispatchStubImpl::get_call_ptr(
 
         case DeviceType::CUDA:
             RAXIS_CHECK_NOT_IMPLEMENTED(cuda_dispatch_ptr,
-                "This op has no CUDA kernel yet (or raxis was loaded without its CUDA backend)");
+                stub_name, ": no CUDA kernel yet (or raxis was loaded without its CUDA backend)");
             return cuda_dispatch_ptr;
 
         default:

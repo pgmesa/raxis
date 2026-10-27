@@ -38,8 +38,11 @@ Tensor scalar_tensor_static(
         .dtype(dtype_opt.value_or(s.dtype()))
         .device(device_opt.value_or(DeviceType::CPU));
     Tensor result = empty({}, opts);
-    scalar_fill(result, s);
-    return result;
+    // Writing through the pointer is only possible on the host
+    if (result.is_cpu()) {
+        return scalar_fill(result, s);
+    }
+    return result.fill_(s);
 }
     
 } // namespace detail

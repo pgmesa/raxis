@@ -148,7 +148,7 @@ Tensor padding(const Tensor& self, IntArrayRef pad, PaddingMode mode) {
     const DimVector output_shape = padding_output_shape(self, pad, mode);
     Tensor output = empty(output_shape, self.options());
     if (output.numel() > 0) {
-        padding_stub(DeviceType::CPU, output, self.contiguous(), pad, mode);
+        padding_stub(self.device().type(), output, self.contiguous(), pad, mode);
     }
     return output;
 }
@@ -158,7 +158,7 @@ Tensor padding_backward(
 ) {
     Tensor grad_input = zeros(input_shape, grad_output.options());
     if (grad_output.numel() > 0) {
-        padding_backward_stub(DeviceType::CPU, grad_input, grad_output.contiguous(), pad, mode);
+        padding_backward_stub(grad_output.device().type(), grad_input, grad_output.contiguous(), pad, mode);
     }
     return grad_input;
 }

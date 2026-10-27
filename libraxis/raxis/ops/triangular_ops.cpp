@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <type_traits>
 
+#include <raxis/ops/device_check.h>
+
 #include <raxis/util/exception.h>
 #include <raxis/util/parallel.h>
 
@@ -42,6 +44,7 @@ void apply_triu_tril_single(
 
 // From: aten/src/ATen/native/TriangularOps.cpp (compute_triu_tril)
 Tensor triu_tril(const Tensor& self, int64_t k, bool upper) {
+    check_cpu_only(upper ? "triu" : "tril", self);
     RAXIS_CHECK(self.ndim() >= 2, upper ? "triu" : "tril", ": input tensor must have at least 2 dimensions");
     Tensor result = empty(self.shape(), self.options());
     if (self.numel() == 0) {

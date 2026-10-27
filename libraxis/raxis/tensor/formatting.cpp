@@ -194,7 +194,7 @@ std::ostream& print(std::ostream& stream, const Tensor& tensor_, int64_t linesiz
         return stream << "[ Tensor (undefined) ]";
     }
 
-    const Tensor tensor = tensor_.to(dtypes::Float64).contiguous();
+    const Tensor tensor = tensor_.to(Device(DeviceType::CPU), dtypes::Float64).contiguous();
     const double* data = tensor.data_ptr<double>();
     const IntArrayRef shape = tensor.shape();
     const int64_t numel = tensor.numel();

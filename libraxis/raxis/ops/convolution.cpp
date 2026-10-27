@@ -6,6 +6,7 @@
 #include <string>
 
 #include <raxis/ops/cpu_blas.h>
+#include <raxis/ops/device_check.h>
 #include <raxis/ops/reduce_ops.h>
 
 #include <raxis/util/exception.h>
@@ -364,6 +365,7 @@ Tensor convolution(
     const Tensor& input, const Tensor& weight, const Tensor& bias,
     IntArrayRef stride, IntArrayRef padding, IntArrayRef dilation, int64_t groups
 ) {
+    check_cpu_only("convolution", input, weight, bias);
     const Conv2dProblem problem = make_problem(input, weight, bias, stride, padding, dilation, groups);
     const Unfold2dParams& p = problem.params;
 
@@ -384,6 +386,7 @@ std::tuple<Tensor, Tensor, Tensor> convolution_backward(
     IntArrayRef stride, IntArrayRef padding, IntArrayRef dilation, int64_t groups,
     std::array<bool, 3> output_mask
 ) {
+    check_cpu_only("convolution_backward", grad_output_, input, weight);
     const Conv2dProblem problem = make_problem(input, weight, {}, stride, padding, dilation, groups);
     const Tensor grad_output = (problem.is_1d ? ops::unsqueeze(grad_output_, 2) : grad_output_).contiguous();
 

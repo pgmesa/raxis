@@ -97,6 +97,9 @@ def _use_flash_attention_cpp(query: Tensor, key: Tensor, value: Tensor, attn_mas
                              dropout_p: float) -> bool:
     """Whether the fused CPU kernel takes these inputs (torch's checks, in
     its order); otherwise the math composition runs."""
+    # torch picks the CUDA backends in sdp_utils.cpp; raxis has none yet
+    if query.is_cuda:
+        return False
     if dropout_p > 0.0:
         return False
     if not query.ndim == key.ndim == value.ndim == 4:
