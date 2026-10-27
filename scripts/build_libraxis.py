@@ -32,6 +32,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--build-type', default='Release', choices=['Release', 'Debug', 'RelWithDebInfo'])
     parser.add_argument('--no-stubs', action='store_true', help="Skip the .pyi generation")
+    parser.add_argument('--cuda', action='store_true', help="Also build libraxis_cuda (needs the CUDA toolkit)")
     args = parser.parse_args()
 
     # Leftovers of another build (e.g. _C for another Python version) would
@@ -59,6 +60,7 @@ def main():
         '-DCMAKE_INSTALL_LIBDIR=lib',
         f'-DCMAKE_PREFIX_PATH={prefix}',
         f'-DPython_EXECUTABLE={sys.executable}',
+        f'-DRAXIS_USE_CUDA={"ON" if args.cuda else "OFF"}',
     ]
     if shutil.which('ninja') and platform.system() != 'Windows':
         configure += ['-G', 'Ninja']

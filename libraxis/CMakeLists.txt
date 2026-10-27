@@ -23,6 +23,8 @@ set(RAXIS_EXAMPLES_DIR ${PROJECT_SOURCE_DIR}/examples)
 # up without re-configuring by hand
 file(GLOB_RECURSE RAXIS_SOURCES CONFIGURE_DEPENDS "${RAXIS_LIB_DIR}/*.cpp")
 list(FILTER RAXIS_SOURCES EXCLUDE REGEX ".*_kernel\\.cpp$")
+# raxis/cuda and raxis/ops/cuda build libraxis_cuda (see "CUDA" below)
+list(FILTER RAXIS_SOURCES EXCLUDE REGEX "/cuda/")
 
 add_library(raxis SHARED ${RAXIS_SOURCES})
 set_target_properties(raxis PROPERTIES EXPORT_NAME Raxis)
@@ -188,11 +190,13 @@ set(RAXIS_LINKS_OPENMP_TARGET OFF)
 if(RAXIS_USE_PARALLEL)
     if(RAXIS_BLAS_FOUND AND RAXIS_BLAS_INFO MATCHES "Intel MKL")
         target_compile_definitions(raxis PUBLIC RAXIS_PARALLEL_OPENMP=1)
+        # Only for C++ sources: nvcc compiling .cu files that include raxis
+        # headers rejects host compiler flags it does not know
         if(MSVC)
-            target_compile_options(raxis PUBLIC /openmp)
+            target_compile_options(raxis PUBLIC $<$<COMPILE_LANGUAGE:CXX>:/openmp>)
             string(APPEND RAXIS_TARGET_CXX_FLAGS " /openmp")
         elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-            target_compile_options(raxis PUBLIC -fopenmp)
+            target_compile_options(raxis PUBLIC $<$<COMPILE_LANGUAGE:CXX>:-fopenmp>)
             string(APPEND RAXIS_TARGET_CXX_FLAGS " -fopenmp")
         endif()
         set(RAXIS_PARALLEL_INFO "OpenMP (via MKL/iomp5)")
@@ -243,6 +247,54 @@ file(GLOB_RECURSE RAXIS_KERNEL_SOURCES CONFIGURE_DEPENDS "${RAXIS_LIB_DIR}/ops/c
 raxis_add_dispatch_sources(raxis ${RAXIS_KERNEL_SOURCES})
 
 # ─────────────────────────────────────────────────────────────────────────────
+# CUDA: a library of its own, as PyTorch's libtorch_cuda next to libtorch_cpu.
+# libraxis does not link CUDA; libraxis_cuda links libraxis and registers its
+# kernels, allocator and CUDAHooksInterface from static initializers when it
+# is loaded (raxis/__init__.py loads it when present), so the CPU library and
+# wheel stay the same with or without it
+option(RAXIS_USE_CUDA "Build libraxis_cuda, the CUDA backend" OFF)
+
+if(RAXIS_USE_CUDA)
+    # Default archs: Turing to Blackwell as SASS, plus PTX of the newest for
+    # future GPUs. An old driver cannot JIT PTX from a newer toolkit, so
+    # every supported arch needs its SASS
+    if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+        set(CMAKE_CUDA_ARCHITECTURES "75-real;80-real;86-real;89-real;90-real;120-real;120-virtual")
+    endif()
+    enable_language(CUDA)
+    find_package(CUDAToolkit REQUIRED)
+    set(CMAKE_CUDA_STANDARD 20)
+    set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+
+    file(GLOB_RECURSE RAXIS_CUDA_SOURCES CONFIGURE_DEPENDS
+        "${RAXIS_LIB_DIR}/cuda/*.cpp"
+        "${RAXIS_LIB_DIR}/ops/cuda/*.cu"
+    )
+    add_library(raxis_cuda SHARED ${RAXIS_CUDA_SOURCES})
+    # The static runtime: no cudart library to ship, only the driver is needed
+    target_link_libraries(raxis_cuda PRIVATE raxis CUDA::cudart_static)
+    target_compile_options(raxis_cuda PRIVATE
+        # Device lambdas in host code and constexpr std:: functions
+        # (std::apply, std::array) in device code, as PyTorch
+        $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda --expt-relaxed-constexpr>
+    )
+    if(MSVC)
+        target_compile_options(raxis_cuda PRIVATE
+            $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/Zc:__cplusplus>
+            # nvcc's C4251 (std:: members in exported classes), which MSVC
+            # only reports at higher warning levels
+            $<$<COMPILE_LANGUAGE:CUDA>:--diag-suppress=1394>
+        )
+    else()
+        target_compile_options(raxis_cuda PRIVATE -fvisibility=hidden)
+        set_target_properties(raxis_cuda PROPERTIES INSTALL_RPATH "$ORIGIN")
+    endif()
+    set(RAXIS_CUDA_INFO "CUDA ${CUDAToolkit_VERSION} (archs: ${CMAKE_CUDA_ARCHITECTURES})")
+else()
+    set(RAXIS_CUDA_INFO "disabled")
+endif()
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Build config summary
 if(NOT DEFINED RAXIS_PARALLEL_INFO)
     set(RAXIS_PARALLEL_INFO "unknown")
@@ -279,6 +331,7 @@ message(STATUS "  SIMD dispatch:  ${RAXIS_SIMD_INFO}")
 message(STATUS "  SLEEF:          ${RAXIS_SLEEF_INFO}")
 message(STATUS "  BLAS:           ${RAXIS_BLAS_INFO}")
 message(STATUS "  Allocator:      ${RAXIS_ALLOC_INFO}")
+message(STATUS "  CUDA:           ${RAXIS_CUDA_INFO}")
 if(IOMP5_RUNTIME)
     message(STATUS "  iomp5 runtime:  ${IOMP5_RUNTIME}")
 endif()
@@ -315,6 +368,14 @@ install(TARGETS raxis
     LIBRARY     DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE     DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
+
+if(RAXIS_USE_CUDA)
+    install(TARGETS raxis_cuda
+        RUNTIME     DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY     DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        ARCHIVE     DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    )
+endif()
 
 if(BUILD_PYTHON_BINDINGS)
     install(TARGETS raxis_bindings
