@@ -9,6 +9,7 @@ Usage:
     python bench_training.py                   # both models
     python bench_training.py -k cnn            # filter by model name
     python bench_training.py --steps 100       # more steps per sample
+    python bench_training.py --device cuda     # on the GPU
 """
 
 import argparse
@@ -48,15 +49,17 @@ MODELS = [
 ]
 
 
-def time_steps(lib, make_model, input_shape, batch_size, make_opt, make_loss, steps, warmup, repeats):
+def time_steps(lib, make_model, input_shape, batch_size, make_opt, make_loss, steps, warmup, repeats, device):
     lib.manual_seed(0)
-    model = make_model(lib)
+    model = make_model(lib).to(device)
     model.train()
     optimizer = make_opt(lib, model.parameters())
     loss_fn = make_loss(lib)
     rng = np.random.default_rng(0)
-    x = lib.tensor(rng.random((batch_size, *input_shape), dtype=np.float32))
-    y = lib.tensor(rng.integers(0, 10, size=batch_size), dtype=lib.long)
+    x = lib.tensor(rng.random((batch_size, *input_shape), dtype=np.float32), device=device)
+    y = lib.tensor(rng.integers(0, 10, size=batch_size), dtype=lib.long, device=device)
+    # GPU work is asynchronous: wait for it before reading the clock
+    sync = lib.cuda.synchronize if device != "cpu" else lambda: None
 
     def step():
         loss = loss_fn(model(x), y)
@@ -66,11 +69,13 @@ def time_steps(lib, make_model, input_shape, batch_size, make_opt, make_loss, st
 
     for _ in range(warmup):
         step()
+    sync()
     samples = []
     for _ in range(repeats):
         t0 = time.perf_counter()
         for _ in range(steps):
             step()
+        sync()
         samples.append((time.perf_counter() - t0) / steps)
     return min(samples) * 1e3
 
@@ -81,6 +86,7 @@ def main():
     parser.add_argument("--steps", type=int, default=50)
     parser.add_argument("--warmup", type=int, default=10)
     parser.add_argument("--repeats", type=int, default=3)
+    parser.add_argument("--device", default="cpu")
     args = parser.parse_args()
 
     print(f"Raxis: {raxis.__version__} | PyTorch: {torch.__version__}")
@@ -89,11 +95,15 @@ def main():
     for name, make_model, input_shape, batch_size, make_opt, make_loss in MODELS:
         if args.filter and args.filter not in name:
             continue
-        times = [
-            time_steps(lib, make_model, input_shape, batch_size, make_opt, make_loss,
-                       args.steps, args.warmup, args.repeats)
-            for lib in (raxis, torch)
-        ]
+        try:
+            times = [
+                time_steps(lib, make_model, input_shape, batch_size, make_opt, make_loss,
+                           args.steps, args.warmup, args.repeats, args.device)
+                for lib in (raxis, torch)
+            ]
+        except NotImplementedError as e:
+            print(f"  {name:6} {batch_size:>6} {'n/a':>11}   ({str(e).splitlines()[0]})")
+            continue
         print(f"  {name:6} {batch_size:>6} {times[0]:>11.3f} {times[1]:>11.3f} {times[0] / times[1]:>6.2f}x")
 
 
