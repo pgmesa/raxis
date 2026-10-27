@@ -366,11 +366,19 @@ void check_index_tensor_types(ArrayRef<Tensor> indices) {
 // A mask over k dims becomes k long index tensors, the columns of
 // mask.nonzero(): x[mask] is x[i0, i1, ...] at the positions where the mask
 // is true. From here on every index picks positions.
+// Index tensors on the CPU go to self's device, as PyTorch
+// (expandTensors with ensure_same_device): x_cuda[[0, 2]] builds its index
+// from a Python list on the CPU
 std::vector<Tensor> expand_masks(const Tensor& self, ArrayRef<Tensor> indices) {
     std::vector<Tensor> result;
     for (const Tensor& index : indices) {
+        if (index.defined()) {
+            RAXIS_CHECK(index.is_cpu() || index.device() == self.device(),
+                "indices should be either on cpu or on the same device as the indexed tensor (",
+                self.device(), ")");
+        }
         if (!index.defined() || !is_mask(index)) {
-            result.push_back(index);
+            result.push_back(index.defined() && index.device() != self.device() ? index.to(self.device()) : index);
             continue;
         }
         for (int64_t j = 0; j < index.ndim(); j++) {
@@ -383,6 +391,9 @@ std::vector<Tensor> expand_masks(const Tensor& self, ArrayRef<Tensor> indices) {
                 " at index ", src_idx);
         }
         Tensor nonzero = ops::nonzero(index);
+        if (nonzero.device() != self.device()) {
+            nonzero = nonzero.to(self.device());
+        }
         for (int64_t j = 0; j < index.ndim(); j++) {
             result.push_back(ops::select(nonzero, 1, j));
         }
@@ -586,7 +597,7 @@ std::optional<Tensor> mask_for_masked_fill(const Tensor& self, ArrayRef<Tensor> 
             if (!mask.defined()) num_ind++;
             continue;
         }
-        if (!is_mask(index) || mask.defined()) {
+        if (!is_mask(index) || index.device() != self.device() || mask.defined()) {
             return std::nullopt;
         }
         mask = index;
@@ -676,14 +687,15 @@ Tensor index_put(const Tensor& self, ArrayRef<Tensor> indices, const Tensor& val
     return ops::index_put_(result, indices, values, accumulate);
 }
 
+namespace {
+
 // From: aten/src/ATen/native/TensorAdvancedIndexing.cpp (nonzero_out_cpu)
 // Two passes over the same chunks: count the nonzeros of each chunk, then
 // each chunk writes its rows from the prefix sum of the counts. PyTorch
 // matches the chunks of both passes through the thread id inside
 // parallel_for; fixing the chunk boundaries here gives the same without
 // relying on how parallel_for splits the range.
-Tensor nonzero(const Tensor& self) {
-    check_cpu_only("nonzero", self);
+Tensor nonzero_cpu(const Tensor& self) {
     const Tensor input = self.contiguous();
     const int64_t numel = input.numel();
     const int64_t ndim = input.ndim();
@@ -749,6 +761,12 @@ Tensor nonzero(const Tensor& self) {
     return result;
 }
 
+} // namespace
+
+Tensor nonzero(const Tensor& self) {
+    return nonzero_stub(self.device().type(), self);
+}
+
 // From: aten/src/ATen/native/TensorAdvancedIndexing.cpp (masked_fill_impl_cpu)
 Tensor& masked_fill_(Tensor& self, const Tensor& mask, Scalar value) {
     RAXIS_CHECK(mask.dtype() == dtypes::Bool,
@@ -787,7 +805,9 @@ DEFINE_DISPATCH(index_stub);
 DEFINE_DISPATCH(index_put_stub);
 DEFINE_DISPATCH(masked_fill_stub);
 DEFINE_DISPATCH(index_select_stub);
+DEFINE_DISPATCH(nonzero_stub);
 
 REGISTER_ALL_CPU_DISPATCH(index_select_stub, &ops::index_select_cpu)
+REGISTER_ALL_CPU_DISPATCH(nonzero_stub, &ops::nonzero_cpu)
 
 } // namespace raxis

@@ -3,7 +3,7 @@ import raxis
 import torch
 import numpy as np
 
-from test_utils import check_match, make_pair, make_grad_pair, randf
+from test_utils import check_match, make_pair, make_grad_pair, randf, device
 
 
 def index_pair(data):
@@ -255,8 +255,9 @@ GETITEM_CASES = {
 
 
 @pytest.mark.parametrize("make_index", GETITEM_CASES.values(), ids=GETITEM_CASES.keys())
-def test_getitem(make_index):
-    r, t = make_pair(randf(4, 5, 6))
+def test_getitem(make_index, device):
+    # The index tensors stay on the CPU: both libraries move them to self's device
+    r, t = make_pair(randf(4, 5, 6), device)
     check_match(r[make_index(raxis)], t[make_index(torch)])
 
 
@@ -336,12 +337,12 @@ SETITEM_CASES = {
 
 
 @pytest.mark.parametrize("make_index,value", SETITEM_CASES.values(), ids=SETITEM_CASES.keys())
-def test_setitem(make_index, value):
-    r, t = make_pair(randf(4, 5, 6))
+def test_setitem(make_index, value, device):
+    r, t = make_pair(randf(4, 5, 6), device)
     if isinstance(value, tuple):
         v = randf(*value, seed=3)
-        r[make_index(raxis)] = raxis.from_numpy(v.copy())
-        t[make_index(torch)] = torch.from_numpy(v.copy())
+        r[make_index(raxis)] = raxis.from_numpy(v.copy()).to(device)
+        t[make_index(torch)] = torch.from_numpy(v.copy()).to(device)
     else:
         r[make_index(raxis)] = value
         t[make_index(torch)] = value
@@ -443,10 +444,10 @@ def test_masked_fill_errors():
 
 
 @pytest.mark.parametrize("shape", [(1000, 1000), (7, 3, 5), (17,), (), (0, 3)])
-def test_nonzero(shape):
+def test_nonzero(shape, device):
     data = (randf(*shape) > 0.7) * randf(*shape, seed=1) if shape else np.float32(0.5)
     data = np.asarray(data, dtype=np.float32)
-    r, t = make_pair(data)
+    r, t = make_pair(data, device)
     check_match(r.nonzero(), t.nonzero())
     check_match(raxis.nonzero(r), torch.nonzero(t))
     assert r.nonzero().dtype == raxis.int64

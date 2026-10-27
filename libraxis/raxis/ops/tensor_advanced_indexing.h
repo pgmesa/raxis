@@ -26,6 +26,11 @@ DECLARE_DISPATCH(masked_fill_fn, masked_fill_stub);
 using index_select_fn = void(*)(const Tensor& result, const Tensor& self, int64_t dim, const Tensor& index);
 DECLARE_DISPATCH(index_select_fn, index_select_stub);
 
+// The (n, ndim) positions of the nonzero elements of self, column-major.
+// The result's size depends on the data, so the kernel allocates it
+using nonzero_fn = Tensor(*)(const Tensor& self);
+DECLARE_DISPATCH(nonzero_fn, nonzero_stub);
+
 using scatter_gather_fn = void(*)(const Tensor& self, int64_t dim, const Tensor& index, const Tensor& src);
 using scatter_fill_fn = void(*)(const Tensor& self, int64_t dim, const Tensor& index, Scalar value);
 
