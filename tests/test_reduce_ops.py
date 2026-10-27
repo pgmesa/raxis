@@ -3,7 +3,7 @@ import raxis
 import torch
 import numpy as np
 
-from test_utils import check_match, make_pair, make_grad_pair, randf
+from test_utils import check_match, make_pair, make_grad_pair, randf, device
 
 
 VAR_SHAPES = [(7,), (5, 4), (3, 4, 5), (300, 500)]
@@ -276,25 +276,25 @@ def test_cumprod_create_graph_with_zeros_raises():
 # ===========================================================================
 
 def check_sort_match(r_result, t_result):
-    np.testing.assert_array_equal(np.array(r_result[0]), t_result[0].numpy())
-    np.testing.assert_array_equal(np.array(r_result[1]), t_result[1].numpy())
+    np.testing.assert_array_equal(np.array(r_result[0].cpu()), t_result[0].cpu().numpy())
+    np.testing.assert_array_equal(np.array(r_result[1].cpu()), t_result[1].cpu().numpy())
 
 
 @pytest.mark.parametrize("dtype", [np.float32, np.float64, np.int32, np.int64, np.uint8, np.bool_],
                          ids=lambda d: np.dtype(d).name)
 @pytest.mark.parametrize("shape", [(7,), (5, 4), (3, 8, 6), (4, 1000)])
 @pytest.mark.parametrize("descending", [False, True])
-def test_sort(shape, dtype, descending):
+def test_sort(shape, dtype, descending, device):
     # Few distinct values in the integer cases, so ties are common; raxis
     # orders ties by position, as torch's stable sort
     rng = np.random.default_rng(0)
     data = (rng.standard_normal(shape) * 3).astype(dtype)
-    r, t = make_pair(data)
+    r, t = make_pair(data, device)
     for dim in range(-len(shape), len(shape)):
         check_sort_match(r.sort(dim, descending), t.sort(dim=dim, descending=descending, stable=True))
         check_sort_match(raxis.sort(r, dim, descending=descending), torch.sort(t, dim=dim, descending=descending, stable=True))
-        np.testing.assert_array_equal(np.array(r.argsort(dim, descending)),
-                                      t.argsort(dim=dim, descending=descending, stable=True).numpy())
+        np.testing.assert_array_equal(np.array(r.argsort(dim, descending).cpu()),
+                                      t.argsort(dim=dim, descending=descending, stable=True).cpu().numpy())
 
 
 def test_sort_nan_layouts_and_edge_cases():
@@ -328,11 +328,11 @@ def test_sort_nan_layouts_and_edge_cases():
 @pytest.mark.parametrize("dtype", [np.float32, np.int64], ids=lambda d: np.dtype(d).name)
 @pytest.mark.parametrize("shape,dim", [((7,), 0), ((5, 40), 1), ((40, 5), 0), ((3, 600, 4), 1)])
 @pytest.mark.parametrize("largest", [True, False])
-def test_topk(shape, dim, dtype, largest):
+def test_topk(shape, dim, dtype, largest, device):
     # Distinct values: torch does not fix the order of ties in topk
     rng = np.random.default_rng(1)
     data = (rng.permutation(int(np.prod(shape))).reshape(shape) - 50).astype(dtype)
-    r, t = make_pair(data)
+    r, t = make_pair(data, device)
     size = shape[dim]
     # k = 1 and 2 take the partial_sort path for the long slices
     for k in sorted({0, 1, 2, size // 3, size - 1, size}):
@@ -341,16 +341,17 @@ def test_topk(shape, dim, dtype, largest):
         # Unsorted: the same set of values per slice
         r_values, _ = r.topk(k, dim, largest, sorted=False)
         t_values, _ = t.topk(k, dim, largest, sorted=False)
-        np.testing.assert_array_equal(np.sort(np.array(r_values), axis=dim), np.sort(t_values.numpy(), axis=dim))
+        np.testing.assert_array_equal(np.sort(np.array(r_values.cpu()), axis=dim),
+                                      np.sort(t_values.cpu().numpy(), axis=dim))
     with pytest.raises(RuntimeError, match="out of range"):
         r.topk(size + 1, dim)
 
 
 @pytest.mark.parametrize("op", ["sort", "sort_desc", "topk", "topk_smallest"])
 @pytest.mark.parametrize("dim", [0, 1, -1])
-def test_sort_topk_backward(op, dim):
+def test_sort_topk_backward(op, dim, device):
     data = randf(4, 6, 5)
-    r, t = make_grad_pair(data)
+    r, t = make_grad_pair(data, device)
     fns = {
         "sort": lambda x: x.sort(dim)[0],
         "sort_desc": lambda x: x.sort(dim, True)[0],
@@ -359,7 +360,7 @@ def test_sort_topk_backward(op, dim):
     }
     r_out, t_out = fns[op](r), fns[op](t)
     w = np.random.default_rng(2).standard_normal(tuple(t_out.shape)).astype(np.float32)
-    (r_out * raxis.from_numpy(w)).sum().backward()
-    (t_out * torch.from_numpy(w)).sum().backward()
+    (r_out * raxis.from_numpy(w).to(device)).sum().backward()
+    (t_out * torch.from_numpy(w).to(device)).sum().backward()
     check_match(r.grad, t.grad)
     assert r_out.grad_fn.name() == t_out.grad_fn.name()
