@@ -66,7 +66,7 @@ static Tensor clone_obey_contract(const Tensor& grad, const Tensor& variable) {
     if (!variable.is_non_overlapping_and_dense()) {
         return grad.clone(MemoryFormat::Contiguous);
     }
-    Tensor out = empty_strided(variable.shape(), variable.strides(), grad.dtype());
+    Tensor out = empty_strided(variable.shape(), variable.strides(), grad.options());
     out.copy_(grad);
     return out;
 }

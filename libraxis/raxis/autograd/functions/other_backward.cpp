@@ -491,7 +491,7 @@ SelectBackward0::SelectBackward0(const Tensor& self, int64_t dim, int64_t index)
 std::string SelectBackward0::name() const { return "SelectBackward0"; }
 
 TensorList SelectBackward0::apply(const TensorList& grads) {
-    Tensor result = zeros(self_shape_, grads[0].dtype());
+    Tensor result = zeros(self_shape_, grads[0].options());
     result.select(dim_, index_).copy_(grads[0]);
     return {result};
 }
@@ -504,7 +504,7 @@ SliceBackward0::SliceBackward0(
 std::string SliceBackward0::name() const { return "SliceBackward0"; }
 
 TensorList SliceBackward0::apply(const TensorList& grads) {
-    Tensor result = zeros(self_shape_, grads[0].dtype());
+    Tensor result = zeros(self_shape_, grads[0].options());
     result.slice(dim_, start_, stop_, step_).copy_(grads[0]);
     return {result};
 }
