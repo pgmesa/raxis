@@ -64,6 +64,11 @@ public:
 
     const std::shared_ptr<StorageImpl>& storage() const;
 
+    // From: c10/core/TensorImpl.h (shallow_copy_from)
+    // Takes the memory and metadata (storage, offset, shape, strides, dtype)
+    // of src; autograd and view fields stay. Only for set_data.
+    void shallow_copy_from(const TensorImpl& src);
+
     // -- Autograd --
     autograd::AutogradMeta* autograd_meta() const;
     void set_autograd_meta(std::unique_ptr<autograd::AutogradMeta> meta);
@@ -87,8 +92,8 @@ public:
     void set_view_version(uint32_t version) { view_version_ = version; }
 
 private:
-    // Shape and strides never change after construction, so the layout
-    // properties are computed once instead of on every check
+    // Shape and strides only change in shallow_copy_from, so the layout
+    // properties are computed there instead of on every check
     void compute_layout();
 
     std::shared_ptr<StorageImpl> storage_;

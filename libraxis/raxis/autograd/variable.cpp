@@ -139,6 +139,19 @@ NodePtr grad_accumulator(const Tensor& leaf) {
     return acc;
 }
 
+void set_data(const Tensor& self, const Tensor& new_data) {
+    RAXIS_CHECK(self.defined() && new_data.defined(), "set_data: undefined tensor");
+    detail::TensorImpl* impl = self.unsafe_get_tensor_impl();
+    // A graph built before the change would send gradients of the old
+    // device, dtype or shape to the leaf: the next use makes a new node
+    if (AutogradMeta* meta = impl->autograd_meta();
+            meta && (self.device() != new_data.device() || self.dtype() != new_data.dtype()
+                     || self.shape() != new_data.shape())) {
+        meta->grad_accumulator.reset();
+    }
+    impl->shallow_copy_from(*new_data.unsafe_get_tensor_impl());
+}
+
 
 static AutogradMeta& materialize_autograd_meta(const Tensor& self) {
     detail::TensorImpl* impl = self.unsafe_get_tensor_impl();

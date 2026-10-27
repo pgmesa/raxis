@@ -105,6 +105,17 @@ bool TensorImpl::is_non_overlapping_and_dense() const {
     return is_non_overlapping_and_dense_;
 }
 
+void TensorImpl::shallow_copy_from(const TensorImpl& src) {
+    storage_ = src.storage_;
+    storage_offset_ = src.storage_offset_;
+    shape_ = src.shape_;
+    strides_ = src.strides_;
+    dtype_ = src.dtype_;
+    numel_ = src.numel_;
+    is_wrapped_number_ = src.is_wrapped_number_;
+    compute_layout();
+}
+
 void TensorImpl::compute_layout() {
     is_contiguous_ = compute_contiguous(shape_, strides_);
     is_non_overlapping_and_dense_ =

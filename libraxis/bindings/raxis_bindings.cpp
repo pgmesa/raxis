@@ -338,6 +338,9 @@ PYBIND11_MODULE(_C, c) {
                 self.set_grad(value.value_or(raxis::Tensor{}));
             })
 
+        // torch's `self.data = new_data`, for Module._apply
+        .def("_set_data", &raxis::autograd::set_data, py::arg("new_data"))
+
         .def_property_readonly("grad_fn",
             [](const raxis::Tensor& self) -> std::optional<raxis::autograd::NodePtr> {
                 auto fn = self.grad_fn();

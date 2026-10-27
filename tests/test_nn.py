@@ -97,9 +97,16 @@ class TestModule:
         t = repr(mlp(torch, final=lambda lib: lib.nn.LogSoftmax(dim=1)))
         assert r == t
 
-    def test_to_cuda_raises(self):
-        with pytest.raises(NotImplementedError):
-            mlp(raxis).to("cuda")
+    def test_to_dtype_keeps_parameters(self):
+        # As torch: the same Parameter objects take the new data, so an
+        # optimizer created before .to() keeps working
+        model = mlp(raxis)
+        params = list(model.parameters())
+        assert model.to(raxis.float64) is model
+        assert [p is q for p, q in zip(params, model.parameters())] == [True] * len(params)
+        assert all(p.dtype == raxis.float64 for p in model.parameters())
+        with pytest.raises(TypeError, match="floating point"):
+            model.to(raxis.int64)
 
     def test_tied_weights_are_yielded_once(self):
         """A weight shared by two modules (nanoGPT ties the token embedding

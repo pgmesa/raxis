@@ -49,6 +49,13 @@ private:
 // The AccumulateGrad node of a leaf that requires grad, created on first use
 RAXIS_API NodePtr grad_accumulator(const Tensor& leaf);
 
+// From: torch/csrc/autograd/variable.cpp (VariableHooks::set_data)
+// What `param.data = new_data` does in PyTorch: self takes the memory and
+// metadata of new_data but stays the same tensor (same Python object, same
+// autograd state), so Module.to() moves the parameters an optimizer already
+// holds. raxis does not expose .data; Module._apply calls this.
+RAXIS_API void set_data(const Tensor& self, const Tensor& new_data);
+
 
 // From: torch/_tensor.py (Tensor.register_hook)
 // hook(grad) runs when the gradient of self is computed, and may return a

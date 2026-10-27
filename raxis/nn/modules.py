@@ -344,13 +344,62 @@ class Module:
             p.requires_grad = requires_grad
         return self
 
-    def to(self, device) -> "Module":
-        if not str(device).startswith("cpu"):
-            raise NotImplementedError(f"raxis only supports the CPU for now, got device '{device}'")
+    # -- Device and dtype --
+
+    # From: torch/nn/modules/module.py (Module._apply)
+    def _apply(self, fn: Callable[[Tensor], Tensor]) -> "Module":
+        """Applies fn to every parameter, gradient and buffer. A parameter
+        stays the same object and takes the new data (torch's
+        `param.data = fn(param)`), so an optimizer created before moving the
+        model keeps updating the moved parameters."""
+        for module in self.children():
+            module._apply(fn)
+        for param in self._parameters.values():
+            if param is None:
+                continue
+            with raxis.no_grad():
+                param._set_data(fn(param))
+                if param.grad is not None:
+                    param.grad._set_data(fn(param.grad))
+        for name, buf in self._buffers.items():
+            if buf is not None:
+                self._buffers[name] = fn(buf)
         return self
+
+    # From: torch/nn/modules/module.py (Module.to)
+    def to(self, *args, **kwargs) -> "Module":
+        """to(device), to(dtype) or to(device, dtype). The dtype applies to
+        floating-point parameters and buffers only, as in torch."""
+        device = kwargs.pop("device", None)
+        dtype = kwargs.pop("dtype", None)
+        if kwargs:
+            raise TypeError(f"to() got unexpected keyword arguments {list(kwargs)}")
+        for arg in args:
+            if isinstance(arg, raxis.dtype):
+                dtype = arg
+            else:
+                device = arg
+        if dtype is not None and not dtype.is_floating:
+            raise TypeError(f"nn.Module.to only accepts floating point dtypes, but got desired dtype={dtype}")
+
+        def convert(t: Tensor) -> Tensor:
+            if dtype is not None and t.dtype.is_floating:
+                return t.to(t.device if device is None else device, dtype)
+            return t if device is None else t.to(device)
+
+        return self._apply(convert)
+
+    def cuda(self, device: int | None = None) -> "Module":
+        return self.to("cuda" if device is None else f"cuda:{device}")
 
     def cpu(self) -> "Module":
         return self.to("cpu")
+
+    def float(self) -> "Module":
+        return self.to(raxis.float32)
+
+    def double(self) -> "Module":
+        return self.to(raxis.float64)
 
     # -- Representation --
 
