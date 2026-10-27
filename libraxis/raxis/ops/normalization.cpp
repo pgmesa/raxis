@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <utility>
 
+#include <raxis/ops/device_check.h>
+
 #include <raxis/util/exception.h>
 
 #include <raxis/tensor/factories.h>
@@ -32,6 +34,7 @@ void check_batch_norm_args(
         "batch_norm: expected a floating point input, but got ", input.dtype());
     RAXIS_CHECK(running_mean.defined() == running_var.defined(),
         "running_mean and running_var must either both be None or neither be None");
+    check_same_device("batch_norm", input, weight, bias, running_mean, running_var);
     check_channel_param(weight, "weight", input);
     check_channel_param(bias, "bias", input);
     check_channel_param(running_mean, "running_mean", input);
@@ -45,11 +48,39 @@ Tensor contiguous_or_undefined(const Tensor& t) {
     return t.defined() ? t.contiguous() : t;
 }
 
+// From: aten/src/ATen/native/Normalization.cpp (batch_norm_cpu_update_stats_template)
+void batch_norm_update_stats_cpu(
+    const Tensor& save_invstd, const Tensor& running_mean, const Tensor& running_var,
+    const Tensor& save_mean, const Tensor& var_sum, int64_t n, double momentum, double eps
+) {
+    const int64_t channels = save_mean.numel();
+    save_mean.dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+        const scalar_t* mean = save_mean.data_ptr<scalar_t>();
+        const scalar_t* var_sums = var_sum.data_ptr<scalar_t>();
+        scalar_t* invstd = save_invstd.mutable_data_ptr<scalar_t>();
+        scalar_t* run_mean = running_mean.defined() ? running_mean.mutable_data_ptr<scalar_t>() : nullptr;
+        scalar_t* run_var = running_var.defined() ? running_var.mutable_data_ptr<scalar_t>() : nullptr;
+        const auto m = static_cast<scalar_t>(momentum);
+        for (int64_t c = 0; c < channels; ++c) {
+            // The batch is normalized with the biased variance, but the
+            // running estimate uses the unbiased one (divided by n - 1)
+            const double var = var_sums[c] / n;
+            invstd[c] = (var != 0 || eps != 0) ? static_cast<scalar_t>(1 / std::sqrt(var + eps)) : scalar_t(0);
+            if (run_mean) {
+                run_mean[c] = m * mean[c] + (1 - m) * run_mean[c];
+                const double unbiased_var = var_sums[c] / (n - 1);
+                run_var[c] = m * unbiased_var + (1 - m) * run_var[c];
+            }
+        }
+    });
+}
+
 // From: aten/src/ATen/native/layer_norm.h (_check_layer_norm_inputs)
 // Returns (M, N): the number of rows (leading dims) and of elements per row
 std::pair<int64_t, int64_t> check_layer_norm_inputs(
     const Tensor& input, IntArrayRef normalized_shape, const Tensor& weight, const Tensor& bias
 ) {
+    check_same_device("layer_norm", input, weight, bias);
     const int64_t normalized_ndim = static_cast<int64_t>(normalized_shape.size());
     RAXIS_CHECK(normalized_ndim >= 1,
         "Expected normalized_shape to be at least 1-dimensional, i.e., containing at least one "
@@ -107,7 +138,6 @@ std::tuple<Tensor, Tensor, Tensor> native_batch_norm(
         return {output, empty({0}, input.options()), empty({0}, input.options())};
     }
 
-    // From: aten/src/ATen/native/Normalization.cpp (batch_norm_cpu_update_stats_template)
     RAXIS_CHECK(input.numel() != 0,
         "input tensor must have at least one element, but got input_sizes = ", input.shape());
     const int64_t channels = input.shape()[1];
@@ -116,26 +146,8 @@ std::tuple<Tensor, Tensor, Tensor> native_batch_norm(
     Tensor save_invstd = empty({channels}, input.options());
     Tensor var_sum = empty({channels}, input.options());
     batch_norm_collect_stats_stub(input.device().type(), save_mean, var_sum, input);
-
-    input.dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
-        const scalar_t* mean = save_mean.data_ptr<scalar_t>();
-        const scalar_t* var_sums = var_sum.data_ptr<scalar_t>();
-        scalar_t* invstd = save_invstd.mutable_data_ptr<scalar_t>();
-        scalar_t* run_mean = running_mean.defined() ? running_mean.mutable_data_ptr<scalar_t>() : nullptr;
-        scalar_t* run_var = running_var.defined() ? running_var.mutable_data_ptr<scalar_t>() : nullptr;
-        const auto m = static_cast<scalar_t>(momentum);
-        for (int64_t c = 0; c < channels; ++c) {
-            // The batch is normalized with the biased variance, but the
-            // running estimate uses the unbiased one (divided by n - 1)
-            const double var = var_sums[c] / n;
-            invstd[c] = (var != 0 || eps != 0) ? static_cast<scalar_t>(1 / std::sqrt(var + eps)) : scalar_t(0);
-            if (run_mean) {
-                run_mean[c] = m * mean[c] + (1 - m) * run_mean[c];
-                const double unbiased_var = var_sums[c] / (n - 1);
-                run_var[c] = m * unbiased_var + (1 - m) * run_var[c];
-            }
-        }
-    });
+    batch_norm_update_stats_stub(input.device().type(), save_invstd, running_mean, running_var,
+                                 save_mean, var_sum, n, momentum, eps);
 
     batch_norm_stub(input.device().type(), output, input, weight, bias, save_mean, save_invstd,
                     running_mean, running_var, true, eps);
@@ -225,8 +237,11 @@ std::tuple<Tensor, Tensor, Tensor> native_layer_norm_backward(
 
 DEFINE_DISPATCH(batch_norm_stub);
 DEFINE_DISPATCH(batch_norm_collect_stats_stub);
+DEFINE_DISPATCH(batch_norm_update_stats_stub);
 DEFINE_DISPATCH(batch_norm_backward_stub);
 DEFINE_DISPATCH(layer_norm_stub);
 DEFINE_DISPATCH(layer_norm_backward_stub);
+
+REGISTER_ALL_CPU_DISPATCH(batch_norm_update_stats_stub, &batch_norm_update_stats_cpu)
 
 } // namespace raxis

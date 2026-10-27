@@ -4,8 +4,6 @@
 #include <cstdint>
 #include <type_traits>
 
-#include <raxis/ops/device_check.h>
-
 #include <raxis/util/exception.h>
 #include <raxis/util/parallel.h>
 
@@ -43,26 +41,16 @@ void apply_triu_tril_single(
 }
 
 // From: aten/src/ATen/native/TriangularOps.cpp (compute_triu_tril)
-Tensor triu_tril(const Tensor& self, int64_t k, bool upper) {
-    check_cpu_only(upper ? "triu" : "tril", self);
-    RAXIS_CHECK(self.ndim() >= 2, upper ? "triu" : "tril", ": input tensor must have at least 2 dimensions");
-    Tensor result = empty(self.shape(), self.options());
-    if (self.numel() == 0) {
-        return result;
-    }
-    const int64_t n = self.shape()[self.ndim() - 2];
-    const int64_t m = self.shape()[self.ndim() - 1];
-    // Clamped so that i + k cannot overflow
-    k = std::clamp(k, -n, m);
-    // A matrix is read with its own strides (a transposed one is not
-    // copied); a batch must step by whole matrices, so it is made contiguous
-    const Tensor self_c = self.ndim() > 2 && !self.is_contiguous() ? self.contiguous() : self;
-    const int64_t self_row_stride = self_c.strides()[self.ndim() - 2];
-    const int64_t self_col_stride = self_c.strides()[self.ndim() - 1];
-    const int64_t self_batch_stride = self.ndim() > 2 ? self_c.strides()[self.ndim() - 3] : 0;
-    const int64_t batch_size = self.numel() / (n * m);
+void triu_tril_cpu(const Tensor& result, const Tensor& self_c, int64_t k, bool upper) {
+    const int64_t ndim = self_c.ndim();
+    const int64_t n = self_c.shape()[ndim - 2];
+    const int64_t m = self_c.shape()[ndim - 1];
+    const int64_t self_row_stride = self_c.strides()[ndim - 2];
+    const int64_t self_col_stride = self_c.strides()[ndim - 1];
+    const int64_t self_batch_stride = ndim > 2 ? self_c.strides()[ndim - 3] : 0;
+    const int64_t batch_size = self_c.numel() / (n * m);
 
-    self.dtype().dispatch_all_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+    self_c.dtype().dispatch_all_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
         const scalar_t* self_data = self_c.data_ptr<scalar_t>();
         scalar_t* result_data = result.mutable_data_ptr<scalar_t>();
         // A batch of matrices splits by matrix, a single matrix by rows
@@ -80,6 +68,22 @@ Tensor triu_tril(const Tensor& self, int64_t k, bool upper) {
             });
         }
     });
+}
+
+Tensor triu_tril(const Tensor& self, int64_t k, bool upper) {
+    RAXIS_CHECK(self.ndim() >= 2, upper ? "triu" : "tril", ": input tensor must have at least 2 dimensions");
+    Tensor result = empty(self.shape(), self.options());
+    if (self.numel() == 0) {
+        return result;
+    }
+    const int64_t n = self.shape()[self.ndim() - 2];
+    const int64_t m = self.shape()[self.ndim() - 1];
+    // Clamped so that i + k cannot overflow
+    k = std::clamp(k, -n, m);
+    // A matrix is read with its own strides (a transposed one is not
+    // copied); a batch must step by whole matrices, so it is made contiguous
+    const Tensor self_c = self.ndim() > 2 && !self.is_contiguous() ? self.contiguous() : self;
+    triu_tril_stub(self.device().type(), result, self_c, k, upper);
     return result;
 }
 
@@ -97,5 +101,9 @@ Tensor triu(const Tensor& self, int64_t diagonal) {
 }
 
 } // namespace ops
+
+DEFINE_DISPATCH(triu_tril_stub);
+
+REGISTER_ALL_CPU_DISPATCH(triu_tril_stub, &triu_tril_cpu)
 
 } // namespace raxis

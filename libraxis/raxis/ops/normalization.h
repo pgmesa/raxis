@@ -25,6 +25,13 @@ using batch_norm_fn = void(*)(
 using batch_norm_collect_stats_fn = void(*)(
     const Tensor& mean, const Tensor& var_sum, const Tensor& input);
 
+// From the statistics of n elements per channel: save_invstd with the
+// biased variance, and running_mean / running_var (if defined) moved toward
+// the batch statistics by momentum, the variance with the unbiased estimate
+using batch_norm_update_stats_fn = void(*)(
+    const Tensor& save_invstd, const Tensor& running_mean, const Tensor& running_var,
+    const Tensor& mean, const Tensor& var_sum, int64_t n, double momentum, double eps);
+
 // Undefined grad_* outputs are skipped
 using batch_norm_backward_fn = void(*)(
     const Tensor& grad_input, const Tensor& grad_weight, const Tensor& grad_bias,
@@ -46,6 +53,7 @@ using layer_norm_backward_fn = void(*)(
 
 DECLARE_DISPATCH(batch_norm_fn, batch_norm_stub);
 DECLARE_DISPATCH(batch_norm_collect_stats_fn, batch_norm_collect_stats_stub);
+DECLARE_DISPATCH(batch_norm_update_stats_fn, batch_norm_update_stats_stub);
 DECLARE_DISPATCH(batch_norm_backward_fn, batch_norm_backward_stub);
 DECLARE_DISPATCH(layer_norm_fn, layer_norm_stub);
 DECLARE_DISPATCH(layer_norm_backward_fn, layer_norm_backward_stub);

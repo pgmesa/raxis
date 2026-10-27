@@ -3,10 +3,17 @@
 #include <cstdint>
 
 #include <raxis/export.h>
+#include <raxis/ops/dispatch_stub.h>
 #include <raxis/tensor/tensor.h>
 
 
 namespace raxis {
+
+// result: contiguous [..., n, m]; self: same shape, with its own strides in
+// the last two dims and contiguous over the batch dims. k is clamped to
+// [-n, m]
+using triu_tril_fn = void(*)(const Tensor& result, const Tensor& self, int64_t k, bool upper);
+DECLARE_DISPATCH(triu_tril_fn, triu_tril_stub);
 
 namespace ops {
 

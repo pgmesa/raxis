@@ -183,14 +183,15 @@ void index_put_kernel(TensorIterator& iter, IntArrayRef index_size, IntArrayRef 
 // PyTorch writes `if (mask) dst = value`, a conditional store the compiler
 // may not vectorize (it cannot add stores the source does not make). Writing
 // `dst = mask ? value : dst` stores every element and becomes a vector
-// blend when both operands are contiguous.
+// blend when both operands are contiguous. Operands: (self, self, mask), as
+// torch's iterator; the loop reads self through the output pointer.
 void masked_fill_kernel(TensorIterator& iter, Scalar value) {
     iter.dtype().dispatch_all_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
         const scalar_t fill = value.to<scalar_t>();
         auto loop = [&](char** data, const int64_t* strides, int64_t n) {
             char* dst = data[0];
-            const char* mask = data[1];
-            if (strides[0] == sizeof(scalar_t) && strides[1] == sizeof(bool)) {
+            const char* mask = data[2];
+            if (strides[0] == sizeof(scalar_t) && strides[2] == sizeof(bool)) {
                 auto* out = reinterpret_cast<scalar_t*>(dst);
                 const auto* m = reinterpret_cast<const bool*>(mask);
                 for (int64_t i = 0; i < n; i++) {
@@ -199,7 +200,7 @@ void masked_fill_kernel(TensorIterator& iter, Scalar value) {
                 return;
             }
             for (int64_t i = 0; i < n; i++) {
-                if (*reinterpret_cast<const bool*>(mask + i * strides[1])) {
+                if (*reinterpret_cast<const bool*>(mask + i * strides[2])) {
                     *reinterpret_cast<scalar_t*>(dst + i * strides[0]) = fill;
                 }
             }

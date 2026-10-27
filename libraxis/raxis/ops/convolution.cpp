@@ -43,28 +43,6 @@ std::string join_sizes(int64_t height, int64_t width, bool is_1d) {
     return ss.str();
 }
 
-// A convolution as the 2-D problem the kernels solve: 1-D inputs get a
-// height of 1, input and weight are contiguous.
-struct Conv2dProblem {
-    Tensor input;    // [N, C, H, W]
-    Tensor weight;   // [O, C / groups, kh, kw]
-    Unfold2dParams params;
-    int64_t groups;
-    int64_t batch_size;
-    int64_t out_channels;
-    bool is_1d;
-    // 1x1 kernel, stride 1, no padding: the image already is its columns
-    bool is_pointwise;
-
-    int64_t output_plane() const { return params.output_height * params.output_width; }
-    int64_t input_numel() const { return params.channels * params.input_height * params.input_width; }
-    // Rows of columns (gemm inner dim) per group
-    int64_t group_rows() const {
-        return params.channels / groups * params.kernel_height * params.kernel_width;
-    }
-    int64_t group_out_channels() const { return out_channels / groups; }
-};
-
 // From: aten/src/ATen/native/Convolution.cpp (check_shape_forward, _convolution)
 Conv2dProblem make_problem(
     const Tensor& input, const Tensor& weight, const Tensor& bias,
@@ -182,7 +160,7 @@ void for_each_image_chunk(int64_t batch_size, const F& f) {
 // before the gemms; here each thread reuses one image-sized buffer, which
 // stays in cache between the unfold and the gemm that reads it.
 template <typename scalar_t>
-void conv2d_forward(Tensor& output, const Conv2dProblem& problem, const Tensor& bias) {
+void conv2d_forward(const Tensor& output, const Conv2dProblem& problem, const Tensor& bias) {
     const Unfold2dParams& p = problem.params;
     const int64_t output_plane = problem.output_plane();
     const int64_t input_numel = problem.input_numel();
@@ -239,7 +217,7 @@ void conv2d_forward(Tensor& output, const Conv2dProblem& problem, const Tensor& 
 // grad_columns[g] = weight[g]^T @ grad_output[g], then fold adds each column
 // back into the image positions it came from.
 template <typename scalar_t>
-void conv2d_backward_input(Tensor& grad_input, const Tensor& grad_output, const Conv2dProblem& problem) {
+void conv2d_backward_input(const Tensor& grad_input, const Tensor& grad_output, const Conv2dProblem& problem) {
     const Unfold2dParams& p = problem.params;
     const int64_t output_plane = problem.output_plane();
     const int64_t input_numel = problem.input_numel();
@@ -356,6 +334,26 @@ Tensor conv2d_backward_weight(const Tensor& grad_output, const Conv2dProblem& pr
     return partials.view({weight_numel});
 }
 
+void conv2d_forward_cpu(const Tensor& output, const Conv2dProblem& problem, const Tensor& bias) {
+    problem.input.dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+        conv2d_forward<scalar_t>(output, problem, bias);
+    });
+}
+
+void conv2d_backward_input_cpu(const Tensor& grad_input, const Tensor& grad_output, const Conv2dProblem& problem) {
+    problem.input.dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+        conv2d_backward_input<scalar_t>(grad_input, grad_output, problem);
+    });
+}
+
+Tensor conv2d_backward_weight_cpu(const Tensor& grad_output, const Conv2dProblem& problem) {
+    Tensor grad_weight;
+    problem.input.dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+        grad_weight = conv2d_backward_weight<scalar_t>(grad_output, problem);
+    });
+    return grad_weight;
+}
+
 } // namespace
 
 
@@ -365,7 +363,7 @@ Tensor convolution(
     const Tensor& input, const Tensor& weight, const Tensor& bias,
     IntArrayRef stride, IntArrayRef padding, IntArrayRef dilation, int64_t groups
 ) {
-    check_cpu_only("convolution", input, weight, bias);
+    check_same_device("convolution", input, weight, bias);
     const Conv2dProblem problem = make_problem(input, weight, bias, stride, padding, dilation, groups);
     const Unfold2dParams& p = problem.params;
 
@@ -373,9 +371,7 @@ Tensor convolution(
         {problem.batch_size, problem.out_channels, p.output_height, p.output_width},
         problem.input.options());
     if (output.numel() > 0) {
-        problem.input.dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
-            conv2d_forward<scalar_t>(output, problem, bias);
-        });
+        conv2d_forward_stub(output.device().type(), output, problem, bias);
     }
     return problem.is_1d ? ops::squeeze(output, 2) : output;
 }
@@ -386,7 +382,7 @@ std::tuple<Tensor, Tensor, Tensor> convolution_backward(
     IntArrayRef stride, IntArrayRef padding, IntArrayRef dilation, int64_t groups,
     std::array<bool, 3> output_mask
 ) {
-    check_cpu_only("convolution_backward", grad_output_, input, weight);
+    check_same_device("convolution_backward", grad_output_, input, weight);
     const Conv2dProblem problem = make_problem(input, weight, {}, stride, padding, dilation, groups);
     const Tensor grad_output = (problem.is_1d ? ops::unsqueeze(grad_output_, 2) : grad_output_).contiguous();
 
@@ -394,14 +390,13 @@ std::tuple<Tensor, Tensor, Tensor> convolution_backward(
     if (output_mask[0]) {
         grad_input = empty(problem.input.shape(), problem.input.options());
     }
-    problem.input.dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
-        if (output_mask[0] && grad_input.numel() > 0) {
-            conv2d_backward_input<scalar_t>(grad_input, grad_output, problem);
-        }
-        if (output_mask[1]) {
-            grad_weight = conv2d_backward_weight<scalar_t>(grad_output, problem);
-        }
-    });
+    const DeviceType device = problem.input.device().type();
+    if (output_mask[0] && grad_input.numel() > 0) {
+        conv2d_backward_input_stub(device, grad_input, grad_output, problem);
+    }
+    if (output_mask[1]) {
+        grad_weight = conv2d_backward_weight_stub(device, grad_output, problem);
+    }
 
     if (output_mask[0]) {
         grad_input = problem.is_1d ? ops::squeeze(grad_input, 2) : grad_input;
@@ -419,5 +414,12 @@ std::tuple<Tensor, Tensor, Tensor> convolution_backward(
 
 DEFINE_DISPATCH(unfolded2d_copy_stub);
 DEFINE_DISPATCH(unfolded2d_acc_stub);
+DEFINE_DISPATCH(conv2d_forward_stub);
+DEFINE_DISPATCH(conv2d_backward_input_stub);
+DEFINE_DISPATCH(conv2d_backward_weight_stub);
+
+REGISTER_ALL_CPU_DISPATCH(conv2d_forward_stub, &conv2d_forward_cpu)
+REGISTER_ALL_CPU_DISPATCH(conv2d_backward_input_stub, &conv2d_backward_input_cpu)
+REGISTER_ALL_CPU_DISPATCH(conv2d_backward_weight_stub, &conv2d_backward_weight_cpu)
 
 } // namespace raxis

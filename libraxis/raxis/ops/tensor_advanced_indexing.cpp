@@ -160,35 +160,42 @@ Tensor scatter_add(const Tensor& self, int64_t dim, const Tensor& index, const T
 }
 
 
-// From: aten/src/ATen/native/TensorAdvancedIndexing.cpp (index_select_out_cpu_)
-// out.select(dim, i) = self.select(dim, index[i]): whole slices are copied.
-// One TensorIterator is built for the copy of one slice and pointed at each
-// (source, destination) pair in turn, so its setup is paid once.
 Tensor index_select(const Tensor& self, int64_t dim, const Tensor& index) {
-    check_cpu_only("index_select", self, index);
+    check_same_device("index_select", self, index);
     RAXIS_CHECK(index.ndim() <= 1, "index_select(): Index is supposed to be a vector");
     RAXIS_CHECK(index.dtype() == dtypes::Int64 || index.dtype() == dtypes::Int32,
         "index_select(): Expected dtype int32/int64 for index");
     dim = wrap_dim(dim, ensure_nonempty_dim(self.ndim()));
     Tensor index_contig = index.to(dtypes::Int64).contiguous();
-    const int64_t* index_data = index_contig.data_ptr<int64_t>();
-    int64_t numel = index_contig.numel();
+    const int64_t numel = index_contig.numel();
+    if (self.ndim() == 0) {
+        RAXIS_CHECK(numel == 1,
+            "index_select(): Index to scalar can have only 1 value, got ", numel, " value(s)");
+    }
 
     DimVector result_shape(self.shape());
     if (self.ndim() > 0) {
         result_shape[dim] = numel;
     }
     Tensor result = empty(result_shape, self.options());
+    index_select_stub(self.device().type(), result, self, dim, index_contig);
+    return result;
+}
 
+namespace {
+
+// From: aten/src/ATen/native/TensorAdvancedIndexing.cpp (index_select_out_cpu_)
+// out.select(dim, i) = self.select(dim, index[i]): whole slices are copied.
+// One TensorIterator is built for the copy of one slice and pointed at each
+// (source, destination) pair in turn, so its setup is paid once.
+void index_select_cpu(const Tensor& result, const Tensor& self, int64_t dim, const Tensor& index_contig) {
+    const int64_t* index_data = index_contig.data_ptr<int64_t>();
+    const int64_t numel = index_contig.numel();
     int64_t self_dim_size = ensure_nonempty_size(self, dim);
     auto check = [self_dim_size](int64_t i) {
         RAXIS_CHECK_INDEX(i >= 0 && i < self_dim_size, "index out of range in self");
     };
 
-    if (self.ndim() == 0) {
-        RAXIS_CHECK(numel == 1,
-            "index_select(): Index to scalar can have only 1 value, got ", numel, " value(s)");
-    }
     if (self.ndim() <= 1) {
         // Plain element copies
         int64_t self_stride = self.ndim() == 0 ? 1 : self.strides()[dim];
@@ -201,10 +208,10 @@ Tensor index_select(const Tensor& self, int64_t dim, const Tensor& index) {
                 result_ptr[i * result_stride] = self_ptr[index_data[i] * self_stride];
             }
         });
-        return result;
+        return;
     }
     if (numel == 0 || self.numel() == 0) {
-        return result;
+        return;
     }
 
     Tensor self_slice = self.select(dim, 0);
@@ -250,8 +257,9 @@ Tensor index_select(const Tensor& self, int64_t dim, const Tensor& index) {
     } else {
         parallel_for(0, numel, detail::GRAIN_SIZE / slice_size, copy_slices);
     }
-    return result;
 }
+
+} // namespace
 
 // From: aten/src/ATen/native/TensorAdvancedIndexing.cpp (index_add_cpu_)
 // self.select(dim, index[i]) += source.select(dim, i), one slice at a time
@@ -750,10 +758,13 @@ Tensor& masked_fill_(Tensor& self, const Tensor& mask, Scalar value) {
         " cannot be broadcast to the tensor of shape ", self.shape());
     assert_no_partial_overlap(self, mask);
 
+    // self is also an input: a GPU kernel computes mask ? value : self
+    // From: aten/src/ATen/native/TensorAdvancedIndexing.cpp (masked_fill_impl_cpu)
     auto iter = TensorIteratorConfig()
         .check_mem_overlap(false)
         .check_all_same_dtype(false)
         .add_output(self)
+        .add_input(self)
         .add_input(mask)
         .build();
     masked_fill_stub(iter.device_type(), iter, value);
@@ -775,5 +786,8 @@ DEFINE_DISPATCH(scatter_add_stub);
 DEFINE_DISPATCH(index_stub);
 DEFINE_DISPATCH(index_put_stub);
 DEFINE_DISPATCH(masked_fill_stub);
+DEFINE_DISPATCH(index_select_stub);
+
+REGISTER_ALL_CPU_DISPATCH(index_select_stub, &ops::index_select_cpu)
 
 } // namespace raxis

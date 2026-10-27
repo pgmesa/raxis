@@ -21,6 +21,11 @@ DECLARE_DISPATCH(index_fn, index_stub);
 DECLARE_DISPATCH(index_put_fn, index_put_stub);
 DECLARE_DISPATCH(masked_fill_fn, masked_fill_stub);
 
+// result.select(dim, i) = self.select(dim, index[i]); index is contiguous
+// int64, result has self's shape with index.numel() in dim
+using index_select_fn = void(*)(const Tensor& result, const Tensor& self, int64_t dim, const Tensor& index);
+DECLARE_DISPATCH(index_select_fn, index_select_stub);
+
 using scatter_gather_fn = void(*)(const Tensor& self, int64_t dim, const Tensor& index, const Tensor& src);
 using scatter_fill_fn = void(*)(const Tensor& self, int64_t dim, const Tensor& index, Scalar value);
 

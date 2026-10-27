@@ -39,6 +39,40 @@ using unfolded2d_acc_fn = void(*)(
 DECLARE_DISPATCH(unfolded2d_copy_fn, unfolded2d_copy_stub);
 DECLARE_DISPATCH(unfolded2d_acc_fn, unfolded2d_acc_stub);
 
+// A convolution as the 2-D problem the kernels solve: 1-D inputs get a
+// height of 1, input and weight are contiguous.
+struct Conv2dProblem {
+    Tensor input;    // [N, C, H, W]
+    Tensor weight;   // [O, C / groups, kh, kw]
+    Unfold2dParams params;
+    int64_t groups;
+    int64_t batch_size;
+    int64_t out_channels;
+    bool is_1d;
+    // 1x1 kernel, stride 1, no padding: the image already is its columns
+    bool is_pointwise;
+
+    int64_t output_plane() const { return params.output_height * params.output_width; }
+    int64_t input_numel() const { return params.channels * params.input_height * params.input_width; }
+    // Rows of columns (gemm inner dim) per group
+    int64_t group_rows() const {
+        return params.channels / groups * params.kernel_height * params.kernel_width;
+    }
+    int64_t group_out_channels() const { return out_channels / groups; }
+};
+
+// output: contiguous [N, O, OH, OW]; bias: [O] or undefined
+using conv2d_forward_fn = void(*)(const Tensor& output, const Conv2dProblem& problem, const Tensor& bias);
+// grad_input: contiguous, shaped as problem.input; grad_output: contiguous [N, O, OH, OW]
+using conv2d_backward_input_fn = void(*)(
+    const Tensor& grad_input, const Tensor& grad_output, const Conv2dProblem& problem);
+// Returns grad_weight flat, [O * C / groups * kh * kw]
+using conv2d_backward_weight_fn = Tensor(*)(const Tensor& grad_output, const Conv2dProblem& problem);
+
+DECLARE_DISPATCH(conv2d_forward_fn, conv2d_forward_stub);
+DECLARE_DISPATCH(conv2d_backward_input_fn, conv2d_backward_input_stub);
+DECLARE_DISPATCH(conv2d_backward_weight_fn, conv2d_backward_weight_stub);
+
 // Differentiable through ConvolutionBackward0. input: [N, C, L] or
 // [N, C, H, W]; weight: [O, C / groups, k...]; bias: [O] or undefined.
 // stride, padding and dilation hold one value per spatial dim or a single
