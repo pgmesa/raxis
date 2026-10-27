@@ -268,11 +268,22 @@ if(RAXIS_USE_CUDA)
 
     file(GLOB_RECURSE RAXIS_CUDA_SOURCES CONFIGURE_DEPENDS
         "${RAXIS_LIB_DIR}/cuda/*.cpp"
+        "${RAXIS_LIB_DIR}/ops/cuda/*.cpp"
         "${RAXIS_LIB_DIR}/ops/cuda/*.cu"
     )
     add_library(raxis_cuda SHARED ${RAXIS_CUDA_SOURCES})
     # The static runtime: no cudart library to ship, only the driver is needed
-    target_link_libraries(raxis_cuda PRIVATE raxis CUDA::cudart_static)
+    # cuBLAS has no static library on Windows; the wheels will depend on
+    # NVIDIA's nvidia-cublas-cu* packages, as PyTorch's
+    target_link_libraries(raxis_cuda PRIVATE raxis CUDA::cudart_static CUDA::cublas)
+    # The ISA macros are in CMAKE_CXX_FLAGS (cmake/DispatchCompile.cmake),
+    # which nvcc does not see: without them the .cu files would compile a
+    # different DispatchStub than the core
+    foreach(def HAVE_AVX2_CPU_DEFINITION HAVE_AVX512_CPU_DEFINITION)
+        if(CMAKE_CXX_FLAGS MATCHES "-D${def}")
+            target_compile_definitions(raxis_cuda PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:${def}>)
+        endif()
+    endforeach()
     target_compile_options(raxis_cuda PRIVATE
         # Device lambdas in host code and constexpr std:: functions
         # (std::apply, std::array) in device code, as PyTorch
@@ -285,6 +296,9 @@ if(RAXIS_USE_CUDA)
             # only reports at higher warning levels
             $<$<COMPILE_LANGUAGE:CUDA>:--diag-suppress=1394>
         )
+        # cudart_static.lib asks for the static CRT (LIBCMT); everything
+        # else here uses the DLL one (/MD), and two CRTs must not mix
+        target_link_options(raxis_cuda PRIVATE /NODEFAULTLIB:LIBCMT)
     else()
         target_compile_options(raxis_cuda PRIVATE -fvisibility=hidden)
         set_target_properties(raxis_cuda PROPERTIES INSTALL_RPATH "$ORIGIN")

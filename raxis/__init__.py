@@ -36,7 +36,18 @@ else:
 # and raxis.cuda.is_available() is False
 _cuda_lib_name = {'Windows': 'raxis_cuda.dll', 'Darwin': 'libraxis_cuda.dylib'}.get(platform.system(), 'libraxis_cuda.so')
 if (raxis_lib_dirs / _cuda_lib_name).exists():
-    ctypes.CDLL(str(raxis_lib_dirs / _cuda_lib_name), mode=ctypes.RTLD_GLOBAL)
+    if platform.system() == 'Windows' and os.environ.get('CUDA_PATH'):
+        # cuBLAS from the CUDA toolkit: since Python 3.8 Windows no longer
+        # resolves DLL dependencies through PATH (CUDA 13 keeps them in bin/x64)
+        for _dir in (Path(os.environ['CUDA_PATH']) / 'bin' / 'x64', Path(os.environ['CUDA_PATH']) / 'bin'):
+            if _dir.is_dir():
+                os.add_dll_directory(str(_dir))
+    try:
+        ctypes.CDLL(str(raxis_lib_dirs / _cuda_lib_name), mode=ctypes.RTLD_GLOBAL)
+    except OSError as e:
+        raise ImportError(
+            f"raxis could not load its CUDA backend ({_cuda_lib_name}): {e}. "
+            "It needs the CUDA runtime libraries (cuBLAS) of the toolkit it was built with") from e
 
 # Dynamically identify and load the `_C` module
 _C_module_file = None

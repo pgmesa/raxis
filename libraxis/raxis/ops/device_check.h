@@ -22,4 +22,17 @@ void check_cpu_only(const char* op_name, const Tensors&... tensors) {
     (check(tensors), ...);
 }
 
+/// For ops that dispatch on one tensor's device (the result's) and read the
+/// others with the same kernel: every defined tensor must be on that device.
+/// From: aten/src/ATen/TensorUtils.cpp (checkAllSameGPU)
+template <typename... Tensors>
+void check_same_device(const char* op_name, const Tensor& first, const Tensors&... tensors) {
+    auto check = [op_name, &first](const Tensor& t) {
+        RAXIS_CHECK(!t.defined() || t.device() == first.device(),
+            op_name, ": expected all tensors to be on the same device, but found at least two devices, ",
+            first.device(), " and ", t.device());
+    };
+    (check(tensors), ...);
+}
+
 } // namespace raxis

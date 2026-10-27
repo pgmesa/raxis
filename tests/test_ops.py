@@ -1483,8 +1483,8 @@ class TestAddmv:
         v_data = randf(k, seed=99, lo=-2.0, hi=2.0)
         r_a, t_a = make_pair(a_data, device)
         r_v, t_v = make_pair(v_data, device)
-        r_self = raxis.zeros([m])
-        t_self = torch.zeros(m)
+        r_self = raxis.zeros([m], device=device)
+        t_self = torch.zeros(m, device=device)
         check_match(
             raxis.addmv(r_self, r_a, r_v, beta=0, alpha=1),
             torch.addmv(t_self, t_a, t_v, beta=0, alpha=1),
@@ -1568,8 +1568,8 @@ class TestAddmm:
         b_data = randf(k, n, seed=99, lo=-2.0, hi=2.0)
         r_a, t_a = make_pair(a_data, device)
         r_b, t_b = make_pair(b_data, device)
-        r_self = raxis.zeros([m, n])
-        t_self = torch.zeros(m, n)
+        r_self = raxis.zeros([m, n], device=device)
+        t_self = torch.zeros(m, n, device=device)
         check_match(
             raxis.addmm(r_self, r_a, r_b, beta=0, alpha=1),
             torch.addmm(t_self, t_a, t_b, beta=0, alpha=1),
@@ -1684,8 +1684,8 @@ class TestAddbmm:
         b_data = randf(bs, k, n, seed=99, lo=-2.0, hi=2.0)
         r_a, t_a = make_pair(a_data, device)
         r_b, t_b = make_pair(b_data, device)
-        r_self = raxis.zeros([m, n])
-        t_self = torch.zeros(m, n)
+        r_self = raxis.zeros([m, n], device=device)
+        t_self = torch.zeros(m, n, device=device)
         check_match(
             raxis.addbmm(r_self, r_a, r_b, beta=0, alpha=1),
             torch.addbmm(t_self, t_a, t_b, beta=0, alpha=1),

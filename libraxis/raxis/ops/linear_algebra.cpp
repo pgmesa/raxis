@@ -36,7 +36,7 @@ static void addmm_impl_cpu_(
     const Scalar& beta, 
     const Scalar& alpha
 ) {
-    check_cpu_only("addmm", result, self, m1, m2);
+    check_same_device("addmm", result, self, m1, m2);
     RAXIS_INTERNAL_ASSERT(self.ndim() == 2 && m1.ndim() == 2 && m2.ndim() == 2);
     RAXIS_CHECK(
         m1.dtype() == m2.dtype(),
@@ -278,7 +278,7 @@ static void bmm_impl_(
     const Scalar& alpha,
     bool is_bmm_out
 ) {
-    check_cpu_only("bmm", self_or_result, batch1, batch2);
+    check_same_device("bmm", self_or_result, batch1, batch2);
     const int64_t bs = batch1.shape()[0];
     const int64_t contraction_size = batch1.shape()[2];
     const int64_t res_rows = batch1.shape()[1];
@@ -378,8 +378,8 @@ static void addbmm_impl_(
  
     Scalar adjusted_beta = beta;
     for (int64_t b = 0; b < num_batches; ++b) {
-        addmm_impl_cpu_(result, result, batch1.select(0, b), batch2.select(0, b),
-                         adjusted_beta, alpha);
+        addmm_stub(result.device().type(), result, result, batch1.select(0, b), batch2.select(0, b),
+                   adjusted_beta, alpha);
         adjusted_beta = 1;
     }
 }
@@ -593,7 +593,7 @@ Tensor& mm_out(const Tensor& mat1, const Tensor& mat2, Tensor& out) {
     if (!out.defined()) {
         out = empty({mat1.shape()[0], mat2.shape()[1]}, mat1.options());
     }
-    addmm_impl_cpu_(out, out, mat1, mat2, 0, 1);
+    addmm_stub(out.device().type(), out, out, mat1, mat2, 0, 1);
     return out;
 }
 
@@ -612,7 +612,7 @@ Tensor& addmm_out(
     if (!out.defined()) {
         out = empty({mat1.shape()[0], mat2.shape()[1]}, mat1.options());
     }
-    addmm_impl_cpu_(out, self_expanded, mat1, mat2, beta, alpha);
+    addmm_stub(out.device().type(), out, self_expanded, mat1, mat2, beta, alpha);
     return out;
 }
 
@@ -625,7 +625,7 @@ Tensor& bmm_out(const Tensor& self, const Tensor& mat2, Tensor& out) {
     if (!out.defined()) {
         out = empty({self.shape()[0], self.shape()[1], mat2.shape()[2]}, self.options());
     }
-    bmm_impl_(out, self, mat2, 0, 1, true);
+    baddbmm_stub(out.device().type(), out, self, mat2, 0, 1, true);
     return out;
 }
  
@@ -686,15 +686,51 @@ static constexpr bool lda_cond(int64_t m, int64_t n, int64_t lda) {
     return n == 1 || lda >= std::max<int64_t>(1, m);
 }
  
+// out = beta * out + alpha * (mat @ vec), out already holding self
+static void addmv_impl_cpu_(
+    Tensor& out, const Tensor& mat, const Tensor& vec, const Scalar& beta, const Scalar& alpha
+) {
+    auto r_stride = out.stride(0);
+
+    out.dtype().dispatch_all_types_except_bool([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+        auto b = beta.to<scalar_t>();
+        auto a = alpha.to<scalar_t>();
+
+        if (mat.stride(0) == 1 && lda_cond(mat.shape()[0], mat.shape()[1], mat.stride(1))) {
+            cpublas::gemv<scalar_t>(
+                TransposeType::NoTranspose, mat.shape()[0], mat.shape()[1], a,
+                mat.data_ptr<scalar_t>(), mat.stride(1),
+                vec.data_ptr<scalar_t>(), vec.stride(0),
+                b, out.mutable_data_ptr<scalar_t>(), r_stride
+            );
+        } else if (mat.stride(1) == 1 && lda_cond(mat.shape()[1], mat.shape()[0], mat.stride(0))) {
+            cpublas::gemv<scalar_t>(
+                TransposeType::Transpose, mat.shape()[1], mat.shape()[0], a,
+                mat.data_ptr<scalar_t>(), mat.stride(0),
+                vec.data_ptr<scalar_t>(), vec.stride(0),
+                b, out.mutable_data_ptr<scalar_t>(), r_stride
+            );
+        } else {
+            Tensor cmat = mat.contiguous();
+            cpublas::gemv<scalar_t>(
+                TransposeType::Transpose, mat.shape()[1], mat.shape()[0], a,
+                cmat.data_ptr<scalar_t>(), cmat.stride(0),
+                vec.data_ptr<scalar_t>(), vec.stride(0),
+                b, out.mutable_data_ptr<scalar_t>(), r_stride
+            );
+        }
+    });
+}
+
 Tensor& addmv_out(
-    const Tensor& self, 
-    const Tensor& mat, 
+    const Tensor& self,
+    const Tensor& mat,
     const Tensor& vec,
-    Scalar beta, 
-    Scalar alpha, 
+    Scalar beta,
+    Scalar alpha,
     Tensor& out
 ) {
-    check_cpu_only("addmv", self, mat, vec, out);
+    check_same_device("addmv", mat, self, vec, out);
     RAXIS_CHECK(mat.ndim() == 2 && vec.ndim() == 1,
         "matrix + vector expected, got ", mat.ndim(), "D and ", vec.ndim(), "D tensors");
     RAXIS_CHECK(mat.shape()[1] == vec.shape()[0],
@@ -722,38 +758,8 @@ Tensor& addmv_out(
     }
  
     if (out.numel() == 0) return out;
- 
-    auto r_stride = out.stride(0);
- 
-    out.dtype().dispatch_all_types_except_bool([&]<typename scalar_t>(std::type_identity<scalar_t>) {
-        auto b = beta.to<scalar_t>();
-        auto a = alpha.to<scalar_t>();
- 
-        if (mat.stride(0) == 1 && lda_cond(mat.shape()[0], mat.shape()[1], mat.stride(1))) {
-            cpublas::gemv<scalar_t>(
-                TransposeType::NoTranspose, mat.shape()[0], mat.shape()[1], a,
-                mat.data_ptr<scalar_t>(), mat.stride(1),
-                vec.data_ptr<scalar_t>(), vec.stride(0),
-                b, out.mutable_data_ptr<scalar_t>(), r_stride
-            );
-        } else if (mat.stride(1) == 1 && lda_cond(mat.shape()[1], mat.shape()[0], mat.stride(0))) {
-            cpublas::gemv<scalar_t>(
-                TransposeType::Transpose, mat.shape()[1], mat.shape()[0], a,
-                mat.data_ptr<scalar_t>(), mat.stride(0),
-                vec.data_ptr<scalar_t>(), vec.stride(0),
-                b, out.mutable_data_ptr<scalar_t>(), r_stride
-            );
-        } else {
-            Tensor cmat = mat.contiguous();
-            cpublas::gemv<scalar_t>(
-                TransposeType::Transpose, mat.shape()[1], mat.shape()[0], a,
-                cmat.data_ptr<scalar_t>(), cmat.stride(0),
-                vec.data_ptr<scalar_t>(), vec.stride(0),
-                b, out.mutable_data_ptr<scalar_t>(), r_stride
-            );
-        }
-    });
- 
+
+    addmv_stub(out.device().type(), out, mat, vec, beta, alpha);
     return out;
 }
  
@@ -790,7 +796,7 @@ Tensor mv(const Tensor& mat, const Tensor& vec) {
 namespace ops {
 
 Tensor dot(const Tensor& self, const Tensor& other) {
-    check_cpu_only("dot", self, other);
+    check_same_device("dot", self, other);
     RAXIS_CHECK(self.ndim() == 1 && other.ndim() == 1,
         "1D tensors expected, but got ", self.ndim(), "D and ", other.ndim(), "D tensors");
     RAXIS_CHECK(self.dtype() == other.dtype(),
@@ -801,7 +807,13 @@ Tensor dot(const Tensor& self, const Tensor& other) {
         "] and src [", other.numel(), "] to have the same number of elements");
  
     Tensor result = empty({}, self.options());
- 
+    dot_stub(self.device().type(), result, self, other);
+    return result;
+}
+
+}
+
+static void dot_impl_cpu_(Tensor& result, const Tensor& self, const Tensor& other) {
     self.dtype().dispatch_all_types_except_bool([&]<typename scalar_t>(std::type_identity<scalar_t>) {
         result.fill_(cpublas::dot_impl<scalar_t>(
             self.numel(),
@@ -809,10 +821,16 @@ Tensor dot(const Tensor& self, const Tensor& other) {
             other.data_ptr<scalar_t>(), other.stride(0)
         ));
     });
- 
-    return result;
 }
 
-}
+DEFINE_DISPATCH(addmm_stub);
+DEFINE_DISPATCH(baddbmm_stub);
+DEFINE_DISPATCH(addmv_stub);
+DEFINE_DISPATCH(dot_stub);
+
+REGISTER_ALL_CPU_DISPATCH(addmm_stub, &addmm_impl_cpu_)
+REGISTER_ALL_CPU_DISPATCH(baddbmm_stub, &bmm_impl_)
+REGISTER_ALL_CPU_DISPATCH(addmv_stub, &addmv_impl_cpu_)
+REGISTER_ALL_CPU_DISPATCH(dot_stub, &dot_impl_cpu_)
 
 } // namespace raxis
