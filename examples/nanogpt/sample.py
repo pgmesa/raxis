@@ -8,6 +8,7 @@ trained with one backend can be sampled with the other:
     python sample.py --backend raxis                       # out-raxis/ckpt.pt
     python sample.py --backend raxis --out_dir out-torch   # trained with torch
     python sample.py --start "ROMEO:" --num_samples 3 --max_new_tokens 300
+    python sample.py --out_dir out-raxis-full --device cuda
 """
 
 import argparse
@@ -26,6 +27,7 @@ parser.add_argument("--temperature", type=float, default=0.8,
                     help="1.0 = no change, < 1.0 = less random, > 1.0 = more random")
 parser.add_argument("--top_k", type=int, default=200, help="keep only the top_k most likely tokens")
 parser.add_argument("--seed", type=int, default=1337)
+parser.add_argument("--device", default="cpu", help="cpu or cuda")
 args = parser.parse_args()
 
 here = os.path.dirname(os.path.abspath(__file__))
@@ -52,6 +54,7 @@ for k in list(state_dict):
         state_dict[k[len(unwanted_prefix):]] = state_dict.pop(k)
 model.load_state_dict(state_dict)
 model.eval()
+model.to(args.device)
 print(f"loaded {ckpt_path} (iter {checkpoint['iter_num']}, val loss {checkpoint['best_val_loss']:.4f})")
 
 meta_path = os.path.join(here, "data", checkpoint["config"]["dataset"], "meta.pkl")
@@ -68,7 +71,7 @@ def decode(ids):
     return "".join(itos[i] for i in ids)
 
 
-x = lib.tensor(encode(args.start), dtype=lib.long)[None, ...]
+x = lib.tensor(encode(args.start), dtype=lib.long, device=args.device)[None, ...]
 start = time.perf_counter()
 with lib.no_grad():
     for _ in range(args.num_samples):
