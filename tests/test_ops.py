@@ -1024,6 +1024,18 @@ class TestRoundTrips:
         r_np = raxis.from_numpy(data).numpy()
         np.testing.assert_allclose(r_np, data, atol=1e-6)
 
+    @pytest.mark.parametrize("char", ["i", "l", "q", "f", "d", "B", "?"])
+    def test_from_numpy_dtype_by_kind_and_size(self, char):
+        # Windows numpy has two int32 types (C int 'i' and long 'l'); numpy
+        # arithmetic on one can return the other
+        data = np.ones(3, dtype=char)
+        expected = {"i": "int32", "l": np.dtype("l").name, "q": "int64", "f": "float32", "d": "float64",
+                    "B": "uint8", "?": "bool"}[char]
+        assert raxis.from_numpy(data).dtype.name == expected
+        assert raxis.from_numpy(np.abs(np.ones(3, dtype=np.int32)) % 3).dtype.name == "int32"
+        with pytest.raises(TypeError, match="unsupported numpy dtype"):
+            raxis.from_numpy(np.ones(3, dtype=">f4"))
+
 
 # ===========================================================================
 # FACTORIES

@@ -38,13 +38,19 @@ py::dtype numpy_dtype(const Dtype& dt) {
     }
 }
 
+// By kind and size, not by descriptor identity: numpy has two int32 types on
+// Windows (C long 'l' and int 'i'), and arithmetic on one may return the other
 inline Dtype dtype_from_numpy(py::dtype dt) {
-    if (dt.is(py::dtype::of<float>()))    return dtypes::Float32;
-    if (dt.is(py::dtype::of<double>()))   return dtypes::Float64;
-    if (dt.is(py::dtype::of<int32_t>()))  return dtypes::Int32;
-    if (dt.is(py::dtype::of<int64_t>()))  return dtypes::Int64;
-    if (dt.is(py::dtype::of<uint8_t>()))  return dtypes::Uint8;
-    if (dt.is(py::dtype::of<bool>()))     return dtypes::Bool;
+    const char kind = dt.kind();
+    const auto size = dt.itemsize();
+    if (dt.byteorder() != '>') {
+        if (kind == 'f' && size == 4) return dtypes::Float32;
+        if (kind == 'f' && size == 8) return dtypes::Float64;
+        if (kind == 'i' && size == 4) return dtypes::Int32;
+        if (kind == 'i' && size == 8) return dtypes::Int64;
+        if (kind == 'u' && size == 1) return dtypes::Uint8;
+        if (kind == 'b' && size == 1) return dtypes::Bool;
+    }
     throw py::type_error("unsupported numpy dtype: " + py::str(dt).cast<std::string>());
 }
 
