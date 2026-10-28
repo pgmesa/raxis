@@ -1047,8 +1047,8 @@ class TestPad:
 
     @pytest.mark.parametrize("mode", PAD_MODES)
     @pytest.mark.parametrize("shape, pad", PAD_CASES)
-    def test_forward_backward(self, shape, pad, mode):
-        r_x, t_x = make_grad_pair(randf_centered(*shape))
+    def test_forward_backward(self, shape, pad, mode, device):
+        r_x, t_x = make_grad_pair(randf_centered(*shape), device)
         r_out = raxis.nn.functional.pad(r_x, pad, mode=mode)
         t_out = F.pad(t_x, pad, mode=mode)
         check_match(r_out, t_out, context=f"pad {mode} {shape} {pad}")

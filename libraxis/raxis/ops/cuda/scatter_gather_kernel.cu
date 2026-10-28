@@ -5,6 +5,7 @@
 #include <raxis/core/scalar.h>
 #include <raxis/cuda/cuda_exception.h>
 #include <raxis/cuda/cuda_functions.h>
+#include <raxis/ops/cuda/atomic.cuh>
 #include <raxis/ops/cuda/loops.cuh>
 #include <raxis/ops/cuda/offset_calculator.cuh>
 #include <raxis/ops/tensor_advanced_indexing.h>
@@ -53,37 +54,6 @@ Tensor restrided_as(const Tensor& t, int64_t dim, const Tensor& index, bool rest
     return make_view(t, t.storage_offset(), shape, strides, /*is_differentiable_view=*/false);
 }
 
-// atomicAdd for every dtype: native for 32 and 64-bit types, a compare and
-// swap of the aligned 32-bit word for bytes (a sum of bools is their OR)
-// From: aten/src/ATen/cuda/Atomic.cuh (AtomicFPOp, AtomicAddIntegerImpl)
-template <typename T>
-__device__ inline void atomic_add(T* address, T value) {
-    if constexpr (std::is_same_v<T, float> || std::is_same_v<T, double> || std::is_same_v<T, int32_t>) {
-        atomicAdd(address, value);
-    } else if constexpr (std::is_same_v<T, int64_t>) {
-        // Two's complement: the unsigned sum is the signed one
-        atomicAdd(reinterpret_cast<unsigned long long*>(address), static_cast<unsigned long long>(value));
-    } else {
-        static_assert(sizeof(T) == 1, "atomic_add: unsupported type");
-        const auto byte = reinterpret_cast<uintptr_t>(address) % 4;
-        auto* word = reinterpret_cast<uint32_t*>(reinterpret_cast<char*>(address) - byte);
-        const uint32_t shift = byte * 8;
-        uint32_t old = *word;
-        uint32_t assumed;
-        do {
-            assumed = old;
-            const auto current = static_cast<uint8_t>(assumed >> shift);
-            uint8_t sum;
-            if constexpr (std::is_same_v<T, bool>) {
-                sum = current || value;
-            } else {
-                sum = static_cast<uint8_t>(current + value);
-            }
-            old = atomicCAS(word, assumed, (assumed & ~(0xffu << shift)) | (static_cast<uint32_t>(sum) << shift));
-        } while (assumed != old);
-    }
-}
-
 // The functors get the element of self and of src that one index value
 // pairs (extended lambdas cannot be defined inside the dtype dispatch)
 template <typename scalar_t>
@@ -104,7 +74,7 @@ struct FillOp {
 template <typename scalar_t>
 struct AtomicAddOp {
     __device__ void operator()(scalar_t* self, const scalar_t* src) const {
-        atomic_add(self, *src);
+        cuda::atomic_add(self, *src);
     }
 };
 
