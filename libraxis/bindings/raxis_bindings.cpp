@@ -56,6 +56,11 @@ PYBIND11_MODULE(_C, c) {
     c.def("_cuda_set_device", [](int index) {
         raxis::get_cuda_hooks().set_device(static_cast<raxis::DeviceIndex>(index));
     }, py::arg("index"));
+    c.def("_cuda_get_device_properties", [](int index) {
+        const auto props = raxis::get_cuda_hooks().device_properties(static_cast<raxis::DeviceIndex>(index));
+        return py::make_tuple(props.name, props.major, props.minor, props.total_memory,
+                              props.multi_processor_count, props.shared_memory_per_block_optin);
+    });
     c.def("_cuda_get_device_capability", [](int index) {
         return raxis::get_cuda_hooks().device_capability(static_cast<raxis::DeviceIndex>(index));
     });

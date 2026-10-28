@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <utility>
 
 #include <raxis/export.h>
@@ -9,6 +10,18 @@
 
 
 namespace raxis {
+
+// From: torch.cuda.get_device_properties (a subset)
+struct CUDADeviceProperties {
+    std::string name;
+    int major = 0;
+    int minor = 0;
+    int64_t total_memory = 0;
+    int multi_processor_count = 0;
+    // Largest dynamic shared memory a block can opt into (164 KB on an
+    // A100, 99 KB on RTX 30xx / 40xx, 64 KB on a T4)
+    int64_t shared_memory_per_block_optin = 0;
+};
 
 struct CUDAMemoryStats {
     int64_t allocated_bytes = 0;
@@ -38,6 +51,7 @@ struct RAXIS_API CUDAHooksInterface {
     virtual void set_device(DeviceIndex index) const;
     /// (major, minor) compute capability, 8.0 for an A100
     virtual std::pair<int, int> device_capability(DeviceIndex index) const;
+    virtual CUDADeviceProperties device_properties(DeviceIndex index) const;
     /// Waits for all the work queued on the device
     virtual void synchronize(DeviceIndex index) const;
 

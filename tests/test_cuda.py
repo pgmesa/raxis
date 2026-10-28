@@ -110,6 +110,16 @@ class TestTransfers:
         np.testing.assert_array_equal(x.grad.numpy(), np.full((3, 4), 3.0, dtype=np.float32))
 
 
+class TestDeviceProperties:
+
+    def test_match_torch(self):
+        r, t = raxis.cuda.get_device_properties(0), torch.cuda.get_device_properties(0)
+        assert (r.name, r.major, r.minor, r.total_memory, r.multi_processor_count) == (
+            t.name, t.major, t.minor, t.total_memory, t.multi_processor_count)
+        assert r.shared_memory_per_block_optin == t.shared_memory_per_block_optin
+        assert raxis.cuda.get_device_capability() == (r.major, r.minor)
+
+
 class TestPinnedMemory:
     """pin_memory() and non_blocking copies (cuda/cuda_host_allocator.cpp)."""
 
@@ -833,6 +843,25 @@ class TestAttention:
         mask[1] = False
         (_, r), _ = attention_both(1, 1, 3, 5, 8, mask=mask)
         assert np.all(r[0][0, 0, 1] == 0) and np.all(np.isfinite(r[1]))
+
+    def test_small_shared_memory(self, monkeypatch):
+        # A T4 (64 KB per block) fits the forward tiles but not the backward
+        # ones: without gradients the kernel runs, with them the math path
+        props = raxis.cuda.get_device_properties()
+        monkeypatch.setattr(raxis.cuda, "get_device_properties",
+                            lambda device=None: props._replace(shared_memory_per_block_optin=65536))
+        calls = []
+        kernel = raxis._C._scaled_dot_product_efficient_attention
+        monkeypatch.setattr(raxis._C, "_scaled_dot_product_efficient_attention",
+                            lambda *args, **kwargs: calls.append(1) or kernel(*args, **kwargs))
+        F = raxis.nn.functional
+        q = raxis.randn(1, 2, 70, 64, device="cuda")
+        with raxis.no_grad():
+            F.scaled_dot_product_attention(q, q, q, is_causal=True)
+        assert len(calls) == 1
+        qg = q.clone().requires_grad_(True)
+        y = F.scaled_dot_product_attention(qg, qg, qg, is_causal=True)
+        assert len(calls) == 1 and y.grad_fn.name() != "ScaledDotProductEfficientAttentionBackward0"
 
     def test_large_head_dim_takes_the_math_path(self):
         (r_name, _), _ = attention_both(1, 1, 8, 8, 72)

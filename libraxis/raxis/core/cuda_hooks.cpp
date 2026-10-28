@@ -45,6 +45,10 @@ std::pair<int, int> CUDAHooksInterface::device_capability(DeviceIndex) const {
     fail_no_cuda();
 }
 
+CUDADeviceProperties CUDAHooksInterface::device_properties(DeviceIndex) const {
+    fail_no_cuda();
+}
+
 CUDAMemoryStats CUDAHooksInterface::memory_stats(DeviceIndex) const {
     fail_no_cuda();
 }

@@ -39,6 +39,13 @@ struct CUDAHooks final : public CUDAHooksInterface {
         return {props.major, props.minor};
     }
 
+    CUDADeviceProperties device_properties(DeviceIndex index) const override {
+        DeviceGuard guard(Device(DeviceType::CUDA, index));
+        const cudaDeviceProp& props = cuda::current_device_properties();
+        return {props.name, props.major, props.minor, static_cast<int64_t>(props.totalGlobalMem),
+                props.multiProcessorCount, static_cast<int64_t>(props.sharedMemPerBlockOptin)};
+    }
+
     CUDAMemoryStats memory_stats(DeviceIndex index) const override {
         return cuda::memory_stats(index);
     }

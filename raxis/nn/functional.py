@@ -126,6 +126,12 @@ def _use_flash_attention_cpp(query: Tensor, key: Tensor, value: Tensor, attn_mas
 
 
 # From: aten/src/ATen/native/transformers/cuda/sdp_utils.cpp (use_mem_efficient_attention)
+# Shared memory of the fused attention kernels (ops/cuda/attention_kernel.cu):
+# 3 tiles of 64 x 68 floats in the forward, up to 5 in the backward
+_ATTENTION_FORWARD_SHARED_MEMORY = 3 * 64 * 68 * 4
+_ATTENTION_BACKWARD_SHARED_MEMORY = 5 * 64 * 68 * 4
+
+
 def _use_mem_efficient_attention(query: Tensor, key: Tensor, value: Tensor, attn_mask: Tensor | None) -> bool:
     """Whether the fused GPU kernel takes these inputs. torch tries its
     FlashAttention-2 kernel first, but that one only takes fp16 / bf16, so
@@ -153,8 +159,13 @@ def _use_mem_efficient_attention(query: Tensor, key: Tensor, value: Tensor, attn
         if attn_mask.ndim == 4 and (attn_mask.shape[0] not in (query.shape[0], 1)
                                     or attn_mask.shape[1] not in (query.shape[1], 1)):
             return False
-    # Its tiles take up to 85 KB of shared memory per block
-    return raxis.cuda.get_device_capability(query.device) >= (8, 0)
+    # Its tiles take 51 KB of shared memory per block in the forward and 85 KB
+    # in the backward: A100 / H100, RTX 30xx and newer, and V100 have room for
+    # both; a T4 or RTX 20xx (64 KB) runs the forward without gradients
+    # (sampling) and trains on the math path
+    shared_memory = raxis.cuda.get_device_properties(query.device).shared_memory_per_block_optin
+    needs_backward = raxis.is_grad_enabled() and (query.requires_grad or key.requires_grad or value.requires_grad)
+    return shared_memory >= (_ATTENTION_BACKWARD_SHARED_MEMORY if needs_backward else _ATTENTION_FORWARD_SHARED_MEMORY)
 
 
 # From: aten/src/ATen/native/transformers/attention.cpp (validate_sdpa_input)

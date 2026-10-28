@@ -48,7 +48,12 @@
 // for float4 loads, and 8 threads reading float4s of 8 different rows hit
 // 8 different groups of 4 banks. Scores are in base 2 (scale * log2(e)
 // folded in) so the exponentials are exp2. Head dims up to 64 (nanoGPT and
-// GPT-2 use 64); SDPA takes the math path above that.
+// GPT-2 use 64); SDPA takes the math path above that. A head dim of 128
+// would need tiles of other shapes: with 64 x 132 tiles the backward's five
+// (169 KB) do not fit even an A100's 164 KB of shared memory per block.
+// The forward takes 3 tiles (51 KB) and the backward 5 or 4 (85 / 68 KB),
+// so GPUs with 64 KB per block (T4, RTX 20xx) run only the forward;
+// F.scaled_dot_product_attention checks the device's limit.
 
 namespace raxis {
 namespace {
@@ -562,7 +567,7 @@ void launch(Kernel kernel, int tiles, const Params& p, int smem_tiles) {
     const int smem_bytes = smem_tiles * kTile * static_cast<int>(sizeof(float));
     RAXIS_CHECK_NOT_IMPLEMENTED(
         static_cast<size_t>(smem_bytes) <= cuda::current_device_properties().sharedMemPerBlockOptin,
-        "efficient attention needs ", smem_bytes, " bytes of shared memory per block (compute capability 8.0+)");
+        "efficient attention needs ", smem_bytes, " bytes of shared memory per block");
     RAXIS_CUDA_CHECK(cudaFuncSetAttribute(kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_bytes));
     const dim3 grid(static_cast<unsigned>(tiles), static_cast<unsigned>(p.B * p.H));
     kernel<<<grid, kThreads, smem_bytes, cuda::current_stream()>>>(p);
