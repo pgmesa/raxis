@@ -379,47 +379,74 @@ def test_setitem_dtype_mismatch_raises():
             x[lib.tensor([0, 1])] = lib.tensor([1, 2])
 
 
-def test_index_put_accumulate():
-    r, t = make_pair(randf(5, 3))
+def test_index_put_accumulate(device):
+    r, t = make_pair(randf(5, 3), device)
     v = randf(4, 3, seed=1)
     idx = np.array([4, 0, 4, 4], dtype=np.int64)
-    r.index_put_((raxis.from_numpy(idx),), raxis.from_numpy(v.copy()), accumulate=True)
-    t.index_put_((torch.from_numpy(idx),), torch.from_numpy(v.copy()), accumulate=True)
+    r.index_put_((raxis.from_numpy(idx),), raxis.from_numpy(v.copy()).to(device), accumulate=True)
+    t.index_put_((torch.from_numpy(idx),), torch.from_numpy(v.copy()).to(device), accumulate=True)
     check_match(r, t)
     # None keeps a dim whole (torch takes it only through aten), values broadcast
-    r2, t2 = make_pair(randf(5, 3))
-    out_r = r2.index_put((None, raxis.tensor([2, 2])), raxis.tensor(1.0), accumulate=True)
-    out_t = torch.ops.aten.index_put(t2, [None, torch.tensor([2, 2])], torch.tensor(1.0), True)
+    r2, t2 = make_pair(randf(5, 3), device)
+    out_r = r2.index_put((None, raxis.tensor([2, 2])), raxis.tensor(1.0, device=device), accumulate=True)
+    out_t = torch.ops.aten.index_put(t2, [None, torch.tensor([2, 2])], torch.tensor(1.0, device=device), True)
     check_match(out_r, out_t)
     check_match(r2, t2)  # out of place
 
 
-def test_index_put_accumulate_bool_is_or():
+@pytest.mark.parametrize("dtype", ["float64", "int64", "uint8"])
+def test_index_put_accumulate_many_repeats(dtype, device):
+    # Two index tensors, every position hit many times, values broadcast
+    # along the last dim; on the GPU the sorted path sums them in order
+    rng = np.random.RandomState(0)
+    data = (rng.rand(6, 5, 7) * 10).astype(dtype)
+    i0, i1 = rng.randint(0, 6, 3000), rng.randint(0, 5, 3000)
+    v = (rng.rand(3000, 1) * 3).astype(dtype)
+    r, t = make_pair(data, device)
+    r.index_put_((raxis.from_numpy(i0), raxis.from_numpy(i1)), raxis.from_numpy(v).to(device), accumulate=True)
+    t.index_put_((torch.from_numpy(i0), torch.from_numpy(i1)), torch.from_numpy(v).to(device), accumulate=True)
+    check_match(r, t, rtol=1e-6)
+
+
+def test_index_put_accumulate_is_deterministic(device):
+    rng = np.random.RandomState(1)
+    idx = raxis.from_numpy(rng.randint(0, 50, 200_000))
+    v = raxis.from_numpy(rng.randn(200_000, 3).astype(np.float32)).to(device)
+    results = []
+    for _ in range(3):
+        x = raxis.zeros(50, 3, device=device)
+        x.index_put_((idx,), v, accumulate=True)
+        results.append(x.cpu().numpy())
+    np.testing.assert_array_equal(results[0], results[1])
+    np.testing.assert_array_equal(results[0], results[2])
+
+
+def test_index_put_accumulate_bool_is_or(device):
     for lib in (raxis, torch):
-        x = lib.zeros(3, dtype=lib.bool)
-        x.index_put_((lib.tensor([0, 0, 2]),), lib.tensor([True, True, False]), accumulate=True)
+        x = lib.zeros(3, dtype=lib.bool, device=device)
+        x.index_put_((lib.tensor([0, 0, 2]),), lib.tensor([True, True, False], device=device), accumulate=True)
         assert x.tolist() == [True, False, False]
 
 
 @pytest.mark.parametrize("name", ["repeated", "separated", "broadcast", "mask", "mask and index", "list in tuple"])
-def test_getitem_backward(name):
-    r, t = make_grad_pair(randf(4, 5, 6))
+def test_getitem_backward(name, device):
+    r, t = make_grad_pair(randf(4, 5, 6), device)
     out_r, out_t = r[GETITEM_CASES[name](raxis)], t[GETITEM_CASES[name](torch)]
     w = randf(*out_t.shape, seed=5)
-    (out_r * raxis.from_numpy(w)).sum().backward()
-    (out_t * torch.from_numpy(w)).sum().backward()
+    (out_r * raxis.from_numpy(w).to(device)).sum().backward()
+    (out_t * torch.from_numpy(w).to(device)).sum().backward()
     check_match(r.grad, t.grad)
     assert out_r.grad_fn.name() == "IndexBackward0"
 
 
 @pytest.mark.parametrize("accumulate", [False, True])
-def test_index_put_backward(accumulate):
-    r, t = make_grad_pair(randf(5, 4))
-    rv, tv = make_grad_pair(randf(4, seed=1))  # broadcast over the indexed rows
-    ri, ti = index_pair(np.array([3, 0, 3], dtype=np.int64))
+def test_index_put_backward(accumulate, device):
+    r, t = make_grad_pair(randf(5, 4), device)
+    rv, tv = make_grad_pair(randf(4, seed=1), device)  # broadcast over the indexed rows
+    ri, ti = index_pair(np.array([3, 0, 3], dtype=np.int64), device)
     w = randf(5, 4, seed=2)
-    (r.index_put((ri,), rv, accumulate=accumulate) * raxis.from_numpy(w)).sum().backward()
-    (t.index_put((ti,), tv, accumulate=accumulate) * torch.from_numpy(w)).sum().backward()
+    (r.index_put((ri,), rv, accumulate=accumulate) * raxis.from_numpy(w).to(device)).sum().backward()
+    (t.index_put((ti,), tv, accumulate=accumulate) * torch.from_numpy(w).to(device)).sum().backward()
     check_match(r.grad, t.grad)
     check_match(rv.grad, tv.grad)
 
