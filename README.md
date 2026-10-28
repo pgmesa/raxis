@@ -25,6 +25,18 @@ Raspberry Pi OS) and macOS (Apple silicon, macOS 14+), Python 3.10 to 3.14.
 Raxis has no runtime dependencies; numpy is optional (`.numpy()`,
 `raxis.from_numpy`).
 
+For NVIDIA GPUs, install the CUDA backend as well (Windows and Linux x86-64).
+It is a separate package, as JAX's CUDA plugins, so the CPU wheel stays small:
+
+```bash
+pip install raxis-cuda12   # driver r525+, GPUs from Volta (sm_70) on
+pip install raxis-cuda13   # driver r580+, GPUs from Turing (sm_75) on
+```
+
+Each pulls the raxis of the same version and NVIDIA's cuBLAS wheel; the CUDA
+runtime is linked in, so only the driver is needed. `import raxis` loads it,
+and `raxis.cuda.is_available()` tells whether there is a GPU to use.
+
 ```python
 import raxis
 from raxis import nn, optim
