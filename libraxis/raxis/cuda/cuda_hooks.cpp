@@ -32,6 +32,12 @@ struct CUDAHooks final : public CUDAHooksInterface {
         device_synchronize();
     }
 
+    std::pair<int, int> device_capability(DeviceIndex index) const override {
+        DeviceGuard guard(Device(DeviceType::CUDA, index));
+        const cudaDeviceProp& props = cuda::current_device_properties();
+        return {props.major, props.minor};
+    }
+
     CUDAMemoryStats memory_stats(DeviceIndex index) const override {
         return cuda::memory_stats(index);
     }

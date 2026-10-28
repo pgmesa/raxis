@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <utility>
 
 #include <raxis/export.h>
 #include <raxis/core/device.h>
@@ -34,6 +35,8 @@ struct RAXIS_API CUDAHooksInterface {
     virtual int device_count() const;
     virtual DeviceIndex current_device() const;
     virtual void set_device(DeviceIndex index) const;
+    /// (major, minor) compute capability, 8.0 for an A100
+    virtual std::pair<int, int> device_capability(DeviceIndex index) const;
     /// Waits for all the work queued on the device
     virtual void synchronize(DeviceIndex index) const;
 

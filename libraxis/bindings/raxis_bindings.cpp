@@ -56,6 +56,9 @@ PYBIND11_MODULE(_C, c) {
     c.def("_cuda_set_device", [](int index) {
         raxis::get_cuda_hooks().set_device(static_cast<raxis::DeviceIndex>(index));
     }, py::arg("index"));
+    c.def("_cuda_get_device_capability", [](int index) {
+        return raxis::get_cuda_hooks().device_capability(static_cast<raxis::DeviceIndex>(index));
+    });
     c.def("_cuda_synchronize", [](int index) {
         raxis::get_cuda_hooks().synchronize(static_cast<raxis::DeviceIndex>(index));
     }, py::arg("index"));

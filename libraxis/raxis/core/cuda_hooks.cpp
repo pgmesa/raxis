@@ -41,6 +41,10 @@ void CUDAHooksInterface::synchronize(DeviceIndex) const {
     fail_no_cuda();
 }
 
+std::pair<int, int> CUDAHooksInterface::device_capability(DeviceIndex) const {
+    fail_no_cuda();
+}
+
 CUDAMemoryStats CUDAHooksInterface::memory_stats(DeviceIndex) const {
     fail_no_cuda();
 }

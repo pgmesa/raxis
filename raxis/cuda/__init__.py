@@ -7,7 +7,7 @@ from raxis import _C
 
 
 __all__ = [
-    "is_available", "device_count", "current_device", "set_device", "synchronize",
+    "is_available", "device_count", "current_device", "set_device", "get_device_capability", "synchronize",
     "memory_allocated", "max_memory_allocated", "memory_reserved", "max_memory_reserved",
     "reset_peak_memory_stats", "empty_cache",
 ]
@@ -27,6 +27,11 @@ def current_device() -> int:
 
 def set_device(device) -> None:
     _C._cuda_set_device(_device_index(device))
+
+
+def get_device_capability(device=None) -> tuple[int, int]:
+    """(major, minor) compute capability of the device: (8, 0) for an A100, (12, 0) for an RTX 50xx."""
+    return tuple(_C._cuda_get_device_capability(_device_index(device)))
 
 
 def synchronize(device=None) -> None:
