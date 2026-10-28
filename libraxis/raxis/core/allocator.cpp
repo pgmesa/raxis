@@ -27,7 +27,7 @@ Allocator* get_allocator(DeviceType type) {
     // libraxis_cuda registers the CUDA allocator when it is loaded
     RAXIS_CHECK(alloc != nullptr || type != DeviceType::CUDA,
         "raxis was not loaded with CUDA support: install the CUDA package "
-        "(pip install raxis-cuda12 or raxis-cuda13) or build with RAXIS_USE_CUDA=ON");
+        "(pip install raxis[cuda12] or raxis[cuda13]) or build with RAXIS_USE_CUDA=ON");
     RAXIS_CHECK(alloc != nullptr,
         "No allocator registered for DeviceType ", device_type_name(type, false));
 

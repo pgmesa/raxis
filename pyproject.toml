@@ -65,6 +65,10 @@ examples = [
 viz = [
     "graphviz>=0.20",
 ]
+# The CUDA backend: pip install raxis[cuda12] or raxis[cuda13]. Not pinned:
+# each plugin requires the raxis of its own version
+cuda12 = ["raxis-cuda12"]
+cuda13 = ["raxis-cuda13"]
 dev = [
     "raxis[build]",
     "raxis[test]",
@@ -96,7 +100,23 @@ framework = "pytest"
 environments = ["sys_platform == 'win32'", "sys_platform == 'linux'"]
 conflicts = [[{ extra = "cpu" }, { extra = "cu130" }]]
 
+# uv locks every extra, and a raxis-cuda* from PyPI requires the raxis of its
+# own version, which a development checkout does not match. For the lock the
+# plugins come from plugins/cuda, with placeholder metadata so that uv never
+# builds them (a source build has libraxis_cuda in raxis/lib instead)
+[[tool.uv.dependency-metadata]]
+name = "raxis-cuda12"
+version = "0.0.0"
+requires-dist = []
+
+[[tool.uv.dependency-metadata]]
+name = "raxis-cuda13"
+version = "0.0.0"
+requires-dist = []
+
 [tool.uv.sources]
+raxis-cuda12 = { path = "plugins/cuda" }
+raxis-cuda13 = { path = "plugins/cuda" }
 torch = [
     { index = "pytorch-cpu", extra = "cpu" },
     { index = "pytorch-cu130", extra = "cu130" },

@@ -27,47 +27,18 @@ Raspberry Pi OS) and macOS (Apple silicon, macOS 14+), Python 3.10 to 3.14.
 Raxis has no runtime dependencies; numpy is optional (`.numpy()`,
 `raxis.from_numpy`).
 
-For NVIDIA GPUs, install the CUDA backend as well (Windows and Linux x86-64).
-It is a separate package, as JAX's CUDA plugins, so the CPU wheel stays small:
+For NVIDIA GPUs, install it with the CUDA backend (Windows and Linux x86-64):
 
 ```bash
-pip install raxis-cuda12   # driver r525+, GPUs from Volta (sm_70) on
-pip install raxis-cuda13   # driver r580+, GPUs from Turing (sm_75) on
+pip install "raxis[cuda12]"   # driver r525+, GPUs from Volta (sm_70) on
+pip install "raxis[cuda13]"   # driver r580+, GPUs from Turing (sm_75) on
 ```
 
-Each pulls the raxis of the same version and NVIDIA's cuBLAS wheel; the CUDA
-runtime is linked in, so only the driver is needed. `import raxis` loads it,
-and `raxis.cuda.is_available()` tells whether there is a GPU to use.
-
-```python
-import raxis
-from raxis import nn, optim
-
-model = nn.Sequential(nn.Linear(784, 128), nn.ReLU(), nn.Linear(128, 10))
-optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
-
-x, y = raxis.randn((64, 784)), raxis.randint(0, 10, (64,))
-loss = nn.functional.cross_entropy(model(x), y)
-optimizer.zero_grad()
-loss.backward()
-optimizer.step()
-```
-
-The API follows PyTorch's, so most code only needs `torch` replaced by
-`raxis`.
-
-`raxis.autograd.graph` exports the autograd graph of a tensor as Graphviz DOT
-or Mermaid text, as autograd nodes (`view="backward"`) or as forward ops
-(`view="forward"`):
-
-```python
-from raxis.autograd import graph
-
-print(graph.to_mermaid(loss, dict(model.named_parameters()), view="forward"))
-graph.render(loss, "loss.svg")  # needs pip install 'raxis[viz]' and Graphviz
-```
-
-`examples/autograd_graph.py` draws every view and format side by side.
+The backend is a package of its own, as JAX's CUDA plugins, so the CPU wheel
+stays small: `pip install raxis-cuda12` / `raxis-cuda13` is the same. It
+pulls the raxis of its version and NVIDIA's cuBLAS wheel; the CUDA runtime is
+linked in, so only the driver is needed. `import raxis` loads it, and
+`raxis.cuda.is_available()` tells whether there is a GPU to use.
 
 ## Performance
 

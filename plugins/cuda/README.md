@@ -4,7 +4,7 @@ The CUDA {cuda_major} backend of [raxis](https://github.com/pgmesa/raxis), a
 readable re-implementation of the core of PyTorch (ATen + autograd) in C++20.
 
 ```bash
-pip install raxis-cuda{cuda_major}
+pip install "raxis[cuda{cuda_major}]"   # or pip install raxis-cuda{cuda_major}
 ```
 
 installs raxis together with its GPU kernels, caching allocator and cuBLAS
