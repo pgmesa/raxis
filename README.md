@@ -139,9 +139,12 @@ only its BLAS calls use several. On 100 x 100 arrays the three are on par.
 |---|---|
 | `libraxis/raxis/tensor` | TensorImpl and storage, views and strides, type promotion, TensorIterator |
 | `libraxis/raxis/ops` | Operators and their CPU kernels, compiled once per ISA (AVX2, AVX512, NEON) and picked at runtime |
+| `libraxis/raxis/ops/cuda` | The CUDA kernels: elementwise loops, reductions, attention, convolutions, sort, indexing |
+| `libraxis/raxis/cuda` | CUDA runtime: caching allocator, pinned host memory, cuBLAS handles |
 | `libraxis/raxis/autograd` | Graph, engine and backward functions |
 | `libraxis/bindings` | pybind11 module `raxis._C` |
-| `raxis/` | Python package: `nn`, `optim`, `autograd.graph`, tensor printing |
+| `raxis/` | Python package: `nn`, `optim`, `cuda`, `autograd.graph`, tensor printing |
+| `plugins/cuda` | The `raxis-cuda12` / `raxis-cuda13` packages |
 
 Code taken from PyTorch keeps a `// From: aten/src/ATen/...` comment pointing
 to the original.
@@ -162,7 +165,10 @@ uv run pytest tests
 `uv sync` installs the pinned build and test dependencies from `uv.lock`,
 including Intel MKL from PyPI and PyTorch, the reference the tests compare
 against. `build_libraxis.py` builds `libraxis` with CMake and installs it into
-the `raxis/` package. To work on the C++ side, `libraxis/CMakePresets.json`
+the `raxis/` package; with `--cuda` it also builds the CUDA backend (needs
+the CUDA toolkit, 12.8 or newer, which brings cuBLAS), and `import raxis`
+loads that build before any installed `raxis-cuda*` package. To work on the
+C++ side, `libraxis/CMakePresets.json`
 has `debug` and `release` presets; `CMakeLists.txt` lists the build options
 (`RAXIS_USE_*`).
 
@@ -178,4 +184,6 @@ trained with one library can be sampled with the other.
 ## License
 
 MIT. Raxis includes code derived from PyTorch (BSD-3-Clause) and links SLEEF,
-mimalloc and Intel MKL: see [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).
+mimalloc, Intel MKL (x86-64), OpenBLAS (Linux aarch64) and, in the CUDA
+packages, the CUDA runtime and CUB: see
+[THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).
