@@ -27,18 +27,22 @@ def all_dims(shape):
 @pytest.mark.parametrize("shape", VAR_SHAPES)
 @pytest.mark.parametrize("dtype", [np.float32, np.float64], ids=lambda d: np.dtype(d).name)
 @pytest.mark.parametrize("name", ["var", "std"])
-def test_var_std(name, dtype, shape):
-    r, t = make_pair(offset_data(shape, dtype))
+def test_var_std(name, dtype, shape, device):
+    r, t = make_pair(offset_data(shape, dtype), device)
+    # float32 on the GPU: with a 1e4 mean any order of the Welford updates
+    # leaves ~1e-3 relative error (torch's own result is as far from float64);
+    # raxis and torch only share the order when torch does not vectorize loads
+    rtol = 2e-3 if device == "cuda" and dtype == np.float32 else 1e-4
     for dim in all_dims(shape):
         for keepdim in (False, True):
             r_out = getattr(r, name)(dim, keepdim=keepdim)
             t_out = getattr(t, name)(dim, keepdim=keepdim)
-            check_match(r_out, t_out, atol=1e-4)
+            check_match(r_out, t_out, atol=1e-4, rtol=rtol)
 
 
 @pytest.mark.parametrize("name", ["var", "std"])
-def test_var_std_correction(name):
-    r, t = make_pair(randf(6, 9))
+def test_var_std_correction(name, device):
+    r, t = make_pair(randf(6, 9), device)
     for correction in (0, 1, 2.5):
         check_match(getattr(r, name)(1, correction=correction), getattr(t, name)(1, correction=correction))
         check_match(getattr(raxis, name)(r, correction=correction), getattr(torch, name)(t, correction=correction))
@@ -48,12 +52,12 @@ def test_var_std_correction(name):
 
 
 @pytest.mark.parametrize("name", ["var", "std"])
-def test_var_std_degenerate(name):
+def test_var_std_degenerate(name, device):
     # n <= correction: division by zero gives inf, or NaN when M2 is 0
     for data in ([1.0], [1.0, 2.0], [3.0, 3.0]):
-        r, t = make_pair(np.array(data, dtype=np.float32))
+        r, t = make_pair(np.array(data, dtype=np.float32), device)
         check_match(getattr(r, name)(correction=len(data)), getattr(t, name)(correction=len(data)))
-    r, t = make_pair(np.zeros((0, 3), dtype=np.float32))
+    r, t = make_pair(np.zeros((0, 3), dtype=np.float32), device)
     check_match(getattr(r, name)(0), getattr(t, name)(0))
 
 
@@ -74,27 +78,27 @@ def test_var_requires_float():
         raxis.tensor([1, 2, 3]).var()
 
 
-def test_var_non_contiguous():
-    r, t = make_pair(randf(40, 60))
+def test_var_non_contiguous(device):
+    r, t = make_pair(randf(40, 60), device)
     check_match(r.transpose(0, 1).var(1), t.t().var(1))
     check_match(r[:, ::3].std(0), t[:, ::3].std(0))
 
 
 @pytest.mark.parametrize("name", ["var", "std"])
 @pytest.mark.parametrize("dim,keepdim", [(None, False), (1, False), (0, True), ((0, 2), False), ((2, 0), True)])
-def test_var_std_backward(name, dim, keepdim):
+def test_var_std_backward(name, dim, keepdim, device):
     data = randf(4, 5, 6)
-    r, t = make_grad_pair(data)
+    r, t = make_grad_pair(data, device)
     w = np.random.default_rng(1).standard_normal(tuple(t.var(dim, keepdim=keepdim).shape)).astype(np.float32)
-    (getattr(r, name)(dim, keepdim=keepdim) * raxis.from_numpy(w)).sum().backward()
-    (getattr(t, name)(dim, keepdim=keepdim) * torch.from_numpy(w)).sum().backward()
+    (getattr(r, name)(dim, keepdim=keepdim) * raxis.from_numpy(w).to(device)).sum().backward()
+    (getattr(t, name)(dim, keepdim=keepdim) * torch.from_numpy(w).to(device)).sum().backward()
     check_match(r.grad, t.grad, atol=1e-4)
     assert getattr(r, name)(dim).grad_fn.name() == getattr(t, name)(dim).grad_fn.name()
 
 
-def test_std_backward_constant_input():
+def test_std_backward_constant_input(device):
     # std = 0: the gradient is 0 instead of 0 / 0
-    r, t = make_grad_pair(np.full((3, 4), 2.0, dtype=np.float32))
+    r, t = make_grad_pair(np.full((3, 4), 2.0, dtype=np.float32), device)
     r.std(1).sum().backward()
     t.std(1).sum().backward()
     check_match(r.grad, t.grad)

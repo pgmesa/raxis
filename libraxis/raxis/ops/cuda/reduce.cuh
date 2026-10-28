@@ -189,10 +189,9 @@ struct ReduceConfig {
     int values_per_thread() const { return static_cast<int>(div_up(num_inputs, step_input)); }
 };
 
-template <typename scalar_t, typename ops_t, typename arg_t, typename out_t>
+// vt0: independent accumulators per thread
+template <typename scalar_t, typename ops_t, typename arg_t, typename out_t, int vt0>
 struct ReduceOp {
-    // Independent accumulators per thread
-    static constexpr int vt0 = 4;
 
     ops_t ops;
     arg_t ident;
@@ -429,9 +428,10 @@ ReduceConfig set_reduce_config(const TensorIterator& iter, int64_t num_outputs, 
 }
 
 /// Reduces input 1 of `iter` into output 0 with `ops`, starting every
-/// accumulator at `ident`. scalar_t is the input type, out_t the output's.
+/// accumulator at `ident`. scalar_t is the input type, out_t the output's;
+/// each thread keeps vt0 accumulators (fewer for large ones, as Welford's).
 /// From: aten/src/ATen/native/cuda/Reduce.cuh (gpu_reduce_kernel)
-template <typename scalar_t, typename out_t, typename ops_t, typename arg_t>
+template <typename scalar_t, typename out_t, int vt0 = 4, typename ops_t, typename arg_t>
 void gpu_reduce_kernel(TensorIterator& iter, const ops_t& ops, arg_t ident) {
     RAXIS_INTERNAL_ASSERT(iter.numel() > 0 && iter.num_inputs() == 1 && iter.num_outputs() == 1);
     // PyTorch splits a larger reduction and accumulates the pieces
@@ -463,7 +463,7 @@ void gpu_reduce_kernel(TensorIterator& iter, const ops_t& ops, arg_t ident) {
         RAXIS_CUDA_CHECK(cudaMemsetAsync(semaphores.mutable_data_ptr(), 0, config.semaphore_size(), current_stream()));
     }
 
-    ReduceOp<scalar_t, ops_t, arg_t, out_t> reduce{
+    ReduceOp<scalar_t, ops_t, arg_t, out_t, vt0> reduce{
         ops, ident, config, input_calc, output_calc,
         static_cast<const char*>(iter.data_ptr(1)), static_cast<char*>(iter.data_ptr(0)),
         buffer.defined() ? buffer.mutable_data_ptr() : nullptr,

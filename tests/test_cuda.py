@@ -298,7 +298,6 @@ class TestHostOnlyOps:
 
     @pytest.mark.parametrize("op", [
         lambda x: raxis.multinomial(x.abs(), 2, replacement=True),
-        lambda x: x.var(),
         lambda x: x.index_add_(0, raxis.tensor([0, 1]).cuda(), x[:2]),
     ])
     def test_raises(self, op):
