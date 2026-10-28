@@ -74,6 +74,13 @@ math(EXPR NUM_CPU_CAPABILITY_NAMES "${NUM_CPU_CAPABILITY_NAMES}-1")
 
 message(STATUS "Dispatch capabilities: ${CPU_CAPABILITY_NAMES}")
 
+# Kernels whose results must not depend on the compiler. GCC fuses a * b + c
+# into one FMA wherever it can under -mfma (-ffp-contract=fast is its
+# default; Clang does it within an expression), which rounds once instead of
+# twice. uniform_ draws the same numbers on the CPU of every platform and on
+# the GPU, whose kernel avoids FMAs too. MSVC does not contract by default
+set(RAXIS_NO_FP_CONTRACT_KERNELS distribution_ops_kernel)
+
 function(raxis_add_dispatch_sources target)
     set(dispatch_dir "${CMAKE_CURRENT_BINARY_DIR}/dispatch")
     file(MAKE_DIRECTORY ${dispatch_dir})
@@ -100,6 +107,9 @@ function(raxis_add_dispatch_sources target)
                 set(EXTRA_FLAGS "/DCPU_CAPABILITY=${CPU_CAPABILITY} /DCPU_CAPABILITY_${CPU_CAPABILITY}")
             else()
                 set(EXTRA_FLAGS "-DCPU_CAPABILITY=${CPU_CAPABILITY} -DCPU_CAPABILITY_${CPU_CAPABILITY}")
+                if(name IN_LIST RAXIS_NO_FP_CONTRACT_KERNELS)
+                    string(APPEND EXTRA_FLAGS " -ffp-contract=off")
+                endif()
             endif()
 
             set_source_files_properties(${wrapper} PROPERTIES

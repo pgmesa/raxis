@@ -1,4 +1,5 @@
 
+import hashlib
 import json
 import os
 import subprocess
@@ -1227,6 +1228,19 @@ class TestRandom:
         np.testing.assert_array_equal(draw(), first)
         # Each call reserves new Philox counters
         assert (first != second).mean() > 0.9
+
+    @pytest.mark.parametrize("dtype, digest", [
+        (raxis.float32, "0851655978a7aea1"),
+        (raxis.float64, "2da6802582287b77"),
+    ])
+    def test_uniform_same_bits_everywhere(self, dtype, digest):
+        # A seed gives the same uniform_ bits on every platform and compiler
+        # and on the GPU (test_cuda checks that side): GCC used to fuse
+        # x * range + from into one FMA, which rounds once instead of twice
+        # (see RAXIS_NO_FP_CONTRACT_KERNELS)
+        raxis.manual_seed(5)
+        x = np.array(raxis.empty((100_003,), dtype=dtype).uniform_(-2, 3))
+        assert hashlib.sha256(x.tobytes()).hexdigest()[:16] == digest
 
     def test_fill_order_is_row_major_for_views(self):
         # A non-contiguous tensor gets the values of a contiguous tensor of
