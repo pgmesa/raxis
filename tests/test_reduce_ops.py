@@ -157,26 +157,27 @@ def test_all_any_non_contiguous():
 @pytest.mark.parametrize("dtype", [np.float32, np.float64, np.int32, np.int64, np.uint8, np.bool_],
                          ids=lambda d: np.dtype(d).name)
 @pytest.mark.parametrize("shape", [(7,), (5, 4), (3, 40, 50), (300, 500)])
-def test_cumsum(shape, dtype):
+def test_cumsum(shape, dtype, device):
     rng = np.random.default_rng(0)
     data = (rng.standard_normal(shape) * 10).astype(dtype)
-    r, t = make_pair(data)
+    r, t = make_pair(data, device)
     for dim in range(-len(shape), len(shape)):
         r_out, t_out = r.cumsum(dim), t.cumsum(dim)
-        # Accumulated in double like torch, so float results match closely
-        check_match(r_out, t_out, atol=1e-4)
+        # Accumulated in double like torch on the CPU, so float results
+        # match closely; on the GPU both accumulate in float
+        check_match(r_out, t_out, atol=1e-4 if device == "cpu" else 1e-3)
         # Integer and bool inputs give int64
-        assert np.array(r_out).dtype == t_out.numpy().dtype
+        assert r_out.dtype.name == str(t_out.dtype).replace("torch.", "")
     check_match(raxis.cumsum(r, 0, dtype=raxis.float64), torch.cumsum(t, 0, dtype=torch.float64), atol=1e-4)
 
 
-def test_cumsum_edge_cases():
-    r, t = make_pair(np.array(2.5, dtype=np.float32))
+def test_cumsum_edge_cases(device):
+    r, t = make_pair(np.array(2.5, dtype=np.float32), device)
     check_match(r.cumsum(0), t.cumsum(0))
     check_match(r.cumsum(-1), t.cumsum(-1))
-    r, t = make_pair(np.zeros((0, 3), dtype=np.float32))
+    r, t = make_pair(np.zeros((0, 3), dtype=np.float32), device)
     check_match(r.cumsum(1), t.cumsum(1))
-    r, t = make_pair(np.arange(60, dtype=np.float32).reshape(6, 10))
+    r, t = make_pair(np.arange(60, dtype=np.float32).reshape(6, 10), device)
     check_match(r[:, ::3].cumsum(1), t[:, ::3].cumsum(1))
     check_match(r.transpose(0, 1).cumsum(0), t.transpose(0, 1).cumsum(0))
 
@@ -189,22 +190,22 @@ def test_cumsum_long_float_accumulates_in_double():
 
 
 @pytest.mark.parametrize("dim", [0, 1, -1, 2])
-def test_cumsum_backward(dim):
+def test_cumsum_backward(dim, device):
     data = randf(4, 5, 6)
-    r, t = make_grad_pair(data)
+    r, t = make_grad_pair(data, device)
     w = np.random.default_rng(1).standard_normal((4, 5, 6)).astype(np.float32)
-    (r.cumsum(dim) * raxis.from_numpy(w)).sum().backward()
-    (t.cumsum(dim) * torch.from_numpy(w)).sum().backward()
+    (r.cumsum(dim) * raxis.from_numpy(w).to(device)).sum().backward()
+    (t.cumsum(dim) * torch.from_numpy(w).to(device)).sum().backward()
     check_match(r.grad, t.grad, atol=1e-4)
     assert r.cumsum(dim).grad_fn.name() == t.cumsum(dim).grad_fn.name()
 
 
-def test_cumsum_backward_dtype_and_size_one():
-    r, t = make_grad_pair(randf(3, 1))
+def test_cumsum_backward_dtype_and_size_one(device):
+    r, t = make_grad_pair(randf(3, 1), device)
     (r.cumsum(1, dtype=raxis.float64) * 2).sum().backward()
     (t.cumsum(1, dtype=torch.float64) * 2).sum().backward()
     check_match(r.grad, t.grad)
-    assert np.array(r.grad).dtype == np.float32
+    assert r.grad.dtype == raxis.float32
 
 
 # ===========================================================================
@@ -266,7 +267,7 @@ def test_cumprod_backward_dtype_and_size_one():
     (r.cumprod(1, dtype=raxis.float64) * 2).sum().backward()
     (t.cumprod(1, dtype=torch.float64) * 2).sum().backward()
     check_match(r.grad, t.grad)
-    assert np.array(r.grad).dtype == np.float32
+    assert r.grad.dtype == raxis.float32
 
 
 def test_cumprod_create_graph_with_zeros_raises():
@@ -368,3 +369,21 @@ def test_sort_topk_backward(op, dim, device):
     (t_out * torch.from_numpy(w).to(device)).sum().backward()
     check_match(r.grad, t.grad)
     assert r_out.grad_fn.name() == t_out.grad_fn.name()
+
+
+@pytest.mark.parametrize("shape", [(7,), (3000,), (5, 4), (3, 40, 50), (20, 3000)])
+def test_cumprod(shape, device):
+    rng = np.random.default_rng(1)
+    data = (1 + rng.standard_normal(shape) * 0.01).astype(np.float64)
+    r, t = make_pair(data, device)
+    for dim in range(len(shape)):
+        check_match(r.cumprod(dim), t.cumprod(dim), rtol=1e-10)
+
+
+@pytest.mark.parametrize("shape, dim", [((100_000,), 0), ((7, 1000), 1), ((1000, 7), 0), ((4, 300, 5), 1)])
+def test_cumsum_backward_reversed_scan(shape, dim, device):
+    # The gradient of cumsum is a cumsum from the end (reversed_cumsum)
+    r, t = make_grad_pair(randf(*shape), device)
+    r.cumsum(dim).sum().backward()
+    t.cumsum(dim).sum().backward()
+    check_match(r.grad, t.grad, rtol=1e-5)

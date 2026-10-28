@@ -296,8 +296,10 @@ class TestBinary:
             raxis.ones((3,), device="cuda") + raxis.ones((3,))
 
     def test_missing_kernel(self):
+        # torch's flash attention for the CPU has no CUDA kernel in either library
+        q = raxis.ones((1, 1, 4, 8), device="cuda")
         with pytest.raises(NotImplementedError, match="CUDA"):
-            raxis.ones((3,), device="cuda").cumsum(0)
+            raxis._C._scaled_dot_product_flash_attention_for_cpu(q, q, q)
 
     def test_32bit_split(self):
         # 2.2e9 one-byte elements: offsets past INT32_MAX, so gpu_kernel
@@ -377,8 +379,9 @@ class TestHostOnlyOps:
             op(x)
 
     def test_stub_name_in_message(self):
-        with pytest.raises(NotImplementedError, match="cumsum_stub"):
-            raxis.ones((3,), device="cuda").cumsum(0)
+        q = raxis.ones((1, 1, 4, 8), device="cuda")
+        with pytest.raises(NotImplementedError, match="flash_attention_stub"):
+            raxis._C._scaled_dot_product_flash_attention_for_cpu(q, q, q)
 
 
 class TestMixedDtypes:
