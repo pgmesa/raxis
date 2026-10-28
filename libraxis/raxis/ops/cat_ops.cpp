@@ -99,7 +99,7 @@ void cat_out_impl(
             }
             iter.unsafe_replace_operand(0, result_data + offset * result_stride_bytes);
             iter.unsafe_replace_operand(1, const_cast<void*>(t.data_ptr()));
-            copy_stub(iter.device_type(), iter);
+            copy_stub(iter.device_type(), iter, /*non_blocking=*/false);
             offset += slice_dim_size;
         }
         return;

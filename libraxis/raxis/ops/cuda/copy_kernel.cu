@@ -4,6 +4,7 @@
 #include <raxis/core/device_guard.h>
 #include <raxis/cuda/cuda_exception.h>
 #include <raxis/cuda/cuda_functions.h>
+#include <raxis/cuda/cuda_host_allocator.h>
 #include <raxis/ops/copy.h>
 #include <raxis/ops/cuda/loops.cuh>
 #include <raxis/tensor/factories.h>
@@ -18,6 +19,13 @@
 // first makes both sides contiguous with the same dtype, doing the
 // conversion on the CPU side (PyTorch does it there too for blocking
 // copies: no extra GPU memory), then copies the range.
+//
+// A blocking copy waits for the transfer. With non_blocking it returns once
+// the transfer is queued, which is only truly asynchronous from or to pinned
+// memory (from pageable memory the driver stages the bytes before returning,
+// to pageable memory it waits). The pinned block then records the stream,
+// so freeing the CPU tensor before the transfer ends cannot hand its memory
+// to a new tensor too early (see cuda/cuda_host_allocator.cpp).
 
 namespace raxis {
 namespace {
@@ -48,7 +56,7 @@ void copy_device_to_device(TensorIterator& iter) {
     });
 }
 
-void copy_kernel_cuda(TensorIterator& iter) {
+void copy_kernel_cuda(TensorIterator& iter, bool non_blocking) {
     RAXIS_INTERNAL_ASSERT(iter.num_operands() == 2);
     Device dst_device = iter.device(0);
     Device src_device = iter.device(1);
@@ -78,7 +86,7 @@ void copy_kernel_cuda(TensorIterator& iter) {
             src_contig = src.expand(dst.shape()).contiguous();
         }
         // Same dtype and contiguous: the recursive copy takes the memcpy path
-        copy(src_contig, dst_contig);
+        copy(src_contig, dst_contig, non_blocking);
         if (!dst_contig.is_same(dst)) {
             copy(dst_contig, dst);
         }
@@ -95,10 +103,14 @@ void copy_kernel_cuda(TensorIterator& iter) {
     void* dst = iter.data_ptr(0);
     void* src = iter.data_ptr(1);
     size_t nbytes = static_cast<size_t>(iter.numel()) * iter.element_size(0);
-    // Blocking: torch's copy_(non_blocking=False). From pageable host memory
-    // the transfer is staged by the driver anyway; pinned memory and
-    // non_blocking come later
-    cuda::memcpy_and_sync(dst, src, nbytes, kind, cuda::current_stream());
+    const cudaStream_t stream = cuda::current_stream();
+    if (!non_blocking) {
+        cuda::memcpy_and_sync(dst, src, nbytes, kind, stream);
+        return;
+    }
+    RAXIS_CUDA_CHECK(cudaMemcpyAsync(dst, src, nbytes, kind, stream));
+    const Tensor& host = iter.get_tensor(dst_device.is_cpu() ? 0 : 1);
+    cuda::host_allocator_record_stream(host.storage()->data_ptr(), stream);
 }
 
 } // anonymous namespace

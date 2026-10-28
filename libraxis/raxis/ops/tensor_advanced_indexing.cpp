@@ -236,7 +236,7 @@ void index_select_cpu(const Tensor& result, const Tensor& self, int64_t dim, con
             sub_iter.unsafe_replace_operand(0, result_slice_data + i * result_stride_bytes);
             sub_iter.unsafe_replace_operand(1, const_cast<char*>(
                 self_slice_data + index_data[i] * self_stride_bytes));
-            copy_stub(sub_iter.device_type(), sub_iter);
+            copy_stub(sub_iter.device_type(), sub_iter, /*non_blocking=*/false);
         }
     };
 

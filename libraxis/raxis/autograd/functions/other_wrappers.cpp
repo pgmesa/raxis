@@ -1,4 +1,5 @@
 
+#include <raxis/core/cuda_hooks.h>
 #include <raxis/ops/copy.h>
 #include <raxis/ops/fill.h>
 #include <raxis/ops/distribution_ops.h>
@@ -472,9 +473,9 @@ Tensor& masked_fill_(Tensor& self, const Tensor& mask, Scalar value) {
 // Copies
 // ============================================================
 
-Tensor& copy_(Tensor& self, const Tensor& src) {
+Tensor& copy_(Tensor& self, const Tensor& src, bool non_blocking) {
     return autograd::inplace_op<autograd::CopyBackwards>(self, {self, src},
-        [&] { copy(src, self); }, self, src);
+        [&] { copy(src, self, non_blocking); }, self, src);
 }
 
 // In-place fills: the old values of self are gone, so its gradient is zero
@@ -515,8 +516,8 @@ Tensor clone(const Tensor& self, MemoryFormat memory_format) {
     return result;
 }
 
-Tensor to_copy(const Tensor& self, Dtype dtype, Device device) {
-    Tensor result = ops::to_copy(self, dtype, device);
+Tensor to_copy(const Tensor& self, Dtype dtype, Device device, bool non_blocking) {
+    Tensor result = ops::to_copy(self, dtype, device, non_blocking);
     if (autograd::requires_autograd(self)) {
         auto grad_fn = std::make_shared<autograd::ToCopyBackward0>(self);
         grad_fn->set_num_inputs(1);
@@ -524,6 +525,25 @@ Tensor to_copy(const Tensor& self, Dtype dtype, Device device) {
         autograd::set_autograd_meta(result, grad_fn);
     }
     return result;
+}
+
+Tensor pin_memory(const Tensor& self) {
+    if (is_pinned(self)) {
+        return self;
+    }
+    Tensor result = ops::pin_memory(self);
+    if (autograd::requires_autograd(self)) {
+        auto grad_fn = std::make_shared<autograd::PinMemoryBackward0>();
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
+// From: aten/src/ATen/native/Memory.cpp (is_pinned)
+bool is_pinned(const Tensor& self) {
+    return self.is_cpu() && get_cuda_hooks().is_pinned(self.unsafe_get_tensor_impl()->storage()->data());
 }
 
 } // namespace raxis

@@ -41,6 +41,10 @@ public:
         return data_ptr_.device();
     }
 
+    const DataPtr& data_ptr() const {
+        return data_ptr_;
+    }
+
     // From: c10/core/TensorImpl.h (VariableVersion)
     // Bumped by every in-place op that writes this memory. A backward node
     // records the version of each tensor it saves and refuses to run if it

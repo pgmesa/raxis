@@ -57,6 +57,18 @@ void CUDAHooksInterface::empty_cache() const {
     fail_no_cuda();
 }
 
+Allocator* CUDAHooksInterface::pinned_memory_allocator() const {
+    fail_no_cuda();
+}
+
+bool CUDAHooksInterface::is_pinned(const void*) const {
+    return false;
+}
+
+void CUDAHooksInterface::host_empty_cache() const {
+    fail_no_cuda();
+}
+
 const CUDAHooksInterface& get_cuda_hooks() {
     return *g_hooks.load(std::memory_order_acquire);
 }

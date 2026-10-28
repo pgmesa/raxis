@@ -99,7 +99,12 @@ def get_batch(split):
     ix = batch_rng.integers(len(data) - block_size, size=batch_size)
     x = np.stack([data[i:i + block_size] for i in ix]).astype(np.int64)
     y = np.stack([data[i + 1:i + 1 + block_size] for i in ix]).astype(np.int64)
-    return lib.from_numpy(x).to(device), lib.from_numpy(y).to(device)
+    x, y = lib.from_numpy(x), lib.from_numpy(y)
+    if device.startswith("cuda"):
+        # As nanoGPT: from pinned memory the copies are asynchronous, so the
+        # next batch moves while the GPU still runs the current step
+        return x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
+    return x.to(device), y.to(device)
 
 
 model_args = dict(n_layer=n_layer, n_head=n_head, n_embd=n_embd, block_size=block_size,

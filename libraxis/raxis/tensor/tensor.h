@@ -182,13 +182,19 @@ public:
     // ======================== Copy & Fill =======================
     Tensor clone(MemoryFormat memory_format = MemoryFormat::Preserve) const;
     Tensor contiguous() const;
-    Tensor& copy_(const Tensor& other) const;
-    Tensor to(Dtype dtype) const;
-    Tensor to(Device device) const;
-    Tensor to(Device device, Dtype dtype) const;
+    /// non_blocking: a copy between pinned CPU memory and the GPU returns
+    /// before the transfer finished (see pin_memory)
+    Tensor& copy_(const Tensor& other, bool non_blocking = false) const;
+    Tensor to(Dtype dtype, bool non_blocking = false) const;
+    Tensor to(Device device, bool non_blocking = false) const;
+    Tensor to(Device device, Dtype dtype, bool non_blocking = false) const;
     Tensor cpu() const;
     /// To the current CUDA device
-    Tensor cuda() const;
+    Tensor cuda(bool non_blocking = false) const;
+    /// A copy in page-locked CPU memory, which the GPU reads and writes
+    /// without the CPU (so .to("cuda", non_blocking=true) does not wait)
+    Tensor pin_memory() const;
+    bool is_pinned() const;
 
     Tensor& fill_(Scalar value) const;
     Tensor& zero_() const;

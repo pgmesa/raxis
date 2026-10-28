@@ -4,6 +4,7 @@
 #include <utility>
 
 #include <raxis/export.h>
+#include <raxis/core/allocator.h>
 #include <raxis/core/device.h>
 
 
@@ -44,6 +45,13 @@ struct RAXIS_API CUDAHooksInterface {
     virtual void reset_peak_memory_stats(DeviceIndex index) const;
     /// Returns the cached, unused blocks of every device to the driver
     virtual void empty_cache() const;
+
+    /// The allocator of pinned (page-locked) CPU memory, for pin_memory()
+    virtual Allocator* pinned_memory_allocator() const;
+    /// Whether a CPU pointer is in page-locked memory (false without CUDA)
+    virtual bool is_pinned(const void* data) const;
+    /// Returns the cached, unused pinned blocks to the driver
+    virtual void host_empty_cache() const;
 };
 
 RAXIS_API const CUDAHooksInterface& get_cuda_hooks();

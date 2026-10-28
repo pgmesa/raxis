@@ -75,6 +75,8 @@ PYBIND11_MODULE(_C, c) {
         raxis::get_cuda_hooks().reset_peak_memory_stats(static_cast<raxis::DeviceIndex>(index));
     }, py::arg("index"));
     c.def("_cuda_empty_cache", [] { raxis::get_cuda_hooks().empty_cache(); });
+    // torch._C._host_emptyCache: the cached pinned blocks
+    c.def("_host_empty_cache", [] { raxis::get_cuda_hooks().host_empty_cache(); });
     // raxis.backends: torch.backends.cuda.matmul.allow_tf32 and
     // torch.backends.cudnn.allow_tf32 (core/context.h)
     c.def("_get_allow_tf32_matmul", &raxis::allow_tf32_matmul);
@@ -554,26 +556,26 @@ PYBIND11_MODULE(_C, c) {
         // Functions to access operations
         .def("clone", &raxis::Tensor::clone,
             py::arg_v("memory_format", raxis::MemoryFormat::Preserve, "preserve_format"))
-        .def("copy_",
-            py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::copy_, py::const_),
-            py::arg("other"))
+        .def("copy_", &raxis::Tensor::copy_, py::arg("other"), py::arg("non_blocking") = false)
         .def("to",
-            py::overload_cast<raxis::Dtype>(&raxis::Tensor::to, py::const_),
-            py::arg("dtype"))
+            py::overload_cast<raxis::Dtype, bool>(&raxis::Tensor::to, py::const_),
+            py::arg("dtype"), py::arg("non_blocking") = false)
         .def("to",
-            py::overload_cast<raxis::Device>(&raxis::Tensor::to, py::const_),
-            py::arg("device"))
+            py::overload_cast<raxis::Device, bool>(&raxis::Tensor::to, py::const_),
+            py::arg("device"), py::arg("non_blocking") = false)
         .def("to",
-            py::overload_cast<raxis::Device, raxis::Dtype>(&raxis::Tensor::to, py::const_),
-            py::arg("device"), py::arg("dtype"))
+            py::overload_cast<raxis::Device, raxis::Dtype, bool>(&raxis::Tensor::to, py::const_),
+            py::arg("device"), py::arg("dtype"), py::arg("non_blocking") = false)
+        .def("pin_memory", &raxis::Tensor::pin_memory)
+        .def("is_pinned", &raxis::Tensor::is_pinned)
         .def("detach",
             py::overload_cast<>(&raxis::Tensor::detach, py::const_))
         .def("cpu", &raxis::Tensor::cpu)
-        .def("cuda", [](const raxis::Tensor& self, std::optional<raxis::Device> device) {
-            if (!device) return self.cuda();
+        .def("cuda", [](const raxis::Tensor& self, std::optional<raxis::Device> device, bool non_blocking) {
+            if (!device) return self.cuda(non_blocking);
             RAXIS_CHECK(device->is_cuda(), "Invalid device, must be cuda device");
-            return self.to(*device);
-        }, py::arg("device") = py::none())
+            return self.to(*device, non_blocking);
+        }, py::arg("device") = py::none(), py::arg("non_blocking") = false)
 
         .def("zero_", 
             py::overload_cast<>(&raxis::Tensor::zero_, py::const_))
@@ -1291,8 +1293,8 @@ PYBIND11_MODULE(_C, c) {
     // Basic operations
     c.def(
         "_copy_from",
-        py::overload_cast<const raxis::Tensor&, raxis::Tensor&>(&raxis::copy), 
-        py::arg("src"), py::arg("dest"));
+        py::overload_cast<const raxis::Tensor&, raxis::Tensor&, bool>(&raxis::copy),
+        py::arg("src"), py::arg("dest"), py::arg("non_blocking") = false);
 
     c.def(
         "add",

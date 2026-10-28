@@ -110,6 +110,77 @@ class TestTransfers:
         np.testing.assert_array_equal(x.grad.numpy(), np.full((3, 4), 3.0, dtype=np.float32))
 
 
+class TestPinnedMemory:
+    """pin_memory() and non_blocking copies (cuda/cuda_host_allocator.cpp)."""
+
+    @staticmethod
+    def address(t):
+        return t.untyped_storage().data_ptr()
+
+    def test_pin_memory(self):
+        x = raxis.from_numpy(make((40, 30)))
+        p = x.pin_memory()
+        assert p.is_pinned() and not x.is_pinned()
+        assert not p.cuda().is_pinned()
+        np.testing.assert_array_equal(p.numpy(), x.numpy())
+        # Already pinned: the same tensor, as torch
+        assert self.address(p.pin_memory()) == self.address(p)
+        # The layout is kept
+        t = x.transpose(0, 1).pin_memory()
+        assert tuple(t.strides) == tuple(x.transpose(0, 1).strides)
+        np.testing.assert_array_equal(t.numpy(), x.numpy().T)
+
+    def test_pin_memory_of_a_cuda_tensor_raises(self):
+        with pytest.raises(RuntimeError, match="only dense CPU tensors can be pinned"):
+            raxis.ones(3, device="cuda").pin_memory()
+
+    def test_autograd(self):
+        r = raxis.from_numpy(make((5,))).requires_grad_(True)
+        t = torch.from_numpy(make((5,))).requires_grad_(True)
+        rp, tp = r.pin_memory(), t.pin_memory()
+        assert rp.grad_fn.name() == tp.grad_fn.name()
+        (rp * 2).sum().backward()
+        (tp * 2).sum().backward()
+        np.testing.assert_array_equal(r.grad.numpy(), t.grad.numpy())
+
+    @pytest.mark.parametrize("dtype", ["float32", "int64", "uint8"])
+    def test_non_blocking_round_trip(self, dtype):
+        x = raxis.from_numpy(make((256, 1000), dtype)).pin_memory()
+        g = x.to("cuda", non_blocking=True)
+        g2 = x.cuda(non_blocking=True)
+        out = raxis.empty((256, 1000), dtype=getattr(raxis, dtype)).pin_memory()
+        out.copy_(g * 1 + g2 * 0, non_blocking=True)
+        raxis.cuda.synchronize()
+        np.testing.assert_array_equal(out.numpy(), x.numpy())
+        # From pageable memory non_blocking still copies correctly (the
+        # driver stages the bytes before returning)
+        y = raxis.from_numpy(make((256, 1000), dtype))
+        np.testing.assert_array_equal(y.to("cuda", non_blocking=True).cpu().numpy(), y.numpy())
+
+    def test_freed_block_waits_for_the_copy(self):
+        # A pinned tensor freed right after a non_blocking copy: its block
+        # must not hold new data before the GPU has read it
+        n = 1 << 24
+        results = []
+        for i in range(4):
+            p = raxis.full((n,), float(i)).pin_memory()
+            results.append(p.to("cuda", non_blocking=True))
+            del p
+        raxis.cuda.synchronize()
+        for i, g in enumerate(results):
+            assert g.min().item() == g.max().item() == float(i)
+
+    def test_blocks_are_reused(self):
+        raxis.cuda.synchronize()
+        p = raxis.empty(1000).pin_memory()
+        address = self.address(p)
+        del p
+        assert self.address(raxis.empty(1000).pin_memory()) == address
+        # 1000 floats round up to a 4096-byte block, so 1024 floats fit too
+        assert self.address(raxis.empty(1024).pin_memory()) == address
+        raxis._C._host_empty_cache()
+
+
 class TestFactories:
 
     @pytest.mark.parametrize("dtype", DTYPES)

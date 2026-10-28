@@ -3,6 +3,7 @@
 #include <raxis/cuda/cuda_caching_allocator.h>
 #include <raxis/cuda/cuda_exception.h>
 #include <raxis/cuda/cuda_functions.h>
+#include <raxis/cuda/cuda_host_allocator.h>
 #include <raxis/core/device_guard.h>
 
 
@@ -48,6 +49,30 @@ struct CUDAHooks final : public CUDAHooksInterface {
 
     void empty_cache() const override {
         cuda::empty_cache();
+    }
+
+    Allocator* pinned_memory_allocator() const override {
+        return host_allocator();
+    }
+
+    // From: aten/src/ATen/cuda/detail/CUDAHooks.cpp (isPinnedPtr): asks the
+    // driver, so memory pinned by someone else counts too
+    bool is_pinned(const void* data) const override {
+        if (!is_available()) {
+            return false;
+        }
+        cudaPointerAttributes attributes;
+        const cudaError_t status = cudaPointerGetAttributes(&attributes, data);
+        if (status == cudaErrorInvalidValue) {
+            (void)cudaGetLastError();   // a pointer the driver never saw
+            return false;
+        }
+        RAXIS_CUDA_CHECK(status);
+        return attributes.type == cudaMemoryTypeHost;
+    }
+
+    void host_empty_cache() const override {
+        cuda::host_empty_cache();
     }
 };
 

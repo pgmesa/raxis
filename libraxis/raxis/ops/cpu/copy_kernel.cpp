@@ -19,7 +19,7 @@ void direct_copy_kernel(TensorIterator& iter) {
     });
 }
 
-void copy_kernel(TensorIterator& iter) {
+void copy_kernel(TensorIterator& iter, bool /*non_blocking*/) {
     Dtype dtype_out = iter.dtype(0);
     Dtype dtype_inp = iter.dtype(1);
     

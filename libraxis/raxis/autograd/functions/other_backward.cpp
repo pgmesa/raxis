@@ -520,6 +520,12 @@ TensorList CloneBackward0::apply(const TensorList& grads) {
     return {grads[0]};
 }
 
+std::string PinMemoryBackward0::name() const { return "PinMemoryBackward0"; }
+
+TensorList PinMemoryBackward0::apply(const TensorList& grads) {
+    return {grads[0]};
+}
+
 ToCopyBackward0::ToCopyBackward0(const Tensor& self)
     : self_dtype_(self.dtype()), self_device_(self.device()) {}
 

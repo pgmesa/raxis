@@ -399,38 +399,46 @@ void Tensor::index_put_(ArrayRef<indexing::TensorIndex> indices, Scalar value) {
 }
 
 // ======================== Copy & Fill =======================
-Tensor& Tensor::copy_(const Tensor& other) const {
-    return ::raxis::copy_(const_cast<Tensor&>(*this), other);
+Tensor& Tensor::copy_(const Tensor& other, bool non_blocking) const {
+    return ::raxis::copy_(const_cast<Tensor&>(*this), other, non_blocking);
 }
 
 Tensor Tensor::clone(MemoryFormat memory_format) const {
     return ::raxis::clone(*this, memory_format);
 }
 
-Tensor Tensor::to(Dtype new_dtype) const {
-    return to(device(), new_dtype);
+Tensor Tensor::to(Dtype new_dtype, bool non_blocking) const {
+    return to(device(), new_dtype, non_blocking);
 }
 
-Tensor Tensor::to(Device new_device) const {
-    return to(new_device, dtype());
+Tensor Tensor::to(Device new_device, bool non_blocking) const {
+    return to(new_device, dtype(), non_blocking);
 }
 
 // From: aten/src/ATen/native/TensorConversions.cpp (to_will_alias)
 // Returns self when nothing changes; a device without index (cuda) matches
 // any index of its type, as torch's x.to("cuda") on a cuda:1 tensor
-Tensor Tensor::to(Device new_device, Dtype new_dtype) const {
+Tensor Tensor::to(Device new_device, Dtype new_dtype, bool non_blocking) const {
     bool same_device = device().type() == new_device.type() &&
         (!new_device.has_index() || device().index() == new_device.index());
     if (same_device && dtype() == new_dtype) return *this;
-    return ::raxis::to_copy(*this, new_dtype, same_device ? device() : new_device);
+    return ::raxis::to_copy(*this, new_dtype, same_device ? device() : new_device, non_blocking);
 }
 
 Tensor Tensor::cpu() const {
     return to(Device(DeviceType::CPU));
 }
 
-Tensor Tensor::cuda() const {
-    return to(Device(DeviceType::CUDA));
+Tensor Tensor::cuda(bool non_blocking) const {
+    return to(Device(DeviceType::CUDA), non_blocking);
+}
+
+Tensor Tensor::pin_memory() const {
+    return ::raxis::pin_memory(*this);
+}
+
+bool Tensor::is_pinned() const {
+    return ::raxis::is_pinned(*this);
 }
 
 Tensor& Tensor::fill_(Scalar value) const {
