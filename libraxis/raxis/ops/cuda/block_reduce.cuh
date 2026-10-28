@@ -43,6 +43,39 @@ __device__ inline T block_sum(T value, T* shared) {
     return value;
 }
 
+// max that returns NaN when either value is NaN (fmaxf would drop it)
+// From: aten/src/ATen/native/SharedReduceOps.h (max_propagate_nan)
+template <typename T>
+__device__ inline T max_propagate_nan(T a, T b) {
+    return (a != a || a > b) ? a : b;
+}
+
+template <typename T>
+__device__ inline T warp_max(T value) {
+    for (int offset = kWarpSize / 2; offset > 0; offset /= 2) {
+        value = max_propagate_nan(value, __shfl_down_sync(0xffffffff, value, offset));
+    }
+    return value;
+}
+
+// shared must hold kWarpSize values; for values >= 0 (the padding lanes give 0)
+template <typename T>
+__device__ inline T block_max_nonnegative(T value, T* shared) {
+    const int lane = threadIdx.x % kWarpSize;
+    const int warp = threadIdx.x / kWarpSize;
+    value = warp_max(value);
+    __syncthreads();
+    if (lane == 0) {
+        shared[warp] = value;
+    }
+    __syncthreads();
+    if (warp == 0) {
+        value = lane < static_cast<int>(blockDim.x) / kWarpSize ? shared[lane] : T(0);
+        value = warp_max(value);
+    }
+    return value;
+}
+
 // Running mean and sum of squared deviations (m2) of n values. Two partial
 // results merge exactly (Chan et al.), so threads can accumulate their own
 // share and the shares combine in any tree. A plain aggregate (no default

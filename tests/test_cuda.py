@@ -777,6 +777,64 @@ class TestFusedAdam:
             np.testing.assert_array_equal(r, t)
 
 
+class TestForeach:
+    """_foreach_norm / _foreach_mul_: the fused kernels for ord 0, 1, 2 and inf
+    follow PyTorch's order of additions, so they are bitwise torch's."""
+
+    # More tensors than one launch holds (80), odd sizes for the unaligned
+    # path, and one tensor of more chunks than a launch holds (320)
+    SHAPES = [(1536, 384), (384,), (65, 384), (3, 5), (70001,), (1,), (0,)] * 12 + [(321 * 65536 + 7,), (7,)]
+
+    def lists(self, dtype, with_empty=True):
+        rng = np.random.RandomState(0)
+        data = [rng.randn(*s).astype(dtype) for s in self.SHAPES if with_empty or np.prod(s) > 0]
+        return ([raxis.tensor(d, device="cuda") for d in data], [torch.tensor(d, device="cuda") for d in data])
+
+    @pytest.mark.parametrize("dtype", ["float32", "float64"])
+    @pytest.mark.parametrize("ord", [0, 1, 2, float("inf"), 3])
+    def test_norm(self, dtype, ord):
+        r_list, t_list = self.lists(dtype, with_empty=ord != float("inf"))
+        r_list[4][3] = float("nan")
+        t_list[4][3] = float("nan")
+        r = np.array([n.cpu().numpy() for n in raxis._C._foreach_norm(r_list, ord)])
+        t = np.array([n.cpu().numpy() for n in torch._foreach_norm(t_list, ord)])
+        if ord == 3:   # composed per tensor, as torch's slow path
+            np.testing.assert_allclose(r, t, rtol=1e-6 if dtype == "float32" else 1e-13)
+        else:
+            np.testing.assert_array_equal(r, t)
+
+    def test_norm_infinity_of_empty_raises(self):
+        with pytest.raises(RuntimeError, match="infinity norm on an empty tensor"):
+            raxis._C._foreach_norm([raxis.zeros(0, device="cuda")], float("inf"))
+
+    def test_mul_(self):
+        r_list, t_list = self.lists("float32")
+        r_versions = [t._version for t in r_list]
+        raxis._C._foreach_mul_(r_list, raxis.tensor(0.25, device="cuda"))
+        torch._foreach_mul_(t_list, torch.tensor(0.25, device="cuda"))
+        for r, t, v in zip(r_list, t_list, r_versions):
+            np.testing.assert_array_equal(r.cpu().numpy(), t.cpu().numpy())
+            assert r._version == v + 1
+
+    def test_mixed_devices_and_dtypes(self):
+        # clip_grad_norm_ groups by (device, dtype); the slow path takes the CPU
+        rng = np.random.RandomState(1)
+        data = [rng.randn(30, 7), rng.randn(5).astype(np.float32), rng.randn(4, 4).astype(np.float32)]
+        devices = ["cuda", "cpu", "cuda"]
+        for foreach in (None, False):
+            norms = []
+            for lib in (raxis, torch):
+                ps = [lib.nn.Parameter(lib.tensor(d, device=dev)) for d, dev in zip(data, devices)]
+                for p in ps:
+                    p.grad = p.detach() * 3
+                norm = lib.nn.utils.clip_grad_norm_(ps, 1.0, foreach=foreach)
+                norms.append((norm.item(), [p.grad.cpu().numpy() for p in ps]))
+            (r_norm, r_grads), (t_norm, t_grads) = norms
+            assert r_norm == pytest.approx(t_norm, rel=1e-6)
+            for r, t in zip(r_grads, t_grads):
+                np.testing.assert_allclose(r, t, rtol=1e-6)
+
+
 def mlp():
     nn = raxis.nn
     return nn.Sequential(

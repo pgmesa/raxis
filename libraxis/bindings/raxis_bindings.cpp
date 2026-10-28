@@ -1575,6 +1575,38 @@ PYBIND11_MODULE(_C, c) {
               py::arg("exp_avg_sqs"), py::arg("state_steps"), py::kw_only(), py::arg("lr"), py::arg("beta1"),
               py::arg("beta2"), py::arg("weight_decay"), py::arg("eps"), py::arg("maximize"));
     }
+    // torch._C._group_tensors_by_device_and_dtype, returning the positions of
+    // each group's tensors in order of first appearance: reading .device and
+    // .dtype from Python costs more than the foreach kernels themselves
+    c.def("_group_indices_by_device_and_dtype", [](const std::vector<raxis::Tensor>& tensors) {
+        std::vector<std::pair<raxis::Device, raxis::Dtype>> keys;
+        std::vector<std::vector<int64_t>> groups;
+        for (size_t i = 0; i < tensors.size(); i++) {
+            const std::pair key{tensors[i].device(), tensors[i].dtype()};
+            size_t g = 0;
+            while (g < keys.size() && keys[g] != key) {
+                g++;
+            }
+            if (g == keys.size()) {
+                keys.push_back(key);
+                groups.emplace_back();
+            }
+            groups[g].push_back(static_cast<int64_t>(i));
+        }
+        return groups;
+    }, py::arg("tensors"));
+    c.def("_foreach_norm", [](std::vector<raxis::Tensor> tensors, double ord) {
+        return raxis::foreach_norm(tensors, ord);
+    }, py::arg("tensors"), py::arg("ord") = 2.0);
+    c.def("_foreach_mul_", [](std::vector<raxis::Tensor> tensors, const raxis::Tensor& scalar) {
+        raxis::foreach_mul_(tensors, scalar);
+    }, py::arg("tensors"), py::arg("scalar"));
+    c.def("_foreach_mul_", [](std::vector<raxis::Tensor> tensors, double scalar) {
+        raxis::autograd::GradModeGuard no_grad(false);
+        for (const raxis::Tensor& t : tensors) {
+            t.mul_(scalar);
+        }
+    }, py::arg("tensors"), py::arg("scalar"));
     c.def("_scaled_dot_product_efficient_attention", [](
             const raxis::Tensor& query, const raxis::Tensor& key, const raxis::Tensor& value,
             std::optional<raxis::Tensor> attn_bias, bool compute_log_sumexp, double dropout_p, bool is_causal,

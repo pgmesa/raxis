@@ -8,6 +8,7 @@
 #include <raxis/ops/loss.h>
 #include <raxis/ops/softmax.h>
 #include <raxis/ops/fill.h>
+#include <raxis/ops/foreach_ops.h>
 #include <raxis/ops/fused_adam.h>
 #include <raxis/ops/pow.h>
 #include <raxis/ops/cat_ops.h>

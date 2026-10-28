@@ -7,7 +7,7 @@ import torch
 import numpy as np
 
 from raxis import nn
-from test_utils import check_match, randf_centered
+from test_utils import check_match, device, randf_centered  # noqa: F401 (device is a fixture)
 
 
 def copy_params(r_model, t_model):
@@ -1039,14 +1039,14 @@ def test_embedding_module():
 # GRADIENT CLIPPING
 # ===========================================================================
 
-def grads_pair(seed=1):
+def grads_pair(seed=1, device="cpu"):
     """The same gradients on raxis and torch parameters; the last one has none."""
     pairs = []
     for lib in (raxis, torch):
-        params = [lib.nn.Parameter(lib.zeros(5, 3)), lib.nn.Parameter(lib.zeros(7)), lib.nn.Parameter(lib.zeros(2))]
+        params = [lib.nn.Parameter(lib.zeros(*s, device=device)) for s in ((5, 3), (7,), (2,))]
         rng = np.random.RandomState(seed)
         for p in params[:2]:
-            p.grad = lib.tensor(rng.randn(*p.shape).astype(np.float32))
+            p.grad = lib.tensor(rng.randn(*p.shape).astype(np.float32), device=device)
         pairs.append(params)
     return pairs
 
@@ -1055,10 +1055,11 @@ class TestClipGrad:
 
     @pytest.mark.parametrize("norm_type", [2.0, 1, 3.5, math.inf, 0])
     @pytest.mark.parametrize("max_norm", [0.1, 100.0])
-    def test_clip_grad_norm_matches_torch(self, norm_type, max_norm):
-        r_params, t_params = grads_pair()
-        r_norm = nn.utils.clip_grad_norm_(r_params, max_norm, norm_type)
-        t_norm = torch.nn.utils.clip_grad_norm_(t_params, max_norm, norm_type)
+    @pytest.mark.parametrize("foreach", [None, False])
+    def test_clip_grad_norm_matches_torch(self, norm_type, max_norm, foreach, device):
+        r_params, t_params = grads_pair(device=device)
+        r_norm = nn.utils.clip_grad_norm_(r_params, max_norm, norm_type, foreach=foreach)
+        t_norm = torch.nn.utils.clip_grad_norm_(t_params, max_norm, norm_type, foreach=foreach)
         check_match(r_norm, t_norm, atol=1e-5)
         for r, t in zip(r_params[:2], t_params[:2]):
             check_match(r.grad, t.grad, atol=1e-6)
