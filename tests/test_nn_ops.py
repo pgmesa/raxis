@@ -960,6 +960,8 @@ class TestScaledDotProductAttention:
 # row long enough for the cascade of Welford chunks, several normalized dims
 LAYER_NORM_CASES = [
     ((4, 7), (7,)), ((3, 5, 37), (37,)), ((2, 3, 4, 5), (4, 5)), ((2, 3000), (3000,)), ((6, 1), (1,)),
+    # float32 rows of N % 4 == 0 up to 4096 take the GPU register kernel (1, 2, 4, 8 float4s per thread)
+    ((8, 16, 384), (384,)), ((5, 1000), (1000,)), ((3, 1536), (1536,)), ((2, 4096), (4096,)), ((2, 5000), (5000,)),
 ]
 
 

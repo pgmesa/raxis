@@ -334,6 +334,91 @@ __global__ void layer_norm_forward_kernel(
     }
 }
 
+// Rows of float32 that fit in registers (N <= 128 threads * kVecs float4s),
+// the case of a transformer's hidden dim. PyTorch's vectorized kernel
+// (layer_norm_kernel.cu, vectorized_layer_norm_kernel) reads float4s with
+// 128 threads and updates a Welford accumulator per element, a division by
+// the running count each time. Here each thread loads its float4s once and
+// keeps them: the block sums them for the mean, then sums the squared
+// deviations from the registers. Two exact passes, no division per element,
+// and the row is read from memory once.
+constexpr int kVecRowThreads = 128;
+
+// The block's sum, in every thread
+__device__ inline float block_sum_all(float value, float* shared) {
+    __shared__ float total;
+    value = cuda::block_sum(value, shared);
+    if (threadIdx.x == 0) {
+        total = value;
+    }
+    __syncthreads();
+    return total;
+}
+
+template <int kVecs>
+__global__ void __launch_bounds__(kVecRowThreads) layer_norm_forward_vec_kernel(
+    float* output, float* mean, float* rstd, const float* input, const float* weight, const float* bias,
+    int32_t N, float eps
+) {
+    __shared__ float shared[cuda::kWarpSize];
+    const int64_t row = blockIdx.x;
+    const auto* x = reinterpret_cast<const float4*>(input + row * N);
+    auto* y = reinterpret_cast<float4*>(output + row * N);
+    const int32_t n_vecs = N / 4;
+
+    float4 v[kVecs];
+    float sum = 0.0f;
+    #pragma unroll
+    for (int k = 0; k < kVecs; k++) {
+        const int32_t j = threadIdx.x + k * kVecRowThreads;
+        v[k] = j < n_vecs ? x[j] : make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+        sum += (v[k].x + v[k].y) + (v[k].z + v[k].w);
+    }
+    const float m = block_sum_all(sum, shared) / static_cast<float>(N);
+    float sq = 0.0f;
+    #pragma unroll
+    for (int k = 0; k < kVecs; k++) {
+        if (threadIdx.x + k * kVecRowThreads < n_vecs) {
+            const float4 d = make_float4(v[k].x - m, v[k].y - m, v[k].z - m, v[k].w - m);
+            sq += (d.x * d.x + d.y * d.y) + (d.z * d.z + d.w * d.w);
+        }
+    }
+    __syncthreads();  // every thread has read `total` before it is reused
+    const float r = 1.0f / ::sqrtf(block_sum_all(sq, shared) / static_cast<float>(N) + eps);
+    if (threadIdx.x == 0) {
+        mean[row] = m;
+        rstd[row] = r;
+    }
+    #pragma unroll
+    for (int k = 0; k < kVecs; k++) {
+        const int32_t j = threadIdx.x + k * kVecRowThreads;
+        if (j < n_vecs) {
+            const float4 gamma = weight != nullptr ? reinterpret_cast<const float4*>(weight)[j]
+                                                   : make_float4(1.0f, 1.0f, 1.0f, 1.0f);
+            const float4 beta = bias != nullptr ? reinterpret_cast<const float4*>(bias)[j]
+                                                : make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+            y[j] = make_float4((v[k].x - m) * r * gamma.x + beta.x, (v[k].y - m) * r * gamma.y + beta.y,
+                               (v[k].z - m) * r * gamma.z + beta.z, (v[k].w - m) * r * gamma.w + beta.w);
+        }
+    }
+}
+
+// Float4s per thread for the register kernel, 0 when it does not apply
+int layer_norm_vecs_per_thread(const Tensor& input, const Tensor& weight, const Tensor& bias, int64_t N) {
+    auto aligned = [](const Tensor& t) {
+        return !t.defined() || reinterpret_cast<uintptr_t>(t.data_ptr()) % 16 == 0;
+    };
+    if (input.dtype() != dtypes::Float32 || N % 4 != 0 || !aligned(input) || !aligned(weight) || !aligned(bias)) {
+        return 0;
+    }
+    for (int vecs : {1, 2, 4, 8}) {
+        if (N <= int64_t{4} * kVecRowThreads * vecs) {
+            return vecs;
+        }
+    }
+    return 0;
+}
+
 // With g = dy * gamma, ds = sum(g * x) and db = sum(g) over the row:
 //   dx = rstd * g + c1 * x + c2,
 //   c1 = (db * mean - ds) * rstd^3 / N,  c2 = -c1 * mean - db * rstd / N
@@ -427,6 +512,21 @@ void layer_norm_cuda(
 ) {
     DeviceGuard guard(input.device());
     check_32bit(input, "layer_norm");
+    if (const int vecs = layer_norm_vecs_per_thread(input, weight, bias, N)) {
+        auto launch = [&](auto kernel) {
+            kernel<<<static_cast<unsigned>(M), kVecRowThreads, 0, cuda::current_stream()>>>(
+                output.mutable_data_ptr<float>(), mean.mutable_data_ptr<float>(), rstd.mutable_data_ptr<float>(),
+                input.data_ptr<float>(), ptr_or_null<float>(weight), ptr_or_null<float>(bias),
+                static_cast<int32_t>(N), static_cast<float>(eps));
+            RAXIS_CUDA_KERNEL_LAUNCH_CHECK();
+        };
+        switch (vecs) {
+            case 1: return launch(layer_norm_forward_vec_kernel<1>);
+            case 2: return launch(layer_norm_forward_vec_kernel<2>);
+            case 4: return launch(layer_norm_forward_vec_kernel<4>);
+            default: return launch(layer_norm_forward_vec_kernel<8>);
+        }
+    }
     input.dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
         layer_norm_forward_kernel<scalar_t><<<static_cast<unsigned>(M), row_threads(N), 0, cuda::current_stream()>>>(
             output.mutable_data_ptr<scalar_t>(), mean.mutable_data_ptr<scalar_t>(), rstd.mutable_data_ptr<scalar_t>(),
