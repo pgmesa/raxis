@@ -7,12 +7,14 @@ distilled from the PyTorch source: it keeps the techniques that make ATen fast
 without the breadth and indirection that make the original hard to read.
 
 The goal is a codebase that someone curious about how PyTorch works inside can
-read end to end, while running at PyTorch speed on CPU.
+read end to end, while running at PyTorch speed on CPU and close to it on
+NVIDIA GPUs (without cuDNN).
 
-> **Status: alpha.** CPU only. Tensors with views and broadcasting, type
+> **Status: alpha.** CPU and CUDA. Tensors with views and broadcasting, type
 > promotion, elementwise ops, reductions, matmul, autograd, and an `nn`/`optim`
 > package with enough to train MLPs, CNNs (Conv1d/2d, pooling, BatchNorm) and a
-> small GPT (Embedding, LayerNorm, GELU, scaled dot product attention). CUDA is next.
+> small GPT (Embedding, LayerNorm, GELU, scaled dot product attention), on the
+> CPU or on an NVIDIA GPU.
 
 ## Install
 
@@ -107,6 +109,24 @@ improving around iteration 2000 and the model overfits afterwards, so both
 were stopped early: the table has the best val loss up to iteration 2000
 (1750 for Raxis, 2000 for PyTorch), against 1.4697 in nanoGPT's README.
 Random numbers differ between the libraries, so the losses do too.
+
+**On the GPU.** RTX 5070 Ti (CUDA 13.0, driver 610), float32, PyTorch
+2.14.1+cu130, the same TF32 flags in both libraries (nanoGPT turns TF32 on
+for matmuls, as its train.py does). Median training step:
+
+| Model | Raxis | PyTorch |
+|---|--:|--:|
+| MNIST MLP, batch 64 (`scripts/bench_training.py --device cuda`) | 0.54 ms | 0.45 ms |
+| MNIST CNN, batch 128 (same) | 1.32 ms | 0.96 ms |
+| nanoGPT `train_shakespeare_char.py`, 5000 iters | 47.3 ms | 45.7 ms |
+
+The full nanoGPT run takes 6.0 min with Raxis and 5.8 min with PyTorch, best
+val loss 1.4668 and 1.4612 (both at iteration 1750). PyTorch convolves
+with cuDNN; Raxis does not link it (a closed library of several hundred MB
+that would hide the most interesting kernels) and runs im2col plus cuBLAS.
+Its attention is its own FlashAttention-2 style kernel, against PyTorch's
+memory-efficient one. At batch 64 the MLP is bound by kernel launches on
+any GPU.
 
 **Ops.** A selection of `scripts/bench_ops.py` (float32, forward only unless
 noted). Over its 388 cases the median ratio Raxis/PyTorch is 0.85x; the only
