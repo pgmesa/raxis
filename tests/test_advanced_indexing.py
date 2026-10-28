@@ -6,8 +6,8 @@ import numpy as np
 from test_utils import check_match, make_pair, make_grad_pair, randf, device
 
 
-def index_pair(data):
-    return raxis.from_numpy(data), torch.from_numpy(data.copy())
+def index_pair(data, device="cpu"):
+    return raxis.from_numpy(data).to(device), torch.from_numpy(data.copy()).to(device)
 
 
 def rand_index(shape, high, seed=0):
@@ -27,30 +27,32 @@ GATHER_CASES = [
 
 
 @pytest.mark.parametrize("shape,dim,index_shape", GATHER_CASES)
-def test_gather(shape, dim, index_shape):
-    r, t = make_pair(randf(*shape))
-    ri, ti = index_pair(rand_index(index_shape, shape[dim]))
+def test_gather(shape, dim, index_shape, device):
+    r, t = make_pair(randf(*shape), device)
+    ri, ti = index_pair(rand_index(index_shape, shape[dim]), device)
     check_match(r.gather(dim, ri), t.gather(dim, ti))
     check_match(raxis.gather(r, dim, ri), torch.gather(t, dim, ti))
 
 
 @pytest.mark.parametrize("shape,dim,index_shape", GATHER_CASES)
-def test_gather_backward(shape, dim, index_shape):
-    r, t = make_grad_pair(randf(*shape))
-    ri, ti = index_pair(rand_index(index_shape, shape[dim]))
+def test_gather_backward(shape, dim, index_shape, device):
+    r, t = make_grad_pair(randf(*shape), device)
+    ri, ti = index_pair(rand_index(index_shape, shape[dim]), device)
     w = randf(*index_shape, seed=3)
-    (r.gather(dim, ri) * raxis.from_numpy(w)).sum().backward()
-    (t.gather(dim, ti) * torch.from_numpy(w)).sum().backward()
+    (r.gather(dim, ri) * raxis.from_numpy(w).to(device)).sum().backward()
+    (t.gather(dim, ti) * torch.from_numpy(w).to(device)).sum().backward()
     check_match(r.grad, t.grad)
 
 
-def test_gather_non_contiguous():
-    r, t = make_pair(randf(6, 8))
-    ri, ti = index_pair(rand_index((8, 3), 6))
+def test_gather_non_contiguous(device):
+    r, t = make_pair(randf(6, 8), device)
+    ri, ti = index_pair(rand_index((8, 3), 6), device)
     check_match(r.transpose(0, 1).gather(1, ri), t.t().gather(1, ti))
 
 
 def test_gather_out_of_bounds():
+    # On the GPU an out of bounds index is a device assert, which poisons
+    # the CUDA context, so only the CPU checks it here
     r, t = make_pair(randf(4, 5))
     ri, ti = index_pair(np.full((2, 5), 4, dtype=np.int64))
     with pytest.raises(RuntimeError, match="out of bounds"):
@@ -80,10 +82,10 @@ def permutation_index(index_shape, dim, high, seed=0):
 
 
 @pytest.mark.parametrize("shape,dim,index_shape", SCATTER_CASES)
-def test_scatter(shape, dim, index_shape):
-    r, t = make_pair(randf(*shape))
-    ri, ti = index_pair(permutation_index(index_shape, dim, shape[dim]))
-    rs, ts = make_pair(randf(*index_shape, seed=1))
+def test_scatter(shape, dim, index_shape, device):
+    r, t = make_pair(randf(*shape), device)
+    ri, ti = index_pair(permutation_index(index_shape, dim, shape[dim]), device)
+    rs, ts = make_pair(randf(*index_shape, seed=1), device)
     check_match(r.scatter(dim, ri, rs), t.scatter(dim, ti, ts))
     check_match(r.scatter(dim, ri, 7.5), t.scatter(dim, ti, 7.5))
     r.scatter_(dim, ri, rs)
@@ -92,42 +94,63 @@ def test_scatter(shape, dim, index_shape):
 
 
 @pytest.mark.parametrize("shape,dim,index_shape", SCATTER_CASES + [((5, 4), 0, (12, 4))])
-def test_scatter_add(shape, dim, index_shape):
+def test_scatter_add(shape, dim, index_shape, device):
     # Repeated indices accumulate
-    r, t = make_pair(randf(*shape))
-    ri, ti = index_pair(rand_index(index_shape, shape[dim]))
-    rs, ts = make_pair(randf(*index_shape, seed=1))
+    r, t = make_pair(randf(*shape), device)
+    ri, ti = index_pair(rand_index(index_shape, shape[dim]), device)
+    rs, ts = make_pair(randf(*index_shape, seed=1), device)
     check_match(r.scatter_add(dim, ri, rs), t.scatter_add(dim, ti, ts))
     check_match(raxis.scatter_add(r, dim, ri, rs), torch.scatter_add(t, dim, ti, ts))
 
 
 @pytest.mark.parametrize("shape,dim,index_shape", SCATTER_CASES)
-def test_scatter_backward(shape, dim, index_shape):
-    r, t = make_grad_pair(randf(*shape))
-    rs, ts = make_grad_pair(randf(*index_shape, seed=1))
-    ri, ti = index_pair(permutation_index(index_shape, dim, shape[dim]))
+def test_scatter_backward(shape, dim, index_shape, device):
+    r, t = make_grad_pair(randf(*shape), device)
+    rs, ts = make_grad_pair(randf(*index_shape, seed=1), device)
+    ri, ti = index_pair(permutation_index(index_shape, dim, shape[dim]), device)
     w = randf(*shape, seed=2)
-    (r.scatter(dim, ri, rs) * raxis.from_numpy(w)).sum().backward()
-    (t.scatter(dim, ti, ts) * torch.from_numpy(w)).sum().backward()
+    (r.scatter(dim, ri, rs) * raxis.from_numpy(w).to(device)).sum().backward()
+    (t.scatter(dim, ti, ts) * torch.from_numpy(w).to(device)).sum().backward()
     check_match(r.grad, t.grad)
     check_match(rs.grad, ts.grad)
 
 
-def test_scatter_add_backward():
-    r, t = make_grad_pair(randf(5, 4))
-    rs, ts = make_grad_pair(randf(9, 4, seed=1))
-    ri, ti = index_pair(rand_index((9, 4), 5))
+def test_scatter_add_backward(device):
+    r, t = make_grad_pair(randf(5, 4), device)
+    rs, ts = make_grad_pair(randf(9, 4, seed=1), device)
+    ri, ti = index_pair(rand_index((9, 4), 5), device)
     w = randf(5, 4, seed=2)
-    (r.scatter_add(0, ri, rs) * raxis.from_numpy(w)).sum().backward()
-    (t.scatter_add(0, ti, ts) * torch.from_numpy(w)).sum().backward()
+    (r.scatter_add(0, ri, rs) * raxis.from_numpy(w).to(device)).sum().backward()
+    (t.scatter_add(0, ti, ts) * torch.from_numpy(w).to(device)).sum().backward()
     check_match(r.grad, t.grad)
     check_match(rs.grad, ts.grad)
 
 
-def test_scatter_requires_int64_index():
-    r = raxis.zeros((3, 3))
+def test_scatter_requires_int64_index(device):
+    r = raxis.zeros((3, 3), device=device)
     with pytest.raises(RuntimeError, match="int64"):
-        r.scatter(0, raxis.tensor([[0, 1, 2]], dtype=raxis.int32), 1.0)
+        r.scatter(0, raxis.tensor([[0, 1, 2]], dtype=raxis.int32, device=device), 1.0)
+
+
+@pytest.mark.parametrize("dtype", ["float64", "int32", "int64", "uint8", "bool"])
+def test_scatter_add_dtypes(dtype, device):
+    # Repeated indices, accumulated with atomics on the GPU (a compare and swap
+    # of the 32-bit word for the 1-byte dtypes)
+    rng = np.random.RandomState(0)
+    data = (rng.randn(6, 7) > 0) if dtype == "bool" else (rng.rand(6, 7) * 10).astype(dtype)
+    src = (rng.randn(40, 7) > 0) if dtype == "bool" else (rng.rand(40, 7) * 10).astype(dtype)
+    r, t = make_pair(data, device)
+    rs, ts = make_pair(src, device)
+    ri, ti = index_pair(rand_index((40, 7), 6), device)
+    check_match(r.scatter_add(0, ri, rs), t.scatter_add(0, ti, ts))
+
+
+def test_gather_scatter_scalars(device):
+    r, t = make_pair(np.array(3.5, dtype=np.float32), device)
+    ri, ti = index_pair(np.array(0, dtype=np.int64), device)
+    check_match(r.gather(0, ri), t.gather(0, ti))
+    check_match(r.scatter(0, ri, 2.0), t.scatter(0, ti, 2.0))
+    check_match(r.scatter_add(0, ri, r), t.scatter_add(0, ti, t))
 
 
 # ===========================================================================
