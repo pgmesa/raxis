@@ -1,6 +1,10 @@
 #include <limits>
+#include <tuple>
 
+#include <raxis/ops/copy.h>
 #include <raxis/ops/cuda/loops.cuh>
+#include <raxis/ops/reduce_ops.h>
+#include <raxis/ops/tensor_advanced_indexing.h>
 #include <raxis/ops/tensor_compare.h>
 #include <raxis/tensor/tensor_iterator.h>
 
@@ -91,6 +95,24 @@ void clamp_kernel_cuda(TensorIterator& iter) {
 
 } // anonymous namespace
 
+// max(dim) / min(dim): the index from argmax / argmin, then the value it
+// points to. PyTorch reduces (value, index) pairs in one kernel with two
+// outputs; reduce.cuh has one output, so this takes a reduction and a
+// gather over the (much smaller) result. argmax already gives what max
+// needs: NaN wins, and among equal values the first index.
+template <bool is_max>
+void minmax_dim_kernel_cuda(const Tensor& values, const Tensor& indices, const Tensor& self, int64_t dim) {
+    // argmax takes no bool; as uint8 the order is the same
+    const Tensor source = self.dtype() == dtypes::Bool ? self.to(dtypes::Uint8) : self;
+    const Tensor index = is_max ? ops::argmax(source, dim, /*keepdim=*/true) : ops::argmin(source, dim, /*keepdim=*/true);
+    Tensor values_out = values;
+    Tensor indices_out = indices;
+    copy(ops::gather(self, dim, index), values_out);
+    copy(index, indices_out);
+}
+
+REGISTER_DISPATCH(max_dim_stub, &minmax_dim_kernel_cuda<true>);
+REGISTER_DISPATCH(min_dim_stub, &minmax_dim_kernel_cuda<false>);
 REGISTER_DISPATCH(where_stub, &where_kernel_cuda);
 REGISTER_DISPATCH(clamp_scalar_stub, &clamp_scalar_kernel_cuda);
 REGISTER_DISPATCH(clamp_min_scalar_stub, &clamp_min_scalar_kernel_cuda);

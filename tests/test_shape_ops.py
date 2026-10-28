@@ -2,7 +2,7 @@ import pytest
 import raxis
 import torch
 
-from test_utils import check_match, make_pair, make_grad_pair, randf
+from test_utils import check_match, device, make_pair, make_grad_pair, randf  # noqa: F401 (fixture)
 
 
 def check_list_match(r_list, t_list):
@@ -182,14 +182,14 @@ FLIP_CASES = [
 
 
 @pytest.mark.parametrize("shape,dims", FLIP_CASES)
-def test_flip(shape, dims):
-    r, t = make_pair(randf(*shape))
+def test_flip(shape, dims, device):
+    r, t = make_pair(randf(*shape), device)
     check_match(r.flip(dims), t.flip(dims))
     check_match(raxis.flip(r, dims), torch.flip(t, dims))
 
 
-def test_flip_layouts_and_dtypes():
-    r, t = make_pair(randf(2, 3, 4))
+def test_flip_layouts_and_dtypes(device):
+    r, t = make_pair(randf(2, 3, 4), device)
     check_match(r.permute(2, 0, 1).flip(0, 1), t.permute(2, 0, 1).flip(0, 1))
     check_match(r[:, ::2].flip(1), t[:, ::2].flip(1))
     check_match(r[:1].expand(3, -1, -1).flip(0, 2), t[:1].expand(3, -1, -1).flip(0, 2))
@@ -201,19 +201,19 @@ def test_flip_layouts_and_dtypes():
         r.flip(0, 0)
 
 
-def test_flip_preserves_layout():
-    r, t = make_pair(randf(4, 6))
+def test_flip_preserves_layout(device):
+    r, t = make_pair(randf(4, 6), device)
     r_out, t_out = r.transpose(0, 1).flip(0), t.t().flip(0)
     check_match(r_out, t_out)
     assert tuple(r_out.strides) == tuple(t_out.stride())
 
 
 @pytest.mark.parametrize("shape,dims", FLIP_CASES[:6])
-def test_flip_backward(shape, dims):
-    r, t = make_grad_pair(randf(*shape))
+def test_flip_backward(shape, dims, device):
+    r, t = make_grad_pair(randf(*shape), device)
     w = randf(*shape, seed=1)
-    (r.flip(dims) * raxis.from_numpy(w)).sum().backward()
-    (t.flip(dims) * torch.from_numpy(w)).sum().backward()
+    (r.flip(dims) * raxis.from_numpy(w).to(device)).sum().backward()
+    (t.flip(dims) * torch.from_numpy(w).to(device)).sum().backward()
     check_match(r.grad, t.grad)
     assert r.flip(dims).grad_fn.name() == t.flip(dims).grad_fn.name()
 

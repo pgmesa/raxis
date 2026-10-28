@@ -12,6 +12,7 @@
 #include <raxis/ops/cuda/offset_calculator.cuh>
 #include <raxis/ops/cuda/loops.cuh>
 #include <raxis/ops/tensor_advanced_indexing.h>
+#include <raxis/ops/tensor_transformations.h>
 #include <raxis/tensor/factories.h>
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/tensor_iterator.h>
@@ -257,6 +258,42 @@ void index_put_kernel_cuda(TensorIterator& iter, IntArrayRef index_size, IntArra
     });
 }
 
+// A copy: the flip is in the output strides ops::flip set up (negative
+// along the flipped dims), and the dummy third operand is never read, so
+// only the first two operands get offsets. The copy moves raw bytes of the
+// item size.
+// From: aten/src/ATen/native/cuda/IndexKernel.cu (flip_kernel_impl)
+template <typename T>
+void flip_kernel_impl(TensorIterator& iter) {
+    if (!iter.can_use_32bit_indexing()) {
+        auto first_half = iter.split(iter.get_dim_to_split());
+        flip_kernel_impl<T>(*first_half);
+        flip_kernel_impl<T>(iter);
+        return;
+    }
+    char* out_ptr = static_cast<char*>(iter.data_ptr(0));
+    const char* in_ptr = static_cast<const char*>(iter.data_ptr(1));
+    auto offset_calc = cuda::make_offset_calculator<2>(iter);
+    cuda::launch_legacy_kernel<128, 4>(iter.numel(), [=] GPU_LAMBDA(int i) {
+        const auto offsets = offset_calc.get(i);
+        *reinterpret_cast<T*>(out_ptr + offsets[0]) = *reinterpret_cast<const T*>(in_ptr + offsets[1]);
+    });
+}
+
+void flip_kernel_cuda(TensorIterator& iter) {
+    if (iter.numel() == 0) {
+        return;
+    }
+    DeviceGuard guard(iter.device(0));
+    switch (iter.element_size(0)) {
+        case 1: return flip_kernel_impl<uint8_t>(iter);
+        case 2: return flip_kernel_impl<uint16_t>(iter);
+        case 4: return flip_kernel_impl<uint32_t>(iter);
+        case 8: return flip_kernel_impl<uint64_t>(iter);
+        default: RAXIS_CHECK(false, "flip: unsupported item size ", iter.element_size(0));
+    }
+}
+
 // self viewed as [outer, dim_size, inner] (contiguous), result as
 // [outer, num_indices, inner]: one thread per result element. PyTorch picks
 // between a kernel per index (large slices) and one per element; per
@@ -319,6 +356,7 @@ void masked_fill_kernel_cuda(TensorIterator& iter, Scalar value) {
 } // anonymous namespace
 
 REGISTER_DISPATCH(index_stub, &index_kernel_cuda);
+REGISTER_DISPATCH(flip_stub, &flip_kernel_cuda);
 REGISTER_DISPATCH(index_put_stub, &index_put_kernel_cuda);
 REGISTER_DISPATCH(index_select_stub, &index_select_kernel_cuda);
 REGISTER_DISPATCH(masked_fill_stub, &masked_fill_kernel_cuda);

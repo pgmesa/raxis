@@ -3,7 +3,7 @@ import raxis
 import torch
 import numpy as np
 
-from test_utils import check_match, make_pair, make_grad_pair, randf, randf_centered
+from test_utils import check_match, device, make_pair, make_grad_pair, randf, randf_centered  # noqa: F401
 
 
 DTYPES = [np.float32, np.float64, np.int32, np.int64, np.uint8]
@@ -217,7 +217,7 @@ def with_ties_and_nans(shape, dtype, seed=0):
 
 
 def check_indices(r, t):
-    np.testing.assert_array_equal(np.array(r.tolist()), t.numpy())
+    np.testing.assert_array_equal(np.array(r.tolist()), t.cpu().numpy())
 
 
 @pytest.mark.parametrize("shape", ARG_SHAPES)
@@ -267,8 +267,8 @@ def test_argmax_non_contiguous():
 @pytest.mark.parametrize("shape", ARG_SHAPES)
 @pytest.mark.parametrize("dtype", [np.float32, np.float64, np.int64], ids=lambda d: np.dtype(d).name)
 @pytest.mark.parametrize("name", ["max", "min"])
-def test_minmax_dim(name, dtype, shape):
-    r, t = make_pair(with_ties_and_nans(shape, dtype))
+def test_minmax_dim(name, dtype, shape, device):
+    r, t = make_pair(with_ties_and_nans(shape, dtype), device)
     for dim in range(-len(shape), len(shape)):
         for keepdim in (False, True):
             r_out = getattr(r, name)(dim, keepdim)
@@ -279,11 +279,11 @@ def test_minmax_dim(name, dtype, shape):
             check_match(r_values, t_out.values)
 
 
-def test_minmax_dim_bool_and_0d():
-    r, t = make_pair(np.array([[True, False], [False, False]]))
+def test_minmax_dim_bool_and_0d(device):
+    r, t = make_pair(np.array([[True, False], [False, False]]), device)
     check_match(r.max(1).values, t.max(1).values)
     check_indices(r.min(0).indices, t.min(0).indices)
-    out = raxis.tensor(3.0).max(0)
+    out = raxis.tensor(3.0, device=device).max(0)
     assert out.values.item() == 3.0 and out.indices.item() == 0
 
 
@@ -294,9 +294,9 @@ def test_minmax_dim_empty_dim_raises():
 
 @pytest.mark.parametrize("name", ["max", "min"])
 @pytest.mark.parametrize("keepdim", [False, True])
-def test_minmax_dim_backward(name, keepdim):
+def test_minmax_dim_backward(name, keepdim, device):
     data = np.array([[1.0, 3.0, 3.0], [4.0, 0.0, 2.0]], dtype=np.float32)
-    r, t = make_grad_pair(data)
+    r, t = make_grad_pair(data, device)
     (getattr(r, name)(1, keepdim).values.exp() * 2.0).sum().backward()
     (getattr(t, name)(1, keepdim).values.exp() * 2.0).sum().backward()
     check_match(r.grad, t.grad)
