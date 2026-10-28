@@ -370,7 +370,6 @@ class TestHostOnlyOps:
     on CUDA tensors instead of dereferencing device pointers (a crash)."""
 
     @pytest.mark.parametrize("op", [
-        lambda x: raxis.multinomial(x.abs(), 2, replacement=True),
         lambda x: x.index_add_(0, raxis.tensor([0, 1]).cuda(), x[:2]),
     ])
     def test_raises(self, op):
@@ -757,6 +756,21 @@ class TestRandom:
         # Without replacement every row is a permutation prefix
         draws = raxis.multinomial(raxis.ones(50, 10, device="cuda"), 10).cpu().numpy()
         assert all(sorted(row) == list(range(10)) for row in draws)
+
+    @pytest.mark.parametrize("dtype", ["float32", "float64"])
+    def test_multinomial_with_replacement(self, dtype):
+        p = np.array([[1.0, 0.0, 3.0, 6.0], [2.0, 2.0, 0.0, 0.0]], dtype=dtype)
+        samples = raxis.multinomial(raxis.tensor(p, device="cuda"), 100_000, replacement=True).cpu().numpy()
+        freq = np.stack([np.bincount(row, minlength=4) / 100_000 for row in samples])
+        np.testing.assert_allclose(freq, p / p.sum(1, keepdims=True), atol=0.01)
+        assert freq[0, 1] == 0 and freq[1, 2] == freq[1, 3] == 0
+        # The draws are the CPU's (same Philox layout); only a draw on a
+        # bucket boundary could round to the other side
+        raxis.manual_seed(3)
+        gpu = raxis.multinomial(raxis.tensor(p, device="cuda"), 5000, replacement=True).cpu().numpy()
+        raxis.manual_seed(3)
+        cpu = raxis.multinomial(raxis.tensor(p), 5000, replacement=True).numpy()
+        assert np.mean(gpu == cpu) > 0.999
 
 
 def attention_both(B, H, L, S, E, mask=None, sliced=False, **kwargs):

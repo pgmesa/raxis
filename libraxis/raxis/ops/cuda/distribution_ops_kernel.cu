@@ -6,6 +6,7 @@
 #include <raxis/cuda/cuda_exception.h>
 #include <raxis/cuda/cuda_functions.h>
 #include <raxis/ops/distribution_ops.h>
+#include <raxis/ops/reduce_ops.h>
 #include <raxis/tensor/tensor.h>
 
 
@@ -171,6 +172,48 @@ void randint_kernel_cuda(const Tensor& self, int64_t low, uint64_t range, uint64
 
 } // anonymous namespace
 
+// One thread per sample: the first category whose cumulative weight reaches
+// the draw scaled by the row total (the CPU normalizes the row instead).
+// Rounding may leave the scaled draw above the last cumulative weight,
+// which still belongs to the last category, as the CPU's forced 1.
+// From: aten/src/ATen/native/cuda/MultinomialKernel.cu (sampleMultinomialWithReplacement)
+template <typename scalar_t>
+__global__ void multinomial_search_kernel(int64_t* result, const scalar_t* cdf, const double* uniform,
+                                          int64_t n_dist, int64_t n_categories, int64_t num_samples) {
+    const int64_t i = static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (i >= n_dist * num_samples) {
+        return;
+    }
+    const scalar_t* row = cdf + (i / num_samples) * n_categories;
+    const double sample = uniform[i] * static_cast<double>(row[n_categories - 1]);
+    int64_t left = 0;
+    int64_t right = n_categories - 1;
+    while (left < right) {
+        const int64_t mid = left + (right - left) / 2;
+        if (static_cast<double>(row[mid]) < sample) {
+            left = mid + 1;
+        } else {
+            right = mid;
+        }
+    }
+    result[i] = left;
+}
+
+void multinomial_with_replacement_kernel_cuda(const Tensor& result, const Tensor& self, const Tensor& uniform) {
+    DeviceGuard guard(self.device());
+    const Tensor cdf = ops::cumsum(self, -1);
+    const int64_t n_categories = self.shape()[self.ndim() - 1];
+    const int64_t n_dist = self.numel() / n_categories;
+    const int64_t n = result.numel();
+    self.dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+        multinomial_search_kernel<scalar_t><<<static_cast<unsigned>((n + 255) / 256), 256, 0, cuda::current_stream()>>>(
+            result.mutable_data_ptr<int64_t>(), cdf.data_ptr<scalar_t>(), uniform.data_ptr<double>(), n_dist,
+            n_categories, n / n_dist);
+    });
+    RAXIS_CUDA_KERNEL_LAUNCH_CHECK();
+}
+
+REGISTER_DISPATCH(multinomial_with_replacement_stub, &multinomial_with_replacement_kernel_cuda);
 REGISTER_DISPATCH(uniform_stub, &uniform_kernel_cuda);
 REGISTER_DISPATCH(normal_stub, &normal_kernel_cuda);
 REGISTER_DISPATCH(randint_stub, &randint_kernel_cuda);

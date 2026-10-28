@@ -31,6 +31,12 @@ DECLARE_DISPATCH(uniform_fn, uniform_stub);
 DECLARE_DISPATCH(normal_fn,  normal_stub);
 DECLARE_DISPATCH(randint_fn, randint_stub);
 
+// multinomial with replacement: result[i, s] is the category of row i of
+// self (contiguous [n_dist, n_categories]) where uniform[i, s] (float64 in
+// [0, 1)) falls in the row's cumulative distribution
+using multinomial_with_replacement_fn = void(*)(const Tensor& result, const Tensor& self, const Tensor& uniform);
+DECLARE_DISPATCH(multinomial_with_replacement_fn, multinomial_with_replacement_stub);
+
 // 32-bit words per uniform or normal sample: float takes 24 random bits from
 // one word and double 53 bits from two, as PyTorch's uniform_real_distribution
 inline int real_words_per_element(Dtype dtype) {

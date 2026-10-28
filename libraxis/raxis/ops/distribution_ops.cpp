@@ -14,7 +14,6 @@
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/factories.h>
 #include <raxis/ops/binary_ops.h>
-#include <raxis/ops/device_check.h>
 #include <raxis/ops/copy.h>
 #include <raxis/ops/reduce_ops.h>
 #include <raxis/ops/sorting.h>
@@ -152,19 +151,27 @@ Tensor multinomial(const Tensor& self, int64_t num_samples, bool replacement) {
         return std::get<1>(ops::topk(keys, num_samples));
     }
 
-    // The Gumbel path above is made of ops with CUDA kernels; this loop reads
-    // the probabilities on the host
-    check_cpu_only("multinomial with replacement", self);
-
     // With replacement: inverse transform sampling, a binary search of each
     // uniform draw in the row's normalized cumulative distribution. The
     // draws come from one Philox fill, so the rows run in parallel and the
     // samples do not depend on the number of threads
-    Tensor uniform = empty(result_shape, TensorOptions().dtype(dtypes::Float64));
+    Tensor uniform = empty(result_shape, self.options().dtype(dtypes::Float64));
     ops::uniform_(uniform);
-    Tensor result = empty(result_shape, TensorOptions().dtype(dtypes::Int64));
-    const Tensor self_c = self.contiguous();
-    self.dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+    Tensor result = empty(result_shape, self.options().dtype(dtypes::Int64));
+    multinomial_with_replacement_stub(self.device().type(), result, self.contiguous(), uniform);
+    return result;
+}
+
+} // namespace ops
+
+namespace {
+
+// From: aten/src/ATen/native/cpu/MultinomialKernel.cpp (multinomial_with_replacement_apply)
+void multinomial_with_replacement_cpu(const Tensor& result, const Tensor& self_c, const Tensor& uniform) {
+    const int64_t n_categories = self_c.shape()[self_c.ndim() - 1];
+    const int64_t n_dist = self_c.numel() / n_categories;
+    const int64_t num_samples = result.numel() / n_dist;
+    self_c.dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
         const scalar_t* self_data = self_c.data_ptr<scalar_t>();
         const double* uniform_data = uniform.data_ptr<double>();
         int64_t* result_data = result.mutable_data_ptr<int64_t>();
@@ -200,10 +207,9 @@ Tensor multinomial(const Tensor& self, int64_t num_samples, bool replacement) {
             }
         });
     });
-    return result;
 }
 
-} // namespace ops
+} // anonymous namespace
 
 Tensor multinomial(const Tensor& self, int64_t num_samples, bool replacement) {
     return ops::multinomial(self, num_samples, replacement);
@@ -213,5 +219,7 @@ Tensor multinomial(const Tensor& self, int64_t num_samples, bool replacement) {
 DEFINE_DISPATCH(uniform_stub);
 DEFINE_DISPATCH(normal_stub);
 DEFINE_DISPATCH(randint_stub);
+DEFINE_DISPATCH(multinomial_with_replacement_stub);
+REGISTER_ALL_CPU_DISPATCH(multinomial_with_replacement_stub, &multinomial_with_replacement_cpu)
 
 } // namespace raxis
