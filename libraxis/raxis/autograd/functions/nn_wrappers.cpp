@@ -268,6 +268,23 @@ std::tuple<Tensor, Tensor> scaled_dot_product_flash_attention_for_cpu(
     return {output, logsumexp};
 }
 
+std::tuple<Tensor, Tensor, Tensor, Tensor> scaled_dot_product_efficient_attention(
+    const Tensor& query, const Tensor& key, const Tensor& value, const Tensor& attn_bias,
+    bool compute_log_sumexp, double dropout_p, bool is_causal, std::optional<double> scale
+) {
+    auto [output, log_sumexp, philox_seed, philox_offset] = ops::scaled_dot_product_efficient_attention(
+        query, key, value, attn_bias, compute_log_sumexp, dropout_p, is_causal, scale);
+    if (autograd::requires_autograd({query, key, value})) {
+        auto grad_fn = std::make_shared<autograd::ScaledDotProductEfficientAttentionBackward0>(
+            query, key, value, attn_bias, dropout_p, is_causal, scale, output, log_sumexp, philox_seed,
+            philox_offset);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, {query, key, value});
+        autograd::set_autograd_meta(output, grad_fn);
+    }
+    return {output, log_sumexp, philox_seed, philox_offset};
+}
+
 // From: aten/src/ATen/native/Dropout.cpp (dropout, _dropout_impl)
 Tensor dropout(const Tensor& input, double p, bool train) {
     RAXIS_CHECK(p >= 0.0 && p <= 1.0,
@@ -490,6 +507,21 @@ std::tuple<Tensor, Tensor, Tensor> scaled_dot_product_flash_attention_for_cpu_ba
     if (autograd::requires_autograd({grad_output, query, key, value})) {
         set_not_implemented({&grad_query, &grad_key, &grad_value}, {grad_output, query, key, value},
                             "_scaled_dot_product_flash_attention_for_cpu_backward");
+    }
+    return {grad_query, grad_key, grad_value};
+}
+
+std::tuple<Tensor, Tensor, Tensor> scaled_dot_product_efficient_attention_backward(
+    const Tensor& grad_output, const Tensor& query, const Tensor& key, const Tensor& value,
+    const Tensor& attn_bias, const Tensor& output, const Tensor& logsumexp, const Tensor& philox_seed,
+    const Tensor& philox_offset, double dropout_p, bool is_causal, std::optional<double> scale
+) {
+    auto [grad_query, grad_key, grad_value] = ops::scaled_dot_product_efficient_attention_backward(
+        grad_output, query, key, value, attn_bias, output, logsumexp, philox_seed, philox_offset, dropout_p,
+        is_causal, scale);
+    if (autograd::requires_autograd({grad_output, query, key, value})) {
+        set_not_implemented({&grad_query, &grad_key, &grad_value}, {grad_output, query, key, value},
+                            "_scaled_dot_product_efficient_attention_backward");
     }
     return {grad_query, grad_key, grad_value};
 }

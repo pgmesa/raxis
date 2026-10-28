@@ -269,6 +269,33 @@ TensorList ScaledDotProductFlashAttentionForCpuBackward0::apply(const TensorList
 }
 
 
+ScaledDotProductEfficientAttentionBackward0::ScaledDotProductEfficientAttentionBackward0(
+    const Tensor& query, const Tensor& key, const Tensor& value, const Tensor& attn_bias,
+    double dropout_p, bool is_causal, std::optional<double> scale, const Tensor& output,
+    const Tensor& log_sumexp, const Tensor& philox_seed, const Tensor& philox_offset)
+    : dropout_p_(dropout_p), is_causal_(is_causal), scale_(scale)
+{
+    query_.save(query);
+    key_.save(key);
+    value_.save(value);
+    attn_bias_.save(attn_bias);
+    output_.save(output, /*is_output=*/true);
+    log_sumexp_.save(log_sumexp);
+    philox_seed_.save(philox_seed);
+    philox_offset_.save(philox_offset);
+}
+std::string ScaledDotProductEfficientAttentionBackward0::name() const {
+    return "ScaledDotProductEfficientAttentionBackward0";
+}
+
+TensorList ScaledDotProductEfficientAttentionBackward0::apply(const TensorList& grads) {
+    auto [grad_query, grad_key, grad_value] = scaled_dot_product_efficient_attention_backward(
+        grads[0], query_.unpack(), key_.unpack(), value_.unpack(), attn_bias_.unpack(), output_.unpack(),
+        log_sumexp_.unpack(), philox_seed_.unpack(), philox_offset_.unpack(), dropout_p_, is_causal_, scale_);
+    return {grad_query, grad_key, grad_value};
+}
+
+
 NativeDropoutBackward0::NativeDropoutBackward0(const Tensor& mask, double scale)
     : scale_(scale)
 {

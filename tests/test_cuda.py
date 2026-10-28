@@ -617,6 +617,119 @@ class TestRandom:
         assert all(sorted(row) == list(range(10)) for row in draws)
 
 
+def attention_both(B, H, L, S, E, mask=None, sliced=False, **kwargs):
+    """Output and q, k, v gradients of SDPA in both libraries. sliced builds
+    q, k, v as nanoGPT does: [B, L, H, E] slices of a wider projection,
+    viewed as [B, H, L, E]."""
+    rng = np.random.RandomState(0)
+    q, k, v = (rng.randn(B, H, n, E).astype(np.float32) for n in (L, S, S))
+    g = rng.randn(B, H, L, E).astype(np.float32)
+    out = []
+    for lib in (raxis, torch):
+        def leaf(a):
+            if sliced:
+                wide = np.concatenate([a.transpose(0, 2, 1, 3)] * 2, axis=-1)
+                return lib.tensor(wide, device="cuda")[..., :E].transpose(1, 2).requires_grad_(True)
+            return lib.tensor(a, device="cuda", requires_grad=True)
+        qt, kt, vt = leaf(q), leaf(k), leaf(v)
+        m = None if mask is None else lib.tensor(mask, device="cuda")
+        y = lib.nn.functional.scaled_dot_product_attention(qt, kt, vt, attn_mask=m, **kwargs)
+        y.backward(lib.tensor(g, device="cuda"))
+        out.append((y.grad_fn.name(), [t.detach().cpu().numpy() for t in (y, qt.grad, kt.grad, vt.grad)]))
+    return out
+
+
+class TestAttention:
+    """The fused GPU kernel (ops/cuda/attention_kernel.cu) against torch's
+    memory-efficient attention, which float32 takes on the GPU in both."""
+
+    @pytest.mark.parametrize("B, H, L, S, E", [
+        (2, 3, 64, 64, 64),      # one tile
+        (2, 3, 100, 100, 64),    # partial tiles
+        (1, 2, 37, 129, 32),     # three key tiles, short query tile
+        (1, 2, 130, 70, 16),     # more queries than keys
+        (1, 1, 5, 3, 8),
+    ])
+    @pytest.mark.parametrize("is_causal", [False, True])
+    def test_matches_torch(self, B, H, L, S, E, is_causal):
+        (r_name, r), (t_name, t) = attention_both(B, H, L, S, E, is_causal=is_causal)
+        assert r_name == t_name == "ScaledDotProductEfficientAttentionBackward0"
+        for r_val, t_val in zip(r, t):
+            np.testing.assert_allclose(r_val, t_val, rtol=0, atol=2e-5 * np.abs(t_val).max())
+
+    def test_nanogpt_layout(self):
+        (_, r), (_, t) = attention_both(2, 2, 77, 77, 64, sliced=True, is_causal=True)
+        for r_val, t_val in zip(r, t):
+            np.testing.assert_allclose(r_val, t_val, rtol=0, atol=2e-5 * np.abs(t_val).max())
+
+    @pytest.mark.parametrize("mask_shape, dtype", [
+        ((50, 90), "bool"), ((2, 1, 50, 90), "float32"), ((1, 2, 1, 90), "float32"), ((2, 2, 50, 90), "bool"),
+    ])
+    def test_masks(self, mask_shape, dtype):
+        rng = np.random.RandomState(1)
+        mask = rng.randn(*mask_shape) > -1 if dtype == "bool" else rng.randn(*mask_shape).astype(np.float32)
+        (_, r), (_, t) = attention_both(2, 2, 50, 90, 64, mask=mask)
+        for r_val, t_val in zip(r, t):
+            np.testing.assert_allclose(r_val, t_val, rtol=0, atol=2e-5 * np.abs(t_val).max())
+
+    def test_fully_masked_row_is_zero(self):
+        mask = np.ones((3, 5), dtype=bool)
+        mask[1] = False
+        (_, r), _ = attention_both(1, 1, 3, 5, 8, mask=mask)
+        assert np.all(r[0][0, 0, 1] == 0) and np.all(np.isfinite(r[1]))
+
+    def test_large_head_dim_takes_the_math_path(self):
+        (r_name, _), _ = attention_both(1, 1, 8, 8, 72)
+        assert r_name != "ScaledDotProductEfficientAttentionBackward0"
+
+    def test_dropout(self):
+        # The backward redraws the forward's mask from the Philox counters:
+        # dV = A^T dO with A the dropped attention matrix, recovered column by
+        # column through value = one-hot rows (the output is linear in value)
+        rng = np.random.RandomState(2)
+        L, S, E = 4, 70, 8
+        q, k, v = (raxis.tensor(rng.randn(1, 1, n, E).astype(np.float32), device="cuda", requires_grad=True)
+                   for n in (L, S, S))
+        w = rng.randn(L, E).astype(np.float32)
+        F = raxis.nn.functional
+        raxis.manual_seed(11)
+        y = F.scaled_dot_product_attention(q, k, v, dropout_p=0.5)
+        (y * raxis.tensor(w, device="cuda")).sum().backward()
+        attn = np.zeros((L, S), dtype=np.float32)
+        for j in range(S):
+            probe = np.zeros((1, 1, S, E), dtype=np.float32)
+            probe[0, 0, j, 0] = 1.0
+            raxis.manual_seed(11)
+            with raxis.no_grad():
+                yj = F.scaled_dot_product_attention(q, k, raxis.tensor(probe, device="cuda"), dropout_p=0.5)
+            attn[:, j] = yj.cpu().numpy()[0, 0, :, 0]
+        assert 0.3 < np.mean(attn == 0) < 0.7
+        np.testing.assert_allclose(v.grad.cpu().numpy()[0, 0], attn.T @ w, atol=1e-5)
+
+    def test_graph_lifetime_and_double_backward(self):
+        # The node saves the output as an output (no reference cycle), and
+        # has no double backward (as torch's)
+        x = raxis.rand((1, 2, 3, 4), device="cuda", requires_grad=True)
+        y = raxis.nn.functional.scaled_dot_product_attention(x, x, x)
+        assert y.grad_fn.name() == "ScaledDotProductEfficientAttentionBackward0"
+        assert y._use_count() == 1
+        g, = raxis.autograd.grad(y.pow(3).sum(), x, create_graph=True)
+        with pytest.raises(RuntimeError, match="'_scaled_dot_product_efficient_attention_backward' is not"):
+            raxis.autograd.grad(g.sum(), x)
+
+    def test_backward_is_deterministic(self):
+        x = [raxis.randn(2, 3, 200, 64, device="cuda", requires_grad=True) for _ in range(3)]
+        grads = []
+        for _ in range(2):
+            for t in x:
+                t.grad = None
+            raxis.manual_seed(3)
+            raxis.nn.functional.scaled_dot_product_attention(*x, dropout_p=0.1, is_causal=True).sum().backward()
+            grads.append([t.grad.cpu().numpy() for t in x])
+        for a, b in zip(*grads):
+            np.testing.assert_array_equal(a, b)
+
+
 def mlp():
     nn = raxis.nn
     return nn.Sequential(

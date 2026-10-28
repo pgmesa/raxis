@@ -873,10 +873,16 @@ class TestScaledDotProductAttention:
     @pytest.mark.parametrize("is_causal", [False, True])
     def test_forward_backward(self, q_shape, kv_len, is_causal, device):
         # On the CPU 4-D inputs run the flash kernel in both libraries and 3-D
-        # ones the math path; on CUDA raxis always takes the math path
+        # ones the math path; on CUDA float32 inputs run the fused kernel
+        # (ScaledDotProductEfficientAttentionBackward0; 3-D inputs get a batch
+        # dim first, so their grad_fn is the squeeze)
         r, t = sdpa_both(q_shape, kv_len, is_causal=is_causal, device=device)
-        if device == "cpu":
-            assert r[0].grad_fn.name() == t[0].grad_fn.name()
+        assert r[0].grad_fn.name() == t[0].grad_fn.name()
+        if device == "cuda":
+            grad_fn = r[0].grad_fn
+            if len(q_shape) == 3:
+                grad_fn = grad_fn.next_functions[0][0]
+            assert grad_fn.name() == "ScaledDotProductEfficientAttentionBackward0"
         for r_val, t_val in zip(r, t):
             check_match(r_val, t_val, atol=1e-5)
 

@@ -264,6 +264,33 @@ private:
 };
 
 
+// The bias gets no gradient (SDPA only picks the fused kernel when it does
+// not require one). log_sumexp and the Philox seed and offset are outputs
+// without grad_fn, saved as inputs
+class RAXIS_API ScaledDotProductEfficientAttentionBackward0 : public Node {
+public:
+    ScaledDotProductEfficientAttentionBackward0(
+        const Tensor& query, const Tensor& key, const Tensor& value, const Tensor& attn_bias,
+        double dropout_p, bool is_causal, std::optional<double> scale, const Tensor& output,
+        const Tensor& log_sumexp, const Tensor& philox_seed, const Tensor& philox_offset);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    SavedVariable query_{this, "query"};
+    SavedVariable key_{this, "key"};
+    SavedVariable value_{this, "value"};
+    SavedVariable attn_bias_{this, "attn_bias"};
+    double dropout_p_;
+    bool is_causal_;
+    std::optional<double> scale_;
+    SavedVariable output_{this, "output"};
+    SavedVariable log_sumexp_{this, "log_sumexp"};
+    SavedVariable philox_seed_{this, "philox_seed"};
+    SavedVariable philox_offset_{this, "philox_offset"};
+};
+
+
 // The mask is a bool tensor (1 byte per element); the scale 1 / (1 - p) is
 // applied again in the backward instead of being stored in the mask
 class RAXIS_API NativeDropoutBackward0 : public Node {

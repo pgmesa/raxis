@@ -1558,6 +1558,16 @@ PYBIND11_MODULE(_C, c) {
     }, py::arg("query"), py::arg("key"), py::arg("value"), py::arg("dropout_p") = 0.0,
        py::arg("is_causal") = false, py::kw_only(), py::arg("attn_mask") = py::none(),
        py::arg("scale") = py::none());
+    c.def("_scaled_dot_product_efficient_attention", [](
+            const raxis::Tensor& query, const raxis::Tensor& key, const raxis::Tensor& value,
+            std::optional<raxis::Tensor> attn_bias, bool compute_log_sumexp, double dropout_p, bool is_causal,
+            std::optional<double> scale) {
+        return raxis::scaled_dot_product_efficient_attention(
+            query, key, value, attn_bias.value_or(raxis::Tensor{}), compute_log_sumexp, dropout_p, is_causal,
+            scale);
+    }, py::arg("query"), py::arg("key"), py::arg("value"), py::arg("attn_bias"),
+       py::arg("compute_log_sumexp"), py::arg("dropout_p") = 0.0, py::arg("is_causal") = false,
+       py::kw_only(), py::arg("scale") = py::none());
     c.def("logical_not",
         py::overload_cast<const raxis::Tensor&>(&raxis::logical_not),
         py::arg("input"));

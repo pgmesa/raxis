@@ -97,7 +97,6 @@ def _use_flash_attention_cpp(query: Tensor, key: Tensor, value: Tensor, attn_mas
                              dropout_p: float) -> bool:
     """Whether the fused CPU kernel takes these inputs (torch's checks, in
     its order); otherwise the math composition runs."""
-    # torch picks the CUDA backends in sdp_utils.cpp; raxis has none yet
     if query.is_cuda:
         return False
     if dropout_p > 0.0:
@@ -124,6 +123,38 @@ def _use_flash_attention_cpp(query: Tensor, key: Tensor, value: Tensor, attn_mas
     if not query.strides[-1] == key.strides[-1] == value.strides[-1] == 1:
         return False
     return query.dtype in (raxis.float32, raxis.float64) and key.dtype == value.dtype == query.dtype
+
+
+# From: aten/src/ATen/native/transformers/cuda/sdp_utils.cpp (use_mem_efficient_attention)
+def _use_mem_efficient_attention(query: Tensor, key: Tensor, value: Tensor, attn_mask: Tensor | None) -> bool:
+    """Whether the fused GPU kernel takes these inputs. torch tries its
+    FlashAttention-2 kernel first, but that one only takes fp16 / bf16, so
+    float32 lands here (or on the math path)."""
+    if not query.is_cuda:
+        return False
+    if not query.ndim == key.ndim == value.ndim == 4:
+        return False
+    if not (query.shape[0] == key.shape[0] == value.shape[0]
+            and query.shape[1] == key.shape[1] == value.shape[1]):
+        return False
+    if not query.dtype == key.dtype == value.dtype == raxis.float32:
+        return False
+    # raxis's kernel keeps head dims up to 64 in its tiles (torch's goes further)
+    if not query.shape[-1] == key.shape[-1] == value.shape[-1] <= 64:
+        return False
+    if query.shape[2] == 0 or key.shape[2] == 0:
+        return False
+    if attn_mask is not None:
+        # The kernel gives the bias no gradient
+        if attn_mask.requires_grad or attn_mask.ndim not in (2, 4):
+            return False
+        if attn_mask.shape[-2] not in (query.shape[2], 1) or attn_mask.shape[-1] not in (key.shape[2], 1):
+            return False
+        if attn_mask.ndim == 4 and (attn_mask.shape[0] not in (query.shape[0], 1)
+                                    or attn_mask.shape[1] not in (query.shape[1], 1)):
+            return False
+    # Its tiles take up to 85 KB of shared memory per block
+    return raxis.cuda.get_device_capability(query.device) >= (8, 0)
 
 
 # From: aten/src/ATen/native/transformers/attention.cpp (validate_sdpa_input)
@@ -160,15 +191,18 @@ def scaled_dot_product_attention(query: Tensor, key: Tensor, value: Tensor, attn
     mask). scale defaults to 1 / sqrt(E).
 
     As in torch, 4-D float inputs without dropout run the fused flash
-    attention kernel (blocks of keys with an online softmax, the (L, S)
-    scores are never stored; grad_fn ScaledDotProductFlashAttentionForCpuBackward0).
-    The rest goes through torch's math backend, a composition of ops that
-    autograd differentiates on its own. Both give the same result up to
-    rounding.
+    attention kernel on the CPU (blocks of keys with an online softmax, the
+    (L, S) scores are never stored; grad_fn
+    ScaledDotProductFlashAttentionForCpuBackward0), and 4-D float32 inputs on
+    the GPU the fused kernel torch calls memory-efficient attention, dropout
+    included (grad_fn ScaledDotProductEfficientAttentionBackward0). The rest
+    goes through torch's math backend, a composition of ops that autograd
+    differentiates on its own. They give the same result up to rounding
+    (dropout draws different masks on each path).
     """
     if enable_gqa:
         raise NotImplementedError("scaled_dot_product_attention: enable_gqa is not supported yet")
-    # Unbatched inputs get a batch dim, so they can take the fused kernel too
+    # Unbatched inputs get a batch dim, so they can take the fused kernels too
     if query.ndim == key.ndim == value.ndim == 3:
         while attn_mask is not None and attn_mask.ndim < 4:
             attn_mask = attn_mask.unsqueeze(0)
@@ -178,6 +212,10 @@ def scaled_dot_product_attention(query: Tensor, key: Tensor, value: Tensor, attn
     if _use_flash_attention_cpp(query, key, value, attn_mask, dropout_p):
         return raxis._C._scaled_dot_product_flash_attention_for_cpu(
             query, key, value, dropout_p, is_causal, attn_mask=attn_mask, scale=scale)[0]
+    if _use_mem_efficient_attention(query, key, value, attn_mask):
+        compute_log_sumexp = query.requires_grad or key.requires_grad or value.requires_grad
+        return raxis._C._scaled_dot_product_efficient_attention(
+            query, key, value, attn_mask, compute_log_sumexp, dropout_p, is_causal, scale=scale)[0]
     if scale is None:
         scale = 1.0 / math.sqrt(query.size(-1))
     # q and k are each scaled by sqrt(scale) before the matmul, which keeps

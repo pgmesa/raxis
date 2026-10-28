@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <limits>
 
+#include <raxis/core/generator.h>
 #include <raxis/ops/tensor_compare.h>
 
 #include <raxis/util/exception.h>
@@ -141,9 +142,95 @@ std::tuple<Tensor, Tensor, Tensor> scaled_dot_product_flash_attention_for_cpu_ba
     return {grad_q.transpose(1, 2), grad_k.transpose(1, 2), grad_v.transpose(1, 2)};
 }
 
+namespace {
+
+// Philox blocks the dropout of a [B, H, L, S] score matrix reserves: one
+// block per row and per 64 keys holds the words of 4 x 16 columns (see
+// ops/cuda/attention_kernel.cu)
+uint64_t attention_philox_blocks(const Tensor& query, const Tensor& key) {
+    const int64_t col_tiles = (key.shape()[2] + 63) / 64;
+    return static_cast<uint64_t>(query.shape()[0] * query.shape()[1] * query.shape()[2] * col_tiles * 16);
+}
+
+} // namespace
+
+std::tuple<Tensor, Tensor, Tensor, Tensor> scaled_dot_product_efficient_attention(
+    const Tensor& query, const Tensor& key, const Tensor& value, const Tensor& attn_bias,
+    bool /*compute_log_sumexp*/, double dropout_p, bool is_causal, std::optional<double> scale
+) {
+    RAXIS_CHECK(query.dtype() == dtypes::Float32 && key.dtype() == dtypes::Float32
+                && value.dtype() == dtypes::Float32,
+        "scaled_dot_product_efficient_attention: expected float32 query, key and value");
+    RAXIS_CHECK(query.ndim() == 4 && key.ndim() == 4 && value.ndim() == 4,
+        "scaled_dot_product_efficient_attention: Accept only 4 dims inputs shape of {B, H, T, K}");
+    RAXIS_CHECK(query.shape()[3] == key.shape()[3] && key.shape()[3] == value.shape()[3],
+        "scaled_dot_product_efficient_attention: Q/K/V should have the same head size");
+    RAXIS_CHECK(key.shape()[0] == query.shape()[0] && value.shape()[0] == query.shape()[0]
+                && key.shape()[1] == query.shape()[1] && value.shape()[1] == query.shape()[1]
+                && value.shape()[2] == key.shape()[2],
+        "scaled_dot_product_efficient_attention: expected query, key and value with the same "
+        "batch size and number of heads, and key and value with the same sequence length");
+    RAXIS_CHECK(dropout_p >= 0.0 && dropout_p < 1.0,
+        "scaled_dot_product_efficient_attention: dropout_p must be in [0, 1)");
+
+    const int64_t batch_size = query.shape()[0];
+    const int64_t num_head = query.shape()[1];
+    const int64_t q_size = query.shape()[2];
+    // As the CPU kernel: computed in [B, L, H, E] memory, so the usual
+    // transpose(1, 2).reshape(B, L, H * E) after attention is free
+    Tensor output = empty({batch_size, q_size, num_head, query.shape()[3]}, query.options()).transpose(1, 2);
+    Tensor logsumexp = empty({batch_size, num_head, q_size}, query.options());
+    uint64_t seed = 0;
+    uint64_t offset = 0;
+    if (dropout_p > 0.0) {
+        std::tie(seed, offset) = get_default_generator().philox_engine_inputs(attention_philox_blocks(query, key));
+    }
+    if (output.numel() > 0) {
+        efficient_attention_stub(
+            query.device().type(), output, logsumexp, unit_last_stride(query), unit_last_stride(key),
+            unit_last_stride(value), attn_mask_to_4d(attn_bias, query, key.shape()[2]), dropout_p, is_causal,
+            calculate_scale(query, scale), seed, offset);
+    }
+    const TensorOptions int64_cpu = TensorOptions().dtype(dtypes::Int64);
+    return {output, logsumexp, full({}, static_cast<int64_t>(seed), int64_cpu),
+            full({}, static_cast<int64_t>(offset), int64_cpu)};
+}
+
+std::tuple<Tensor, Tensor, Tensor> scaled_dot_product_efficient_attention_backward(
+    const Tensor& grad_output, const Tensor& query, const Tensor& key, const Tensor& value,
+    const Tensor& attn_bias, const Tensor& output, const Tensor& logsumexp, const Tensor& philox_seed,
+    const Tensor& philox_offset, double dropout_p, bool is_causal, std::optional<double> scale
+) {
+    if (!grad_output.defined()) {
+        return {Tensor(), Tensor(), Tensor()};
+    }
+    Tensor grad_q = empty_like(query);
+    Tensor grad_k = empty_like(key);
+    Tensor grad_v = empty_like(value);
+    if (grad_q.numel() > 0 && grad_k.numel() > 0) {
+        efficient_attention_backward_stub(
+            query.device().type(), grad_q, grad_k, grad_v, unit_last_stride(grad_output),
+            unit_last_stride(query), unit_last_stride(key), unit_last_stride(value), output, logsumexp,
+            attn_mask_to_4d(attn_bias, query, key.shape()[2]), dropout_p, is_causal,
+            calculate_scale(query, scale), static_cast<uint64_t>(philox_seed.item().to<int64_t>()),
+            static_cast<uint64_t>(philox_offset.item().to<int64_t>()));
+    } else {
+        grad_q.zero_();
+        grad_k.zero_();
+        grad_v.zero_();
+    }
+    return {grad_q, grad_k, grad_v};
+}
+
 } // namespace ops
 
 DEFINE_DISPATCH(flash_attention_stub);
 DEFINE_DISPATCH(flash_attention_backward_stub);
+DEFINE_DISPATCH(efficient_attention_stub);
+DEFINE_DISPATCH(efficient_attention_backward_stub);
+
+// GPU only, as torch's _efficient_attention_forward
+REGISTER_NO_CPU_DISPATCH(efficient_attention_stub)
+REGISTER_NO_CPU_DISPATCH(efficient_attention_backward_stub)
 
 } // namespace raxis
