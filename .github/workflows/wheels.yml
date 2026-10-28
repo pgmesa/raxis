@@ -2,7 +2,9 @@ name: Wheels
 
 # Pushing a version tag releases it: the wheels are built and tested, then
 # uploaded to PyPI and to a GitHub release whose notes are the tag's message
-# followed by the commits since the previous tag:
+# followed by the commits since the previous tag. Besides raxis (CPU), the
+# CUDA backend is released as raxis-cuda12 and raxis-cuda13 (plugins/cuda),
+# for Windows and Linux x86-64:
 #
 #   git tag -a v0.2.0 -F notes.md && git push origin v0.2.0
 #
@@ -18,6 +20,10 @@ on:
       build:
         description: Wheels to build, as CIBW_BUILD (empty builds every Python version)
         default: ""
+      cuda:
+        description: Also build the CUDA wheels (needs windows-2022 and ubuntu-24.04 in os, and cp312 in build)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -73,9 +79,63 @@ jobs:
           name: wheels-${{ matrix.os }}
           path: wheelhouse/*.whl
 
+  # The CUDA backend for one CUDA major version. libraxis_cuda does not link
+  # Python, so it is one py3-none wheel per platform, built against (and
+  # tested with) the raxis wheel of the build job: it links that libraxis.
+  # The runners have no GPU, so the test only checks that it loads
+  cuda:
+    name: CUDA ${{ matrix.cuda }} ${{ matrix.os }}
+    needs: [validate, build]
+    if: ${{ !failure() && !cancelled() && (github.ref_type == 'tag' || inputs.cuda) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 240
+    strategy:
+      matrix:
+        os: [windows-2022, ubuntu-24.04]
+        cuda: ["12.8", "13.0"]
+        include:
+          # SASS per arch plus PTX of the newest (an old driver cannot JIT a
+          # newer toolkit's PTX). CUDA 13 dropped Volta (sm_70)
+          - cuda: "12.8"
+            archs: "70-real;75-real;80-real;86-real;90-real;100-real;120-real;120-virtual"
+            windows-toolkit: "12.8.1"
+          - cuda: "13.0"
+            archs: "75-real;80-real;86-real;90-real;100-real;120-real;120-virtual"
+            windows-toolkit: "13.0.2"
+    env:
+      RAXIS_CUDA_VERSION: ${{ matrix.cuda }}
+      CUDAARCHS: ${{ matrix.archs }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      # On Linux the toolkit is installed inside the manylinux container
+      # (before-all in plugins/cuda/pyproject.toml)
+      - if: runner.os == 'Windows'
+        uses: Jimver/cuda-toolkit@v0.2.36
+        with:
+          cuda: ${{ matrix.windows-toolkit }}
+          log-file-suffix: cuda-${{ matrix.cuda }}.txt
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: wheels-${{ matrix.os }}
+          path: dist-raxis
+
+      - uses: pypa/cibuildwheel@v4.2.1
+        with:
+          package-dir: plugins/cuda
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheels-cuda${{ matrix.cuda }}-${{ matrix.os }}
+          path: wheelhouse/*.whl
+
   publish:
     name: Publish
-    needs: [validate, build]
+    needs: [validate, build, cuda]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-24.04
     environment: pypi
@@ -104,12 +164,14 @@ jobs:
       - name: Check the wheels
         run: |
           ls -l dist
-          if ls dist/*.whl | grep -v "/raxis-${VERSION}-"; then
+          if ls dist/*.whl | grep -vE "/raxis(_cuda1[23])?-${VERSION}-"; then
             echo "::error::Wheels whose version is not ${VERSION}"
             exit 1
           fi
 
-      # skip-existing lets a re-run finish a release whose upload succeeded
+      # skip-existing lets a re-run finish a release whose upload succeeded.
+      # raxis-cuda12 and raxis-cuda13 have their own trusted publishers on
+      # PyPI (same repository, workflow and environment)
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           skip-existing: true
