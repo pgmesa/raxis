@@ -451,6 +451,8 @@ OPTIMIZERS = [
     ("adam", lambda lib, p: lib.optim.Adam(p, lr=1e-2)),
     ("adam_wd", lambda lib, p: lib.optim.Adam(p, lr=1e-2, weight_decay=1e-2)),
     ("adamw", lambda lib, p: lib.optim.AdamW(p, lr=1e-2)),
+    ("adam_fused", lambda lib, p: lib.optim.Adam(p, lr=1e-2, weight_decay=1e-2, fused=True)),
+    ("adamw_fused", lambda lib, p: lib.optim.AdamW(p, lr=1e-2, fused=True)),
 ]
 
 

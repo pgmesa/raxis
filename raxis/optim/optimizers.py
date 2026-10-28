@@ -165,21 +165,53 @@ class SGD(Optimizer):
 
 
 class Adam(Optimizer):
-    """Adam (Kingma & Ba, 2014), as torch.optim.Adam (L2 weight decay)."""
+    """Adam (Kingma & Ba, 2014), as torch.optim.Adam (L2 weight decay).
+
+    fused=True updates every parameter in one kernel (per chunk of
+    parameters, on the GPU) instead of a chain of elementwise ops per
+    parameter, as torch's fused implementation.
+    """
 
     decoupled_weight_decay = False
 
     def __init__(self, params: Iterable[Tensor] | Iterable[dict], lr: float = 1e-3,
                  betas: tuple[float, float] = (0.9, 0.999), eps: float = 1e-8,
-                 weight_decay: float = 0.0, maximize: bool = False) -> None:
+                 weight_decay: float = 0.0, maximize: bool = False, fused: bool | None = None) -> None:
         if lr < 0.0:
             raise ValueError(f"Invalid learning rate: {lr}")
-        defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, maximize=maximize)
+        defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, maximize=maximize, fused=fused)
         super().__init__(params, defaults)
+
+    # From: torch/optim/adam.py (_fused_adam)
+    def _fused_step(self, group: dict) -> None:
+        tensors = []
+        for p in group["params"]:
+            if p.grad is None:
+                continue
+            state = self.state[p]
+            if not state:
+                state["step"] = 0
+                state["exp_avg"] = raxis.zeros_like(p)
+                state["exp_avg_sq"] = raxis.zeros_like(p)
+            state["step"] += 1
+            tensors.append((p, p.grad.contiguous(), state["exp_avg"], state["exp_avg_sq"], float(state["step"])))
+        # One call per device and dtype, as torch's _group_tensors_by_device_and_dtype
+        by_device = {}
+        for t in tensors:
+            by_device.setdefault((str(t[0].device), t[0].dtype), []).append(t)
+        fused = raxis._C._fused_adamw_ if self.decoupled_weight_decay else raxis._C._fused_adam_
+        beta1, beta2 = group["betas"]
+        for group_tensors in by_device.values():
+            params, grads, exp_avgs, exp_avg_sqs, steps = map(list, zip(*group_tensors))
+            fused(params, grads, exp_avgs, exp_avg_sqs, steps, lr=group["lr"], beta1=beta1, beta2=beta2,
+                  weight_decay=group["weight_decay"], eps=group["eps"], maximize=group["maximize"])
 
     def step(self) -> None:
         with raxis.no_grad():
             for group in self.param_groups:
+                if group.get("fused"):
+                    self._fused_step(group)
+                    continue
                 lr, eps, weight_decay = group["lr"], group["eps"], group["weight_decay"]
                 beta1, beta2 = group["betas"]
                 for p in group["params"]:
@@ -220,5 +252,5 @@ class AdamW(Adam):
 
     def __init__(self, params: Iterable[Tensor] | Iterable[dict], lr: float = 1e-3,
                  betas: tuple[float, float] = (0.9, 0.999), eps: float = 1e-8,
-                 weight_decay: float = 1e-2, maximize: bool = False) -> None:
-        super().__init__(params, lr, betas, eps, weight_decay, maximize)
+                 weight_decay: float = 1e-2, maximize: bool = False, fused: bool | None = None) -> None:
+        super().__init__(params, lr, betas, eps, weight_decay, maximize, fused)

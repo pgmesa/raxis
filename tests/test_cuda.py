@@ -730,6 +730,32 @@ class TestAttention:
             np.testing.assert_array_equal(a, b)
 
 
+class TestFusedAdam:
+
+    @pytest.mark.parametrize("name, kwargs", [
+        ("Adam", dict(weight_decay=0.1)), ("AdamW", dict(weight_decay=0.1)), ("AdamW", dict(maximize=True)),
+    ])
+    def test_bitwise_torch(self, name, kwargs):
+        # 40 tensors: more than one launch holds (36), and odd sizes for the
+        # scalar path; the 21M-element tensor spans more blocks than a launch
+        # holds (320 chunks of 65536), so it continues in the next launch
+        rng = np.random.RandomState(0)
+        shapes = [(1536, 384), (384,), (65, 384), (3, 5), (70001,), (1,), (0,)] * 5 + [(321 * 65536 + 7,)] + [(7,)] * 4
+        data = [rng.randn(*s).astype(np.float32) for s in shapes]
+        grads = [[rng.randn(*s).astype(np.float32) for s in shapes] for _ in range(2)]
+        out = []
+        for lib in (raxis, torch):
+            ps = [lib.nn.Parameter(lib.tensor(d, device="cuda")) for d in data]
+            opt = getattr(lib.optim, name)(ps, lr=1e-2, fused=True, **kwargs)
+            for g in grads:
+                for p, gi in zip(ps, g):
+                    p.grad = lib.tensor(gi, device="cuda")
+                opt.step()
+            out.append([p.detach().cpu().numpy() for p in ps])
+        for r, t in zip(*out):
+            np.testing.assert_array_equal(r, t)
+
+
 def mlp():
     nn = raxis.nn
     return nn.Sequential(

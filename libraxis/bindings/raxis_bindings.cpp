@@ -1558,6 +1558,23 @@ PYBIND11_MODULE(_C, c) {
     }, py::arg("query"), py::arg("key"), py::arg("value"), py::arg("dropout_p") = 0.0,
        py::arg("is_causal") = false, py::kw_only(), py::arg("attn_mask") = py::none(),
        py::arg("scale") = py::none());
+    // torch._fused_adam_ / _fused_adamw_ without amsgrad and grad scaling;
+    // state_steps are the step counts as numbers (torch keeps them in tensors)
+    auto fused_adam = [](bool decoupled_weight_decay) {
+        return [decoupled_weight_decay](
+                std::vector<raxis::Tensor> params, std::vector<raxis::Tensor> grads,
+                std::vector<raxis::Tensor> exp_avgs, std::vector<raxis::Tensor> exp_avg_sqs,
+                std::vector<double> state_steps, double lr, double beta1, double beta2, double weight_decay,
+                double eps, bool maximize) {
+            raxis::fused_adam_(params, grads, exp_avgs, exp_avg_sqs, state_steps,
+                raxis::FusedAdamOptions{lr, beta1, beta2, weight_decay, eps, maximize, decoupled_weight_decay});
+        };
+    };
+    for (const auto& [name, decoupled] : {std::pair{"_fused_adam_", false}, std::pair{"_fused_adamw_", true}}) {
+        c.def(name, fused_adam(decoupled), py::arg("params"), py::arg("grads"), py::arg("exp_avgs"),
+              py::arg("exp_avg_sqs"), py::arg("state_steps"), py::kw_only(), py::arg("lr"), py::arg("beta1"),
+              py::arg("beta2"), py::arg("weight_decay"), py::arg("eps"), py::arg("maximize"));
+    }
     c.def("_scaled_dot_product_efficient_attention", [](
             const raxis::Tensor& query, const raxis::Tensor& key, const raxis::Tensor& value,
             std::optional<raxis::Tensor> attn_bias, bool compute_log_sumexp, double dropout_p, bool is_causal,
