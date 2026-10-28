@@ -203,37 +203,47 @@ def test_index_select_out_of_range():
 
 
 @pytest.mark.parametrize("shape,dim,index", INDEX_SELECT_CASES[:4])
-def test_index_add(shape, dim, index):
-    r, t = make_pair(randf(*shape))
+def test_index_add(shape, dim, index, device):
+    r, t = make_pair(randf(*shape), device)
     idx = select_index(index, shape[dim])
-    ri, ti = index_pair(idx)
+    ri, ti = index_pair(idx, device)
     source_shape = list(shape)
     source_shape[dim] = len(idx)
-    rs, ts = make_pair(randf(*source_shape, seed=1))
+    rs, ts = make_pair(randf(*source_shape, seed=1), device)
     check_match(r.index_add(dim, ri, rs), t.index_add(dim, ti, ts))
     r.index_add_(dim, ri, rs)
     t.index_add_(dim, ti, ts)
     check_match(r, t)
 
 
-def test_index_add_backward():
-    r, t = make_grad_pair(randf(6, 5))
-    rs, ts = make_grad_pair(randf(4, 5, seed=1))
-    ri, ti = index_pair(np.array([5, 0, 5, 2], dtype=np.int64))
+def test_index_add_device_mismatch_raises():
+    if not raxis.cuda.is_available():
+        pytest.skip("needs a GPU")
+    for lib in (raxis, torch):
+        with pytest.raises(RuntimeError, match="device"):
+            lib.zeros(3).index_add_(0, lib.tensor([0], device="cuda"), lib.ones(1))
+
+
+def test_index_add_backward(device):
+    r, t = make_grad_pair(randf(6, 5), device)
+    rs, ts = make_grad_pair(randf(4, 5, seed=1), device)
+    ri, ti = index_pair(np.array([5, 0, 5, 2], dtype=np.int64), device)
     w = randf(6, 5, seed=2)
-    (r.index_add(0, ri, rs) * raxis.from_numpy(w)).sum().backward()
-    (t.index_add(0, ti, ts) * torch.from_numpy(w)).sum().backward()
+    (r.index_add(0, ri, rs) * raxis.from_numpy(w).to(device)).sum().backward()
+    (t.index_add(0, ti, ts) * torch.from_numpy(w).to(device)).sum().backward()
     check_match(r.grad, t.grad)
     check_match(rs.grad, ts.grad)
 
 
-def test_add_on_bool_is_or():
+def test_add_on_bool_is_or(device):
     for lib in (raxis, torch):
-        idx = lib.tensor([0, 0, 2])
-        src = lib.tensor([True, True, False])
-        assert lib.zeros(3, dtype=lib.bool).scatter_add(0, idx, src).tolist() == [True, False, False]
-        assert lib.zeros(3, dtype=lib.bool).index_add(0, idx, src).tolist() == [True, False, False]
-        out = lib.zeros((3, 2), dtype=lib.bool).index_add(0, idx, lib.ones((3, 2), dtype=lib.bool))
+        idx = lib.tensor([0, 0, 2], device=device)
+        src = lib.tensor([True, True, False], device=device)
+        zeros = lib.zeros(3, dtype=lib.bool, device=device)
+        assert zeros.scatter_add(0, idx, src).tolist() == [True, False, False]
+        assert zeros.index_add(0, idx, src).tolist() == [True, False, False]
+        out = lib.zeros((3, 2), dtype=lib.bool, device=device).index_add(
+            0, idx, lib.ones((3, 2), dtype=lib.bool, device=device))
         assert out.tolist() == [[True, True], [False, False], [True, True]]
 
 

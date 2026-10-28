@@ -265,7 +265,7 @@ void index_select_cpu(const Tensor& result, const Tensor& self, int64_t dim, con
 // self.select(dim, index[i]) += source.select(dim, i), one slice at a time
 // (indices can repeat, so the slices are not split between threads)
 Tensor& index_add_(Tensor& self, int64_t dim, const Tensor& index, const Tensor& source) {
-    check_cpu_only("index_add_", self, index, source);
+    check_same_device("index_add_", self, index, source);
     RAXIS_CHECK(index.ndim() <= 1, "index_add_(): Index is supposed to be a vector");
     RAXIS_CHECK(index.dtype() == dtypes::Int64 || index.dtype() == dtypes::Int32,
         "index_add_(): Expected dtype int32/int64 for index");
@@ -273,6 +273,19 @@ Tensor& index_add_(Tensor& self, int64_t dim, const Tensor& index, const Tensor&
         "index_add_(): self (", self.dtype(), ") and source (", source.dtype(),
         ") must have the same scalar type");
     dim = wrap_dim(dim, ensure_nonempty_dim(self.ndim()));
+    if (!self.is_cpu()) {
+        // self[:, ..., index] += source: index_put_ with accumulate, which on
+        // the GPU sums repeated indices in a fixed order (PyTorch's CUDA
+        // index_add_ uses atomic adds)
+        RAXIS_CHECK(index.numel() == ensure_nonempty_size(source, dim),
+            "index_add_(): Number of indices (", index.numel(),
+            ") should be equal to source.size(dim) (", ensure_nonempty_size(source, dim), ")");
+        Tensor self_1d = self.ndim() == 0 ? self.view({1}) : self;
+        std::vector<Tensor> indices(dim + 1);
+        indices[dim] = index.reshape({index.numel()});
+        ops::index_put_(self_1d, indices, source.ndim() == 0 ? source.view({1}) : source, /*accumulate=*/true);
+        return self;
+    }
     Tensor index_contig = index.to(dtypes::Int64).contiguous();
     const int64_t* index_data = index_contig.data_ptr<int64_t>();
     int64_t numel = index_contig.numel();

@@ -375,17 +375,10 @@ class TestCat:
         check(r, t)
 
 
-class TestHostOnlyOps:
-    """Ops whose only implementation reads the data on the host must raise
-    on CUDA tensors instead of dereferencing device pointers (a crash)."""
-
-    @pytest.mark.parametrize("op", [
-        lambda x: x.index_add_(0, raxis.tensor([0, 1]).cuda(), x[:2]),
-    ])
-    def test_raises(self, op):
-        x = raxis.from_numpy(make((4, 4))).cuda()
-        with pytest.raises(NotImplementedError, match="CUDA|cuda"):
-            op(x)
+class TestMissingKernels:
+    """An op without a CUDA kernel raises NotImplementedError naming its stub
+    (since 2026-10-28 every op raxis has runs on CUDA; torch's CPU-only flash
+    attention is the example left)."""
 
     def test_stub_name_in_message(self):
         q = raxis.ones((1, 1, 4, 8), device="cuda")
