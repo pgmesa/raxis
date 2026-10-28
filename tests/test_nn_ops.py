@@ -776,10 +776,13 @@ class TestBatchNorm:
 # ===========================================================================
 
 # (num_embeddings, embedding_dim, indices shape, padding_idx, scale_grad_by_freq):
-# repeated indices, a negative padding_idx, more rows than one thread's grain
+# repeated indices, a negative padding_idx, more rows than one thread's grain;
+# over 3072 indices the GPU takes the sorted path (one frequent index spans
+# many partial segments in nanoGPT's shape)
 EMBEDDING_CASES = [
     (65, 32, (12, 64), None, False), (10, 7, (5,), 3, False), (10, 7, (4, 6), -1, True),
     (5000, 16, (3, 1000), None, False), (5000, 64, (4, 100), 0, True), (4, 3, (0,), None, False),
+    (65, 384, (64, 256), None, False), (1000, 40, (40000,), 7, True),
 ]
 
 
@@ -797,10 +800,24 @@ class TestEmbedding:
         backward_both(r_out, t_out)
         # Each row is summed in index order: the order of torch's CPU kernel
         # and of its CUDA feature kernel. With scale_grad_by_freq or more than
-        # 3072 indices torch's CUDA kernel sorts the indices instead
-        exact = device == "cpu" or (not freq and idx.size <= 3072)
-        check_match(r_w.grad, t_w.grad, atol=0 if exact else 1e-6)
+        # 3072 indices torch's CUDA kernel sorts the indices and adds the
+        # partial sums of a frequent index with atomics (raxis in order), and
+        # torch's CPU kernel scales by frequency in another order
+        exact = idx.size <= 3072 and (device == "cpu" or not freq)
+        check_match(r_w.grad, t_w.grad, atol=0 if exact else 3e-5)
         assert r_out.grad_fn.name() == "EmbeddingBackward0"
+
+    def test_sorted_path_is_deterministic(self, device):
+        rng = np.random.RandomState(1)
+        idx = raxis.tensor(rng.randint(0, 50, 20000), device=device)
+        g = raxis.tensor(rng.randn(20000, 33).astype(np.float32), device=device)
+        grads = []
+        for _ in range(3):
+            w = raxis.zeros(50, 33, device=device, requires_grad=True)
+            raxis.nn.functional.embedding(idx, w).backward(g)
+            grads.append(w.grad.cpu().numpy())
+        np.testing.assert_array_equal(grads[0], grads[1])
+        np.testing.assert_array_equal(grads[0], grads[2])
 
     def test_int32_indices_and_float64(self):
         w = randf_centered(6, 4).astype(np.float64)
