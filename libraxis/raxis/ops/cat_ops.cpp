@@ -1,6 +1,7 @@
 
 #include <raxis/ops/cat_ops.h>
 
+#include <cstdint>
 #include <cstring>
 
 #include <raxis/ops/copy.h>
@@ -43,6 +44,14 @@ void cat_out_impl(
     bool all_contiguous, bool all_same_dtype, bool all_same_sizes_and_stride
 ) {
     if (result.numel() == 0) {
+        return;
+    }
+
+    // From: aten/src/ATen/native/cuda/Shape.cu (cat_out_cuda: parallel_cat
+    // when all the inputs are contiguous and share the result's dtype)
+    if (!result.is_cpu() && all_contiguous && all_same_dtype && result.is_contiguous()
+            && result.numel() <= INT32_MAX) {
+        cat_batched_stub(result.device().type(), result, tensors, dim);
         return;
     }
 
@@ -255,5 +264,7 @@ std::vector<Tensor> unbind(const Tensor& self, int64_t dim) {
 
 DEFINE_DISPATCH(cat_serial_stub);
 DEFINE_DISPATCH(stack_serial_stub);
+DEFINE_DISPATCH(cat_batched_stub);
+REGISTER_NO_CPU_DISPATCH(cat_batched_stub)
 
 }

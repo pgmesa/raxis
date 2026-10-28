@@ -264,6 +264,27 @@ class TestCat:
         check(r, t)
 
     @pytest.mark.parametrize("dim", [0, 1, 2])
+    @pytest.mark.parametrize("dtype", DTYPES)
+    def test_cat_many_inputs(self, dim, dtype):
+        # More inputs than one batched launch holds (64), of different
+        # lengths along dim, some empty, and the legacy 1-D empty tensor
+        xs = []
+        for i in range(150):
+            shape = [3, 4, 5]
+            shape[dim] = i % 4
+            xs.append(make(tuple(shape), dtype, seed=i))
+        r = raxis.cat([raxis.from_numpy(x).cuda() for x in xs] + [raxis.zeros(0, dtype=dtype).cuda()], dim)
+        t = torch.cat([torch.from_numpy(x).cuda() for x in xs] + [torch.zeros(0, dtype=getattr(torch, dtype)).cuda()], dim)
+        check(r, t, atol=0, rtol=0)
+
+    def test_stack_of_scalars(self):
+        # clip_grad_norm_ stacks one 0-d norm per parameter: views of one vector
+        r_vec, t_vec = raxis.arange(100.0).cuda(), torch.arange(100.0).cuda()
+        r = raxis.stack([r_vec[i] for i in range(99, -1, -1)])
+        t = torch.stack([t_vec[i] for i in range(99, -1, -1)])
+        check(r, t, atol=0, rtol=0)
+
+    @pytest.mark.parametrize("dim", [0, 1, 2])
     def test_stack(self, dim):
         xs = [make((5, 6), seed=i) for i in range(3)]
         r = raxis.stack([raxis.from_numpy(x).cuda() for x in xs], dim)
