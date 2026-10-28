@@ -12,7 +12,7 @@ namespace {
 [[noreturn]] void fail_no_cuda() {
     RAXIS_CHECK(false,
         "raxis was not loaded with CUDA support: install the CUDA package "
-        "(pip install raxis[cuda12] or raxis[cuda13]) or build with RAXIS_USE_CUDA=ON");
+        "(pip install raxis-cuda12 or raxis-cuda13) or build with RAXIS_USE_CUDA=ON");
     std::abort();
 }
 

@@ -197,6 +197,29 @@ external contributions to this project including patches, pull requests, etc.
 
 -------------------------------------------------------------------------------
 
+NVIDIA CUDA runtime (cudart_static)
+https://developer.nvidia.com/cuda-toolkit
+
+Statically linked into libraxis_cuda in the raxis-cuda12 and raxis-cuda13
+binary distributions, as a redistributable of the NVIDIA CUDA Toolkit,
+under the NVIDIA Software License Agreement for the CUDA Toolkit
+(https://docs.nvidia.com/cuda/eula/). cuBLAS is not included: those
+distributions depend on NVIDIA's own wheels (nvidia-cublas-cu12,
+nvidia-cublas).
+
+-------------------------------------------------------------------------------
+
+CUDA C++ Core Libraries (CCCL: CUB, Thrust, libcu++)
+https://github.com/NVIDIA/cccl
+
+CUB's device-wide radix sort, scan and select are compiled into
+libraxis_cuda. Licensed under the Apache License, Version 2.0 with LLVM
+Exceptions (https://llvm.org/LICENSE.txt).
+
+Copyright (c) 2011-2024, NVIDIA CORPORATION. All rights reserved.
+
+-------------------------------------------------------------------------------
+
 Intel oneAPI Math Kernel Library (oneMKL)
 https://pypi.org/project/mkl-static/
 

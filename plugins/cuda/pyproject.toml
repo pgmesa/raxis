@@ -1,0 +1,50 @@
+# The raxis-cuda12 / raxis-cuda13 wheels (see setup.py). Built in CI with
+# `cibuildwheel plugins/cuda`, after the raxis wheels of the same version
+[build-system]
+requires = ["setuptools>=77.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.cibuildwheel]
+# One build per platform: the wheel is py3-none (no Python C API), and
+# cibuildwheel tests it on this Python
+build = "cp312-*"
+skip = "*-musllinux_*"
+# libraxis is built as for the raxis wheels (with MKL), so that what
+# libraxis_cuda links against matches the shipped one. CUDAARCHS (read by
+# CMake) picks the archs of each CUDA version
+before-build = [
+    "pip install mkl-devel mkl-static intel-openmp",
+    "python {project}/scripts/build_libraxis.py --cuda-plugin",
+]
+# The raxis wheels built earlier in this workflow, not PyPI's: the plugin
+# links against that exact libraxis, and PyPI may hold another build of
+# the same version (manual runs)
+before-test = "pip install --no-index --find-links {project}/dist-raxis raxis"
+# There is no GPU on the runners: check that the plugin loads and registers
+# its hooks, and that CUDA is reported as unavailable without a driver
+test-command = "python -c \"import raxis; assert raxis.backends.cuda.is_built(); assert not raxis.cuda.is_available()\""
+
+[tool.cibuildwheel.linux]
+archs = ["x86_64"]
+# CUDA from NVIDIA's RHEL 8 repository (the manylinux_2_28 images are
+# AlmaLinux 8): only the compiler, the runtime, CCCL (cub) and cuBLAS.
+# RAXIS_CUDA_VERSION is e.g. 12.8, the packages are suffixed 12-8
+before-all = [
+    "dnf install -y dnf-plugins-core",
+    "dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel8/x86_64/cuda-rhel8.repo",
+    "V=${RAXIS_CUDA_VERSION/./-} && dnf install -y cuda-nvcc-$V cuda-cudart-devel-$V cuda-cccl-$V libcublas-devel-$V",
+    "/opt/python/cp312-cp312/bin/python -m pip install --prefix /opt/mkl mkl-devel mkl-static intel-openmp",
+]
+before-build = "python {project}/scripts/build_libraxis.py --cuda-plugin"
+environment-pass = ["RAXIS_CUDA_VERSION", "CUDAARCHS"]
+environment = { RAXIS_MKL_PREFIX = "/opt/mkl", PATH = "/usr/local/cuda-$RAXIS_CUDA_VERSION/bin:$PATH" }
+# libraxis comes from the raxis wheel and cuBLAS from NVIDIA's (raxis_cuda
+# preloads both): auditwheel must not bundle copies of them
+repair-wheel-command = """auditwheel repair -w {dest_dir} {wheel} \
+    --exclude libraxis.so --exclude 'libcublas.so.*' --exclude 'libcublasLt.so.*'"""
+
+[tool.cibuildwheel.windows]
+archs = ["AMD64"]
+# raxis_cuda.dll only depends on raxis.dll, cuBLAS and the MSVC runtime,
+# which raxis/lib already ships
+repair-wheel-command = ""

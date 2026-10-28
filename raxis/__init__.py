@@ -31,10 +31,14 @@ else:
     ctypes.CDLL(str(core_lib_path), mode=ctypes.RTLD_GLOBAL)
     extension = '.so'
 
-# The CUDA backend, when it was built (RAXIS_USE_CUDA): loading it registers
-# its kernels, allocator and hooks in libraxis. Without it raxis is CPU only
-# and raxis.cuda.is_available() is False
+# The CUDA backend: loading libraxis_cuda registers its kernels, allocator and
+# hooks in libraxis. It comes from a source build (RAXIS_USE_CUDA, next to
+# libraxis in raxis/lib) or from the raxis-cuda13 / raxis-cuda12 wheels
+# (packages raxis_cuda13 / raxis_cuda12, see plugins/cuda). Without it raxis
+# is CPU only and raxis.cuda.is_available() is False
+_cuda_library = None
 _cuda_lib_name = {'Windows': 'raxis_cuda.dll', 'Darwin': 'libraxis_cuda.dylib'}.get(platform.system(), 'libraxis_cuda.so')
+_cuda_plugins = [name for name in ('raxis_cuda13', 'raxis_cuda12') if importlib.util.find_spec(name) is not None]
 if (raxis_lib_dirs / _cuda_lib_name).exists():
     if platform.system() == 'Windows' and os.environ.get('CUDA_PATH'):
         # cuBLAS from the CUDA toolkit: since Python 3.8 Windows no longer
@@ -48,6 +52,27 @@ if (raxis_lib_dirs / _cuda_lib_name).exists():
         raise ImportError(
             f"raxis could not load its CUDA backend ({_cuda_lib_name}): {e}. "
             "It needs the CUDA runtime libraries (cuBLAS) of the toolkit it was built with") from e
+    _cuda_library = raxis_lib_dirs / _cuda_lib_name
+elif _cuda_plugins:
+    import warnings as _warnings
+    import importlib.metadata as _metadata
+
+    if len(_cuda_plugins) > 1:
+        _warnings.warn(f"Both raxis-cuda13 and raxis-cuda12 are installed: using {_cuda_plugins[0]}. "
+                       "Uninstall the one you do not need", stacklevel=2)
+    # pip keeps both at the same version (the plugin requires raxis==<its
+    # version>), but a source checkout of raxis may find a plugin installed
+    # from PyPI: libraxis_cuda only works with the libraxis it was built with
+    _plugin_version = _metadata.version(_cuda_plugins[0].replace('_', '-'))
+    if _plugin_version != __version__:
+        raise ImportError(f"{_cuda_plugins[0]} {_plugin_version} does not match raxis {__version__}: "
+                          f"install the same version of both")
+    _cuda_plugin = importlib.import_module(_cuda_plugins[0])
+    try:
+        _cuda_plugin.load()
+    except OSError as e:
+        raise ImportError(f"raxis could not load its CUDA backend ({_cuda_plugins[0]}): {e}") from e
+    _cuda_library = _cuda_plugin.library_path
 
 # Dynamically identify and load the `_C` module
 _C_module_file = None

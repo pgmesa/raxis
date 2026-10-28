@@ -85,3 +85,7 @@ examples/nanogpt/out-*/
 
 # Output of examples/autograd_graph.py
 examples/autograd_graph_out/
+
+# Copied into the raxis-cuda* wheel by build_libraxis.py --cuda-plugin
+plugins/cuda/LICENSE
+plugins/cuda/THIRD_PARTY_NOTICES.txt

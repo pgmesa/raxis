@@ -1,8 +1,17 @@
-"""torch.backends.cuda: the TF32 switch of float32 matmuls."""
+"""torch.backends.cuda: whether the CUDA backend is there, and the TF32
+switch of float32 matmuls."""
+import raxis
 from raxis import _C
 
 
-__all__ = ["matmul"]
+__all__ = ["is_built", "matmul"]
+
+
+def is_built() -> bool:
+    """Whether raxis loaded its CUDA backend (libraxis_cuda, from a source
+    build or the raxis-cuda12 / raxis-cuda13 packages). It does not mean
+    there is a GPU: that is raxis.cuda.is_available()."""
+    return raxis._cuda_library is not None
 
 
 class _MatmulFlags:
