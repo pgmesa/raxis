@@ -257,9 +257,13 @@ option(RAXIS_USE_CUDA "Build libraxis_cuda, the CUDA backend" OFF)
 if(RAXIS_USE_CUDA)
     # Default archs: Turing to Blackwell as SASS, plus PTX of the newest for
     # future GPUs. An old driver cannot JIT PTX from a newer toolkit, so
-    # every supported arch needs its SASS
-    if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-        set(CMAKE_CUDA_ARCHITECTURES "75-real;80-real;86-real;89-real;90-real;120-real;120-virtual")
+    # every supported arch needs its SASS. A SASS runs on the later minors of
+    # its major (sm_86 on sm_89, sm_120 on sm_121), so only the first minor
+    # of each feature set is listed, as in PyTorch's wheels. The CUDAARCHS
+    # environment variable (read by CMake) overrides it: the CUDA 12 wheels
+    # add sm_70, which CUDA 13 dropped
+    if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES AND NOT DEFINED ENV{CUDAARCHS})
+        set(CMAKE_CUDA_ARCHITECTURES "75-real;80-real;86-real;90-real;100-real;120-real;120-virtual")
     endif()
     enable_language(CUDA)
     find_package(CUDAToolkit REQUIRED)
@@ -301,8 +305,19 @@ if(RAXIS_USE_CUDA)
         target_link_options(raxis_cuda PRIVATE /NODEFAULTLIB:LIBCMT)
     else()
         target_compile_options(raxis_cuda PRIVATE -fvisibility=hidden)
-        set_target_properties(raxis_cuda PROPERTIES INSTALL_RPATH "$ORIGIN")
+        # Next to libraxis (a source build), or in the raxis-cuda* wheel's
+        # package, next to raxis's and the NVIDIA cuBLAS wheel's directories
+        # in site-packages (raxis/__init__.py also preloads them)
+        if(CUDAToolkit_VERSION_MAJOR VERSION_GREATER_EQUAL 13)
+            set(RAXIS_CUBLAS_WHEEL_DIR "nvidia/cu${CUDAToolkit_VERSION_MAJOR}/lib")
+        else()
+            set(RAXIS_CUBLAS_WHEEL_DIR "nvidia/cublas/lib")
+        endif()
+        set_target_properties(raxis_cuda PROPERTIES
+            INSTALL_RPATH "$ORIGIN;$ORIGIN/../../raxis/lib;$ORIGIN/../../${RAXIS_CUBLAS_WHEEL_DIR}")
     endif()
+    # Read by build_libraxis.py --cuda-plugin: it names the wheel (raxis-cuda12 / raxis-cuda13)
+    file(WRITE "${CMAKE_BINARY_DIR}/cuda_version.txt" "${CUDAToolkit_VERSION}\n")
     set(RAXIS_CUDA_INFO "CUDA ${CUDAToolkit_VERSION} (archs: ${CMAKE_CUDA_ARCHITECTURES})")
 else()
     set(RAXIS_CUDA_INFO "disabled")
