@@ -451,13 +451,16 @@ void TensorIterator::compute_types(const TensorIteratorConfig& config) {
                 op.current_dtype = common_dtype_;
                 op.target_dtype = common_dtype_;
             }
-        }
 
-        // Promotes inputs by creating temporaries of the correct dtype
-        if (config.promote_inputs_to_common_dtype_ && !op.is_output && op.current_dtype != common_dtype_) {
-            op.exchange_tensor(MaybeOwned<Tensor>::owned(op.tensor().to(common_dtype_)));
-            op.current_dtype = common_dtype_;
-            op.target_dtype = common_dtype_;
+            // Promotes inputs by creating temporaries of the correct dtype.
+            // CUDA kernels convert each input as they load it instead
+            // (dynamic casting in ops/cuda/loops.cuh): no temporary, no
+            // extra pass over memory
+            if (config.promote_inputs_to_common_dtype_ && !op.is_output && op.current_dtype != common_dtype_) {
+                op.exchange_tensor(MaybeOwned<Tensor>::owned(op.tensor().to(common_dtype_)));
+                op.current_dtype = common_dtype_;
+                op.target_dtype = common_dtype_;
+            }
         }
     }
 }

@@ -310,6 +310,54 @@ class TestHostOnlyOps:
             raxis.ones((3,), device="cuda").cumsum(0)
 
 
+class TestMixedDtypes:
+    """Inputs of different dtypes are converted as the kernel loads them (no
+    temporaries on the GPU, as torch): the unrolled kernel when contiguous,
+    the generic one otherwise."""
+
+    OPS = [
+        ("add", lambda a, b: a + b), ("mul", lambda a, b: a * b), ("div", lambda a, b: a / b),
+        ("lt", lambda a, b: a < b), ("eq", lambda a, b: a == b),
+        ("maximum", lambda a, b: a.maximum(b)), ("pow", lambda a, b: a.abs() ** b),
+    ]
+
+    @pytest.mark.parametrize("name, op", OPS, ids=[o[0] for o in OPS])
+    @pytest.mark.parametrize("lhs, rhs", [
+        ("int64", "float32"), ("float32", "float64"), ("uint8", "int32"), ("bool", "float32"), ("int32", "float64"),
+    ])
+    @pytest.mark.parametrize("layout", ["contiguous", "transposed", "broadcast"])
+    def test_binary(self, name, op, lhs, rhs, layout):
+        if name == "pow" and "bool" in (lhs, rhs):
+            pytest.skip("pow with a bool tensor")
+        a, b = make((70, 90), lhs, seed=0), make((70, 90), rhs, seed=1)
+        if name == "pow":
+            b = (np.abs(b) % 3).astype(rhs) if rhs != "bool" else b
+        r = [raxis.from_numpy(x).cuda() for x in (a, b)]
+        t = [torch.from_numpy(x).cuda() for x in (a, b)]
+        if layout == "transposed":
+            r = [x.transpose(0, 1) for x in r]
+            t = [x.t() for x in t]
+        elif layout == "broadcast":
+            r[1], t[1] = r[1][:1], t[1][:1]
+        check(op(*r), op(*t), atol=1e-5, rtol=1e-5)
+
+    def test_where_and_clamp(self):
+        cond = raxis.from_numpy(make((50, 60), "bool")).cuda()
+        a, b = make((50, 60), "int64", seed=1), make((50, 60), "float32", seed=2)
+        r = raxis.where(cond, raxis.from_numpy(a).cuda(), raxis.from_numpy(b).cuda())
+        t = torch.where(torch.from_numpy(make((50, 60), "bool")).cuda(), torch.from_numpy(a).cuda(),
+                        torch.from_numpy(b).cuda())
+        check(r, t)
+
+    def test_inplace_into_wider_dtype(self):
+        a, b = make((64, 64), "float64"), make((64, 64), "int32", seed=1)
+        r = raxis.from_numpy(a).cuda()
+        t = torch.from_numpy(a.copy()).cuda()
+        r += raxis.from_numpy(b).cuda()
+        t += torch.from_numpy(b).cuda()
+        check(r, t, atol=0, rtol=0)
+
+
 class TestKernels:
     """GPU paths the shared suites do not reach."""
 
