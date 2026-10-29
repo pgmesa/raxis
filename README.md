@@ -47,9 +47,8 @@ threads, PyTorch 2.14.1 and Intel MKL in both libraries. The scripts and
 notebooks to reproduce them are in the repo (see [Build from source](#build-from-source)).
 
 **Training the examples.** Time of `trainer.fit` in each notebook (training
-plus the validation pass of every epoch) with Raxis, PyTorch and the two
-earlier projects of the same author:
-[synapx](https://github.com/pgmesa/synapx) (autograd in C++ on top of libtorch)
+plus the validation pass of every epoch) with Raxis, PyTorch and my two
+earlier projects: [synapx](https://github.com/pgmesa/synapx) (autograd in C++ on top of libtorch)
 and [synapgrad](https://github.com/pgmesa/synapgrad) (autograd in pure Python
 on top of NumPy).
 
