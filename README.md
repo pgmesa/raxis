@@ -55,13 +55,14 @@ on top of NumPy).
 | Notebook | Raxis | PyTorch | synapx | synapgrad | Params | Train set | Batch | Epochs |
 |---|--:|--:|--:|--:|--:|--:|--:|--:|
 | basic_mlp.ipynb | 0.20 s | 1.4 s | 0.53 s | 0.26 s | 337 | 150 | 4 | 50 |
-| mnist_mlp.ipynb | 2.9 s | 4.5 s | 5.6 s | 10.0 s | 178,110 | 48,000 | 64 | 10 |
-| mnist_cnn.ipynb | 10.8 s | 37.8 s | - | 4 min 55 s | 20,538 | 48,000 | 128 | 5 |
+| mnist_mlp.ipynb | 2.9 s | 4.5 s | 6.4 s | 9.7 s | 178,110 | 48,000 | 64 | 10 |
+| mnist_cnn.ipynb | 10.8 s | 37.8 s | 3 min 12 s | 4 min 55 s | 20,538 | 48,000 | 128 | 5 |
 
 The models reach the same accuracy with every library (MNIST: ~97.6% val with
 the MLP, ~98.6% with the CNN). Most of PyTorch's time in the CNN is Dropout:
 its CPU random numbers come from a serial mt19937, Raxis draws them from
-Philox in parallel. synapx has no Conv2d.
+Philox in parallel. synapx's Conv2d is synapgrad's algorithm on libtorch
+(sliding windows and tensordot), not PyTorch's convolution.
 
 **nanoGPT.** [nanoGPT](https://github.com/karpathy/nanoGPT)'s
 character-level Shakespeare model, trained with `examples/nanogpt/train.py`
@@ -172,7 +173,8 @@ has `debug` and `release` presets; `CMakeLists.txt` lists the build options
 (`RAXIS_USE_*`).
 
 `scripts/bench_ops.py` benchmarks each op against PyTorch and NumPy,
-`scripts/bench_training.py` times a training step of the example models, and
+`scripts/bench_training.py` times a training step of the example models,
+`scripts/lineage` measures what made my earlier projects slow, and
 `examples/` has notebooks that train MLPs on two moons and MNIST and a CNN on
 MNIST with either Raxis or PyTorch, and `examples/nanogpt` trains
 [nanoGPT](https://github.com/karpathy/nanoGPT)'s character-level Shakespeare

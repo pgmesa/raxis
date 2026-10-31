@@ -19,7 +19,7 @@
 #define NO_VECTOR __pragma(loop(no_vector))
 #else
 #define NOINLINE __attribute__((noinline))
-#define NO_VECTOR _Pragma("GCC novector")
+#define NO_VECTOR _Pragma("GCC novector")  // GCC 14+: older ones ignore it and vectorize
 #endif
 
 
