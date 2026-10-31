@@ -54,15 +54,16 @@ on top of NumPy).
 
 | Notebook | Raxis | PyTorch | synapx | synapgrad | Params | Train set | Batch | Epochs |
 |---|--:|--:|--:|--:|--:|--:|--:|--:|
-| basic_mlp.ipynb | 0.20 s | 1.4 s | 0.53 s | 0.26 s | 337 | 150 | 4 | 50 |
-| mnist_mlp.ipynb | 2.9 s | 4.5 s | 6.4 s | 9.7 s | 178,110 | 48,000 | 64 | 10 |
-| mnist_cnn.ipynb | 10.8 s | 37.8 s | 3 min 12 s | 4 min 55 s | 20,538 | 48,000 | 128 | 5 |
+| basic_mlp.ipynb | 0.22 s | 0.50 s | 2.0 s | 0.33 s | 337 | 150 | 4 | 50 |
+| mnist_mlp.ipynb | 3.0 s | 4.6 s | 6.3 s | 9.4 s | 178,110 | 48,000 | 64 | 10 |
+| mnist_cnn.ipynb | 12.5 s | 47.2 s | 3 min 7 s | 5 min 6 s | 20,538 | 48,000 | 128 | 5 |
 
 The models reach the same accuracy with every library (MNIST: ~97.6% val with
 the MLP, ~98.6% with the CNN). Most of PyTorch's time in the CNN is Dropout:
 its CPU random numbers come from a serial mt19937, Raxis draws them from
 Philox in parallel. synapx's Conv2d is synapgrad's algorithm on libtorch
-(sliding windows and tensordot), not PyTorch's convolution.
+(sliding windows and tensordot), not PyTorch's convolution. synapx supports up
+to PyTorch 2.7, so its column runs in an environment of its own.
 
 **nanoGPT.** [nanoGPT](https://github.com/karpathy/nanoGPT)'s
 character-level Shakespeare model, trained with `examples/nanogpt/train.py`

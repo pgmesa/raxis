@@ -17,6 +17,8 @@ X = rng.random((B_MLP, 28, 28), dtype=np.float32)
 Y = rng.integers(0, 10, size=B_MLP)
 X_C = rng.random((B_CNN, 1, 28, 28), dtype=np.float32)
 Y_C = rng.integers(0, 10, size=B_CNN)
+X_T = rng.random((4, 2), dtype=np.float32)
+Y_T = rng.random((4, 1), dtype=np.float32)
 
 
 def median_ms(step, warmup, n):
@@ -141,6 +143,9 @@ def full_step(name, kind):
     if name == "torch":
         import torch as lib
         tensor = lambda a, long=False: lib.tensor(a, dtype=lib.long) if long else lib.tensor(a)
+    elif name == "raxis":
+        import raxis as lib
+        tensor = lambda a, long=False: lib.tensor(a, dtype=lib.long) if long else lib.tensor(a)
     elif name == "synapx":
         import synapx as lib
         import torch
@@ -149,7 +154,11 @@ def full_step(name, kind):
         import synapgrad as lib
         tensor = lambda a, long=False: lib.Tensor(a.astype(np.int64) if long else a)
     nn = lib.nn
-    if kind == "mlp":
+    if kind == "tiny":
+        model = nn.Sequential(nn.Linear(2, 16), nn.ReLU(), nn.Linear(16, 16), nn.ReLU(), nn.Linear(16, 1))
+        opt = lib.optim.SGD(list(model.parameters()), lr=0.1)
+        loss_fn, x, y = nn.MSELoss(), tensor(X_T), tensor(Y_T)
+    elif kind == "mlp":
         model = nn.Sequential(
             nn.Flatten(), nn.Linear(784, 200), nn.ReLU(), nn.Dropout(0.2),
             nn.Linear(200, 100), nn.ReLU(), nn.Linear(100, 10), nn.LogSoftmax(dim=1))
@@ -176,9 +185,9 @@ what = sys.argv[1]
 if what == "check":
     check_manual_backward()
 elif what == "numpy_ops":
-    print(f"{what}: {median_ms(numpy_ops(), 20, 300):.3f} ms")
+    print(f"{what}: {median_ms(numpy_ops(), 20, 500):.3f} ms")
 elif what == "torch_ops":
-    print(f"{what}: {median_ms(torch_ops(), 20, 300):.3f} ms")
+    print(f"{what}: {median_ms(torch_ops(), 20, 500):.3f} ms")
 elif what == "profile":
     step = full_step("synapgrad", "cnn")
     step()
@@ -206,5 +215,5 @@ elif what == "profile":
     print(f"primitive calls per step: {stats.prim_calls // 5}")
 else:
     name, kind = what.split(":")
-    warmup, n = (20, 300) if kind == "mlp" and name != "synapgrad" else (3, 30)
+    warmup, n = (3, 30) if kind == "cnn" else (20, 500)
     print(f"{what}: {median_ms(full_step(name, kind), warmup, n):.3f} ms")
