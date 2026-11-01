@@ -147,7 +147,7 @@ only its BLAS calls use several. On 100 x 100 arrays the three are on par.
 | `raxis/` | Python package: `nn`, `optim`, `cuda`, `autograd.graph`, tensor printing |
 | `plugins/cuda` | The `raxis-cuda12` / `raxis-cuda13` packages |
 
-Code taken from PyTorch keeps a `// From: aten/src/ATen/...` comment pointing
+Much of the code comes from PyTorch, and many places carry a `// From: aten/src/ATen/...` comment pointing
 to the original.
 
 ## Build from source

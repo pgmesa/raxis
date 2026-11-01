@@ -13,4 +13,5 @@ Run them on Windows from a venv with PyTorch, on a clone of
 | `multitensor_check.cpp` | Multitensor's own code: wrong offsets on expanded tensors, and its `add` |
 | `training_split.py` | A training step of each library, and the MLP step with only its tensor operations |
 | `conv_algorithms.py` | Windows + tensordot, im2col + matmul and `conv2d`, on NumPy and libtorch; synapgrad's CNN step without its graph, on NumPy and on torch in Python; `matmul` on both |
+| `conv_breakdown.py` | Each step of windows and im2col on NumPy and on torch in Python |
 | `conv_forward_backward.py` | Windows and im2col on NumPy, forward and backward apart |
