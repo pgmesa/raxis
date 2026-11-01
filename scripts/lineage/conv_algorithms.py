@@ -188,9 +188,165 @@ def numpy_cnn_ops():
     return step
 
 
+# The same kernels in Python with torch instead of NumPy: the test that needs no
+# C++ at all. Line by line as synapgrad's cpu_ops and conv_tools.
+
+def t_extract_windows(a, k, s, p, pad_value=0.0):
+    padded = F.pad(a, (p, p, p, p), value=pad_value)
+    return padded.unfold(2, k, s).unfold(3, k, s).permute(2, 3, 0, 1, 4, 5)
+
+
+def t_place_windows(windows, out_shape, k, s, p):
+    N, C, H, W = out_shape
+    output = torch.zeros(N, C, H + 2 * p, W + 2 * p, dtype=windows.dtype)
+    windows = windows.movedim(2, 0)
+    for i in range(windows.shape[1]):
+        for j in range(windows.shape[2]):
+            output[..., i * s:i * s + k, j * s:j * s + k] += windows[:, i, j]
+    return output[..., p:H + p, p:W + p] if p else output
+
+
+def t_conv_forward(x, w):
+    windows = t_extract_windows(x, K, 1, P)
+    return torch.tensordot(w, windows, dims=([1, 2, 3], [3, 4, 5])).movedim(-1, 0), windows
+
+
+def t_conv_backward(grad, x_shape, w, windows):
+    x_grad_windows = torch.tensordot(grad, w, dims=([1], [0])).movedim(0, 2)
+    x_grad = t_place_windows(x_grad_windows, x_shape, K, 1, P)
+    return x_grad, torch.tensordot(grad, windows, dims=([2, 3, 0], [0, 1, 2]))
+
+
+def torch_windows():
+    data = [tuple(torch.from_numpy(a) for a in layer_data(*layer)) for layer in LAYERS]
+
+    @torch.no_grad()
+    def step():
+        for x, w, grad in data:
+            _, windows = t_conv_forward(x, w)
+            t_conv_backward(grad, x.shape, w, windows)
+
+    return step
+
+
+def torch_cnn_ops():
+    """numpy_cnn_ops with torch: same kernels, same dropout and Adam, no graph."""
+    X = torch.from_numpy(rng.random((128, 1, 28, 28), dtype=np.float32))
+    y = torch.from_numpy(rng.integers(0, 10, size=128))
+    r = np.random.default_rng(1)
+    idx = torch.arange(128)
+
+    def uniform(*shape):
+        return torch.from_numpy((r.random(shape, dtype=np.float32) - 0.5) * 0.5)
+
+    w1, w2 = uniform(16, 1, 3, 3), uniform(32, 16, 3, 3)
+    g1, b1, g2, b2 = torch.ones(16), torch.zeros(16), torch.ones(32), torch.zeros(32)
+    rm1, rv1, rm2, rv2 = torch.zeros(16), torch.ones(16), torch.zeros(32), torch.ones(32)
+    w3, b3 = uniform(10, 32 * 7 * 7), uniform(10)
+    params = [w1, g1, b1, w2, g2, b2, w3, b3]
+    m1, m2 = [0] * len(params), [0] * len(params)
+    t = [0]
+
+    def softmax(a):
+        exps = (a - a.amax(dim=1, keepdim=True)).exp()
+        return exps / exps.sum(dim=1, keepdim=True)
+
+    def block_fw(x, w, g, b, rm, rv):
+        c, windows = t_conv_forward(x, w)
+        dims, k_shape = (0, 2, 3), (1, -1, 1, 1)
+        n = c.numel() / c.shape[1]
+        mean, var = c.mean(dims), c.var(dims, unbiased=False)
+        norm = (c - mean.reshape(k_shape)) / (var + 1e-5).sqrt().reshape(k_shape)
+        norm = norm * g.reshape(k_shape) + b.reshape(k_shape)
+        mean * 0.1 + rm * 0.9
+        var * (n / (n - 1)) * 0.1 + rv * 0.9
+        a = norm.clamp(min=0)
+        mask = (torch.rand(a.shape) > 0.3).float() / 0.7
+        d = a * mask
+        p_windows = t_extract_windows(d, 2, 2, 0, -float("inf"))
+        p = p_windows.reshape(*p_windows.shape[:-2], -1).amax(dim=-1).permute(2, 3, 0, 1)
+        return p, (x, c, norm, windows, mean, var, mask, d.shape, p_windows)
+
+    def block_bw(grad, w, g, b, state):
+        x, c, norm, windows, mean, var, mask, d_shape, p_windows = state
+        grad = grad.permute(2, 3, 0, 1)
+        flat = p_windows.reshape(*p_windows.shape[:-2], -1)
+        pool_mask = torch.zeros_like(flat).scatter_(-1, flat.argmax(dim=-1, keepdim=True), 1.0)
+        d_g = t_place_windows((grad.unsqueeze(-1) * pool_mask).reshape(p_windows.shape), d_shape, 2, 2, 0)
+        n_g = d_g * mask * (norm > 0)
+
+        dims, k_shape = (0, 2, 3), (1, -1, 1, 1)
+        n = c.numel() / c.shape[1]
+        mean_k, var_k = mean.reshape(k_shape), var.reshape(k_shape)
+        std_k = (var_k + 1e-5).sqrt()
+        x_norm = (c - mean_k) / std_k
+        hat = n_g * g.reshape(k_shape)
+        g_g, b_g = (n_g * x_norm).sum(dims), n_g.sum(dims)
+        d_var = (hat * (c - mean_k)).mul(-0.5).sum(dims, keepdim=True) * (var_k + 1e-5) ** -1.5
+        d_avg = (hat / std_k).neg().sum(dims, keepdim=True) + d_var * (c - mean_k).mul(-2.0).sum(dims, keepdim=True) / n
+        c_g = hat / std_k + 2.0 * d_var * (c - mean_k) / n + d_avg / n
+
+        x_g, w_g = t_conv_backward(c_g, x.shape, w, windows)
+        return x_g, w_g, g_g, b_g
+
+    @torch.no_grad()
+    def step():
+        p1, s1 = block_fw(X, w1, g1, b1, rm1, rv1)
+        p2, s2 = block_fw(p1, w2, g2, b2, rm2, rv2)
+        flat = p2.reshape(128, -1)
+        logits = flat @ w3.T + b3
+        probs = softmax(logits)
+        -(probs + 1e-12).log()[idx, y].mean()
+
+        l_g = probs.clone()
+        l_g[idx, y] -= 1
+        l_g = l_g / 128
+        w3_g, b3_g, flat_g = l_g.T @ flat, l_g.sum(dim=0), l_g @ w3
+        p1_g, w2_g, g2_g, b2_g = block_bw(flat_g.reshape(p2.shape), w2, g2, b2, s2)
+        _, w1_g, g1_g, b1_g = block_bw(p1_g, w1, g1, b1, s1)
+
+        t[0] += 1
+        for i, (p, grad) in enumerate(zip(params, (w1_g, g1_g, b1_g, w2_g, g2_g, b2_g, w3_g, b3_g))):
+            m1[i] = 0.9 * m1[i] + 0.1 * grad
+            m2[i] = 0.999 * m2[i] + 0.001 * grad**2.0
+            c1 = m1[i] / (1.0 - 0.9 ** t[0])
+            c2 = m2[i] / (1.0 - 0.999 ** t[0])
+            p -= 0.01 * c1 / (c2.sqrt() + 1e-8)
+
+    return step
+
+
+def check_torch_matches_numpy():
+    x, w, grad = layer_data(*LAYERS[1])
+    out_n, windows_n = cpu_ops.conv2d_forward(x, w, None, 1, P, 1)
+    x_n, w_n, _ = cpu_ops.conv2d_backward(grad, x.shape, w, None, 1, P, 1, windows_n)
+    tx, tw, tg = torch.from_numpy(x), torch.from_numpy(w), torch.from_numpy(grad)
+    out_t, windows_t = t_conv_forward(tx, tw)
+    x_t, w_t = t_conv_backward(tg, tx.shape, tw, windows_t)
+    assert np.allclose(out_t.numpy(), out_n, atol=1e-3)
+    assert np.allclose(x_t.numpy(), x_n, atol=1e-2)
+    assert np.allclose(w_t.numpy(), w_n, atol=1e-1, rtol=1e-3)
+    print("torch windows matches numpy windows")
+
+
+def matmul_times():
+    # The size in synapgrad's tests/test_ops.py, and the matmul of each layer of the CNN
+    for shape_a, shape_b in (((3, 512, 512), (3, 512, 512)), ((128, 1568), (1568, 10)), ((128, 9, 784), (16, 9)),):
+        a = rng.random(shape_a, dtype=np.float32)
+        b = rng.random(shape_b, dtype=np.float32)
+        if shape_b == (16, 9):
+            a, b = b, a
+        ta, tb = torch.from_numpy(a), torch.from_numpy(b)
+        n, tt = median_ms(lambda: a @ b, 5, 101), median_ms(lambda: ta @ tb, 5, 101)
+        print(f"matmul {a.shape} @ {b.shape}: numpy {n:.3f} ms, torch {tt:.3f} ms, x{n / tt:.2f}")
+
+
 what = sys.argv[1]
 if what == "check":
     check_im2col_matches_windows()
+    check_torch_matches_numpy()
+elif what == "matmul":
+    matmul_times()
 elif what == "ops":
     print(f"numpy_cnn_ops: {median_ms(numpy_cnn_ops(), 3, 30):.2f} ms")
 else:
