@@ -48,11 +48,11 @@ notebooks to reproduce them are in the repo (see [Build from source](#build-from
 
 **Training the examples.** Time of `trainer.fit` in each notebook (training
 plus the validation pass of every epoch) with Raxis, PyTorch and my two
-earlier projects: [synapx](https://github.com/pgmesa/synapx) (autograd in C++ on top of libtorch)
-and [synapgrad](https://github.com/pgmesa/synapgrad) (autograd in pure Python
+earlier projects: [SynapX](https://github.com/pgmesa/synapx) (autograd in C++ on top of libtorch)
+and [SynapGrad](https://github.com/pgmesa/synapgrad) (autograd in pure Python
 on top of NumPy).
 
-| Notebook | Raxis | PyTorch | synapx | synapgrad | Params | Train set | Batch | Epochs |
+| Notebook | Raxis | PyTorch | SynapX | SynapGrad | Params | Train set | Batch | Epochs |
 |---|--:|--:|--:|--:|--:|--:|--:|--:|
 | basic_mlp.ipynb | 0.22 s | 0.50 s | 2.0 s | 0.33 s | 337 | 150 | 4 | 50 |
 | mnist_mlp.ipynb | 3.0 s | 4.6 s | 6.3 s | 9.4 s | 178,110 | 48,000 | 64 | 10 |
@@ -61,8 +61,8 @@ on top of NumPy).
 The models reach the same accuracy with every library (MNIST: ~97.6% val with
 the MLP, ~98.6% with the CNN). Most of PyTorch's time in the CNN is Dropout:
 its CPU random numbers come from a serial mt19937, Raxis draws them from
-Philox in parallel. synapx's Conv2d is synapgrad's algorithm on libtorch
-(sliding windows and tensordot), not PyTorch's convolution. synapx supports up
+Philox in parallel. SynapX's Conv2d is SynapGrad's algorithm on libtorch
+(sliding windows and tensordot), not PyTorch's convolution. SynapX supports up
 to PyTorch 2.7, so its column runs in an environment of its own.
 
 **nanoGPT.** [nanoGPT](https://github.com/karpathy/nanoGPT)'s
