@@ -345,6 +345,22 @@ Tensor Tensor::mT() const {
     return transpose(-2, -1);
 }
 
+// From: aten/src/ATen/native/TensorShape.cpp (numpy_T)
+Tensor Tensor::numpy_T() const {
+    DimVector dims;
+    dims.reserve(ndim());
+    for (int64_t d = ndim() - 1; d >= 0; --d) {
+        dims.push_back(d);
+    }
+    return permute(dims);
+}
+
+// From: aten/src/ATen/native/TensorShape.cpp (t)
+Tensor Tensor::t() const {
+    RAXIS_CHECK(ndim() <= 2, "t() expects a tensor with <= 2 dimensions, but self is ", ndim(), "D");
+    return transpose(0, ndim() < 2 ? 0 : 1);
+}
+
 Tensor Tensor::transpose(int64_t dim0, int64_t dim1) const {
     return ::raxis::transpose(*this, dim0, dim1);
 }

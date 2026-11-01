@@ -283,6 +283,15 @@ PYBIND11_MODULE(_C, c) {
             pybind11::tuple py_strides = pybind11::cast(self.strides());
             return py_strides;
         })
+        .def("stride", [](const raxis::Tensor& self, std::optional<int64_t> dim) -> py::object {
+            if (!dim) {
+                return py::tuple(py::cast(self.strides()));
+            }
+            return py::int_(self.strides()[raxis::wrap_dim(*dim, self.ndim())]);
+        }, py::arg("dim") = py::none())
+        .def("data_ptr", [](const raxis::Tensor& self) {
+            return reinterpret_cast<std::intptr_t>(self.mutable_data_ptr());
+        })
         .def_property_readonly("byte_strides", [](const raxis::Tensor& self) -> py::tuple {
             pybind11::tuple py_byte_strides = pybind11::cast(self.byte_strides());
             return py_byte_strides;
@@ -430,6 +439,21 @@ PYBIND11_MODULE(_C, c) {
         .def("squeeze", &raxis::Tensor::squeeze, py::arg("dim") = py::none())
         .def("unsqueeze", &raxis::Tensor::unsqueeze, py::arg("dim"))
         .def_property_readonly("mT", &raxis::Tensor::mT)
+        .def_property_readonly("T", [](const raxis::Tensor& self) {
+            // From: aten/src/ATen/native/TensorShape.cpp (numpy_T)
+            if (self.ndim() != 2) {
+                const char* message = self.ndim() == 0
+                    ? "Tensor.T is deprecated on 0-D tensors. This function is the identity in these cases."
+                    : "The use of `x.T` on tensors of dimension other than 2 to reverse their shape is deprecated "
+                      "and it will throw an error in a future release. Consider `x.mT` to transpose batches of "
+                      "matrices or `x.permute(*torch.arange(x.ndim - 1, -1, -1))` to reverse the dimensions of a tensor.";
+                if (PyErr_WarnEx(PyExc_UserWarning, message, 1) < 0) {
+                    throw py::error_already_set();
+                }
+            }
+            return self.numpy_T();
+        })
+        .def("t", &raxis::Tensor::t)
         .def("transpose", &raxis::Tensor::transpose, py::arg("dim0"), py::arg("dim1"))
         .def("permute", [](const raxis::Tensor& self, raxis::Vec dims) {
             return self.permute(dims);

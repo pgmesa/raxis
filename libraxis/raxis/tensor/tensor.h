@@ -163,6 +163,8 @@ public:
     Tensor unsqueeze(int64_t dim) const;
     Tensor squeeze(std::optional<int64_t> dim_opt = std::nullopt) const;
     Tensor mT() const;
+    Tensor numpy_T() const;
+    Tensor t() const;
     Tensor transpose(int64_t dim0, int64_t dim1) const;
     Tensor permute(IntArrayRef dims) const;
     Tensor swapdims(int64_t dim0, int64_t dim1) const;

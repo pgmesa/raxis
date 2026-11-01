@@ -168,7 +168,8 @@ Tensor squeeze(const Tensor& self, std::optional<int64_t> dim_opt) {
 }
 
 Tensor transpose(const Tensor& self, int64_t dim0, int64_t dim1) {
-    const int n = self.ndim();
+    // As in torch's maybe_wrap_dim, a 0-d tensor accepts dims 0 and -1
+    const int n = std::max(self.ndim(), 1);
     dim0 = wrap_dim(dim0, n);
     dim1 = wrap_dim(dim1, n);
 

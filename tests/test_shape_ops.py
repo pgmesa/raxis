@@ -1,3 +1,5 @@
+import warnings
+
 import pytest
 import raxis
 import torch
@@ -275,3 +277,83 @@ def test_like_memory_format(name):
     r_out = getattr(raxis, name)(r.transpose(0, 1), memory_format=raxis.contiguous_format)
     t_out = getattr(torch, name)(t.t(), memory_format=torch.contiguous_format)
     assert tuple(r_out.strides) == tuple(t_out.stride())
+
+
+# ===========================================================================
+# T, t, stride, data_ptr
+# ===========================================================================
+
+@pytest.mark.parametrize("shape", [(3, 4), (2, 3, 4), (5,), ()])
+@pytest.mark.filterwarnings("ignore:.*x.T.*|.*Tensor.T.*")
+def test_T(shape):
+    r, t = make_pair(randf(*shape))
+    r_out, t_out = r.T, t.T
+    check_match(r_out, t_out)
+    assert tuple(r_out.stride()) == tuple(t_out.stride())
+
+
+def test_T_warns_as_torch_outside_2d():
+    r3, r2 = raxis.zeros(2, 3, 4), raxis.zeros(2, 3)
+    with pytest.warns(UserWarning, match="other than 2"):
+        r3.T
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        r2.T
+
+
+@pytest.mark.parametrize("shape", [(3, 4), (5,), ()])
+def test_t(shape):
+    r, t = make_pair(randf(*shape))
+    check_match(r.t(), t.t())
+
+
+@pytest.mark.parametrize("dims", [(0, 0), (-1, 0)])
+def test_transpose_0d(dims):
+    r, t = make_grad_pair(randf())
+    r_out, t_out = r.transpose(*dims), t.transpose(*dims)
+    check_match(r_out, t_out)
+    (r_out * 2.0).backward()
+    (t_out * 2.0).backward()
+    check_match(r.grad, t.grad)
+    with pytest.raises(IndexError):
+        r.transpose(0, 1)
+    with pytest.raises(IndexError):
+        t.transpose(0, 1)
+
+
+def test_t_rejects_more_than_2_dims():
+    r, t = make_pair(randf(2, 3, 4))
+    with pytest.raises(RuntimeError, match="<= 2 dimensions, but self is 3D"):
+        r.t()
+    with pytest.raises(RuntimeError, match="<= 2 dimensions, but self is 3D"):
+        t.t()
+
+
+def test_T_backward():
+    r, t = make_grad_pair(randf(3, 4))
+    (r.T * 2.0).sum().backward()
+    (t.T * 2.0).sum().backward()
+    check_match(r.grad, t.grad)
+
+
+def test_stride():
+    r, t = make_pair(randf(3, 4, 5))
+    assert r.stride() == t.stride()
+    assert isinstance(r.stride(), tuple)
+    for dim in (0, 1, 2, -1, -3):
+        assert r.stride(dim) == t.stride(dim)
+    with pytest.raises(IndexError):
+        r.stride(3)
+    with pytest.raises(IndexError):
+        t.stride(3)
+
+
+def test_data_ptr_follows_the_offset():
+    r, t = make_pair(randf(3, 4))
+    itemsize = 4 if t.dtype == torch.float32 else 8
+    for view in (lambda x: x[1:3], lambda x: x[:, 2], lambda x: x[2, 3]):
+        r_delta = view(r).data_ptr() - r.data_ptr()
+        t_delta = view(t).data_ptr() - t.data_ptr()
+        assert r_delta == t_delta == view(t).storage_offset() * itemsize
+    assert r.transpose(0, 1).data_ptr() == r.data_ptr()
+    assert r.clone().data_ptr() != r.data_ptr()
