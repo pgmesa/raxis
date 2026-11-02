@@ -117,11 +117,12 @@ long = int64
 
 
 def _return_self(method):
+    # functools.wraps also sets __wrapped__, which scripts/generate_pyi.py
+    # follows to write the C++ signature into the stubs
+    @_functools.wraps(method)
     def inplace(self, *args, **kwargs):
         method(self, *args, **kwargs)
         return self
-    inplace.__name__ = method.__name__
-    inplace.__doc__ = method.__doc__
     return inplace
 
 

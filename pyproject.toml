@@ -88,7 +88,7 @@ cu130 = [
 
 [tool.setuptools]
 packages = { find = { where = ["."], include = ["raxis", "raxis.*"]} }
-package-data = { "raxis.lib" = ["**/*"], "raxis" = ["include/**/*", "share/**/*", "_C/*.pyi"] }
+package-data = { "raxis.lib" = ["**/*"], "raxis" = ["include/**/*", "share/**/*", "_C/*.pyi", "py.typed"] }
 
 [tool.setuptools.dynamic]
 version = {attr = "raxis.__version__"}
