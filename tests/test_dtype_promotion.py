@@ -633,3 +633,10 @@ class TestFillPreservesDtype:
         r = raxis.ones((4,), dtype=r_dt)
         r.zero_()
         assert r.dtype == r_dt, f"zero_ changed dtype from {r_dt} to {r.dtype}"
+
+@pytest.mark.parametrize("r_dtype,t_dtype", SHARED_DTYPES)
+def test_dtype_properties(r_dtype, t_dtype):
+    assert r_dtype.is_floating == t_dtype.is_floating_point
+    assert r_dtype.is_signed == t_dtype.is_signed
+    assert r_dtype.is_integral == (not t_dtype.is_floating_point and t_dtype != torch.bool)
+    assert r_dtype.itemsize == t_dtype.itemsize

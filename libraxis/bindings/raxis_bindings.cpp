@@ -118,7 +118,7 @@ PYBIND11_MODULE(_C, c) {
         .def_property_readonly("name", &raxis::Dtype::name)
         .def_property_readonly("itemsize", &raxis::Dtype::itemsize)
         .def_property_readonly("is_floating", &raxis::Dtype::is_floating)
-        .def_property_readonly("is_integral", &raxis::Dtype::is_integral)
+        .def_property_readonly("is_integral", [](const raxis::Dtype& d) { return d.is_integral(); })
         .def_property_readonly("is_signed", &raxis::Dtype::is_signed)
         .def("__repr__", [](const raxis::Dtype& d) {
             return d.name();
@@ -597,8 +597,6 @@ PYBIND11_MODULE(_C, c) {
             py::arg("device"), py::arg("dtype"), py::arg("non_blocking") = false)
         .def("pin_memory", &raxis::Tensor::pin_memory)
         .def("is_pinned", &raxis::Tensor::is_pinned)
-        .def("detach",
-            py::overload_cast<>(&raxis::Tensor::detach, py::const_))
         .def("cpu", &raxis::Tensor::cpu)
         .def("cuda", [](const raxis::Tensor& self, std::optional<raxis::Device> device, bool non_blocking) {
             if (!device) return self.cuda(non_blocking);
