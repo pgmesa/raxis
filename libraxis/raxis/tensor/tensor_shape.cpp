@@ -5,7 +5,9 @@
 #include <numeric>
 #include <algorithm>
 
+#include <raxis/ops/copy.h>
 #include <raxis/tensor/tensor.h>
+#include <raxis/tensor/factories.h>
 #include <raxis/tensor/shape_utils.h>
 #include <raxis/tensor/tensor_indexing.h>
 #include <raxis/autograd/grad_mode.h>
@@ -279,6 +281,41 @@ Tensor expand(const Tensor& self, IntArrayRef shape) {
 
 Tensor broadcast_to(const Tensor& self, IntArrayRef shape) {
     return ops::expand(self, shape);
+}
+
+// From: aten/src/ATen/native/TensorShape.cpp (repeat)
+// One copy into the output, as torch, which writes it through unfold. Here
+// with two views: the output [r0 * a0, r1 * a1] seen as [r0, a0, r1, a1]
+// (the same memory), and self seen with that shape too, with stride 0 on the
+// r dims, so every copy reads the same elements of self.
+Tensor repeat(const Tensor& self, IntArrayRef repeats) {
+    const int64_t ndim = static_cast<int64_t>(repeats.size());
+    RAXIS_CHECK(ndim >= self.ndim(),
+        "Number of dimensions of repeat dims can not be smaller than number of dimensions of tensor");
+    const int64_t new_dims = ndim - self.ndim();
+
+    DimVector result_shape(ndim);
+    DimVector split_shape(2 * ndim);
+    DimVector self_strides(2 * ndim, 0);
+    for (int64_t d = 0; d < ndim; ++d) {
+        RAXIS_CHECK(repeats[d] >= 0,
+            "Trying to create tensor with negative dimension ", repeats[d], ": ", repeats);
+        // New leading dims have size 1, so their stride never matters
+        int64_t size = d < new_dims ? 1 : self.shape()[d - new_dims];
+        result_shape[d] = repeats[d] * size;
+        split_shape[2 * d] = repeats[d];
+        split_shape[2 * d + 1] = size;
+        self_strides[2 * d + 1] = d < new_dims ? 0 : self.strides()[d - new_dims];
+    }
+
+    Tensor result = empty(result_shape, self.options());
+    if (result.numel() == 0) {
+        return result;
+    }
+    Tensor source = make_view(self, self.storage_offset(), split_shape, self_strides, false);
+    Tensor target = make_view(result, 0, split_shape, compute_strides(split_shape), false);
+    ::raxis::copy(source, target);
+    return result;
 }
 
 // From: aten/src/ATen/native/TensorShape.cpp

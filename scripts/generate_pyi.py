@@ -66,7 +66,8 @@ def nonzero(self, *, as_tuple: typing.Literal[True]) -> tuple[Tensor, ...]: ...'
 
 # Shapes also taken as separate ints (x.view(3, 4), raxis.zeros(3, 4)), see
 # _sizes_as_varargs in raxis/__init__.py
-TENSOR_SIZE_VARARGS = ['view', 'reshape', 'permute', 'expand', 'flip']
+TENSOR_SIZE_VARARGS = ['view', 'reshape', 'permute', 'expand', 'flip', 'repeat',
+                       'new_empty', 'new_zeros', 'new_ones']
 FUNCTION_SIZE_VARARGS = ['empty', 'zeros', 'ones', 'rand', 'randn']
 
 
@@ -98,6 +99,8 @@ def add_size_varargs(text: str, name: str, indent: str) -> str:
     if signature is None:
         raise RuntimeError(f'generate_pyi: cannot read the signature of {name}: {def_line}')
     self_arg, size_arg, rest, result = signature.groups()
+    # After *size the rest is keyword-only already: (*size, *, dtype) is invalid
+    rest = rest.removeprefix(', *')
     varargs = f'def {name}({self_arg or ""}*{size_arg}: _int{rest}) -> {result}: ...'
     sized = def_line[len(indent):].rstrip(':') + ': ...'
     stub = f'@typing.overload\n{sized}\n@typing.overload\n{varargs}'

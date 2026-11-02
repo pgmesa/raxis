@@ -401,6 +401,23 @@ Tensor Tensor::broadcast_to(IntArrayRef target_shape) const {
     return ::raxis::broadcast_to(*this, target_shape);
 }
 
+// From: aten/src/ATen/native/TensorShape.cpp (view_as, reshape_as, expand_as)
+Tensor Tensor::view_as(const Tensor& other) const {
+    return view(other.shape());
+}
+
+Tensor Tensor::reshape_as(const Tensor& other) const {
+    return reshape(other.shape());
+}
+
+Tensor Tensor::expand_as(const Tensor& other) const {
+    return expand(other.shape());
+}
+
+Tensor Tensor::repeat(IntArrayRef repeats) const {
+    return ::raxis::repeat(*this, repeats);
+}
+
 // ========================= Indexing =========================
 Tensor Tensor::index(ArrayRef<indexing::TensorIndex> indices) const {
     return indexing::get_item(*this, indices);
@@ -455,6 +472,23 @@ Tensor Tensor::pin_memory() const {
 
 bool Tensor::is_pinned() const {
     return ::raxis::is_pinned(*this);
+}
+
+// From: aten/src/ATen/native/TensorFactories.cpp (new_empty, new_zeros, ...)
+Tensor Tensor::new_empty(IntArrayRef shape, TensorOptions opts) const {
+    return ::raxis::empty(shape, options().merge_in(opts));
+}
+
+Tensor Tensor::new_zeros(IntArrayRef shape, TensorOptions opts) const {
+    return ::raxis::zeros(shape, options().merge_in(opts));
+}
+
+Tensor Tensor::new_ones(IntArrayRef shape, TensorOptions opts) const {
+    return ::raxis::ones(shape, options().merge_in(opts));
+}
+
+Tensor Tensor::new_full(IntArrayRef shape, Scalar fill_value, TensorOptions opts) const {
+    return ::raxis::full(shape, fill_value, options().merge_in(opts));
 }
 
 Tensor& Tensor::fill_(Scalar value) const {

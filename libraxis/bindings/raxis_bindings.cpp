@@ -33,6 +33,25 @@
 namespace py = pybind11;
 namespace dtypes = raxis::dtypes;
 
+// From: torch/csrc/utils/tensor_types.cpp (type_to_string): x.type() names
+// the legacy tensor classes, raxis.FloatTensor or raxis.cuda.FloatTensor
+static std::string legacy_type_name(const raxis::Tensor& self) {
+    const raxis::Dtype dtype = self.dtype();
+    std::string_view name = dtype == dtypes::Bool    ? "Bool"
+                          : dtype == dtypes::Uint8   ? "Byte"
+                          : dtype == dtypes::Int32   ? "Int"
+                          : dtype == dtypes::Int64   ? "Long"
+                          : dtype == dtypes::Float32 ? "Float"
+                          : "Double";
+    return std::string(self.is_cuda() ? "raxis.cuda." : "raxis.") + std::string(name) + "Tensor";
+}
+
+static raxis::TensorOptions make_options(
+    std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad
+) {
+    return raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
+}
+
 
 PYBIND11_MODULE(_C, c) {
     c.doc() = "Raxis Python bindings";
@@ -479,6 +498,12 @@ PYBIND11_MODULE(_C, c) {
         .def("expand", [](const raxis::Tensor& self, raxis::Vec shape) {
             return self.expand(shape);
         }, py::arg("size"))
+        .def("view_as", &raxis::Tensor::view_as, py::arg("other"))
+        .def("reshape_as", &raxis::Tensor::reshape_as, py::arg("other"))
+        .def("expand_as", &raxis::Tensor::expand_as, py::arg("other"))
+        .def("repeat", [](const raxis::Tensor& self, raxis::Vec repeats) {
+            return self.repeat(repeats);
+        }, py::arg("repeats"))
         .def("unbind", [](const raxis::Tensor& self, int64_t dim) {
             return raxis::unbind(self, dim);
         }, py::arg("dim") = 0)
@@ -595,6 +620,55 @@ PYBIND11_MODULE(_C, c) {
         .def("to",
             py::overload_cast<raxis::Device, raxis::Dtype, bool>(&raxis::Tensor::to, py::const_),
             py::arg("device"), py::arg("dtype"), py::arg("non_blocking") = false)
+        // From: torch/csrc/autograd/python_variable_methods.cpp (float, double, ...)
+        .def("float", [](const raxis::Tensor& self) { return self.to(dtypes::Float32); })
+        .def("double", [](const raxis::Tensor& self) { return self.to(dtypes::Float64); })
+        .def("int", [](const raxis::Tensor& self) { return self.to(dtypes::Int32); })
+        .def("long", [](const raxis::Tensor& self) { return self.to(dtypes::Int64); })
+        .def("bool", [](const raxis::Tensor& self) { return self.to(dtypes::Bool); })
+        .def("byte", [](const raxis::Tensor& self) { return self.to(dtypes::Uint8); })
+        .def("type", [](const raxis::Tensor& self) { return legacy_type_name(self); })
+        .def("type", [](const raxis::Tensor& self, raxis::Dtype dtype) { return self.to(dtype); },
+            py::arg("dtype"))
+        .def("type_as", [](const raxis::Tensor& self, const raxis::Tensor& other) {
+            return self.to(other.device(), other.dtype());
+        }, py::arg("other"))
+        .def("new_empty", [](const raxis::Tensor& self, raxis::VecOrInt size,
+                             std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
+            return self.new_empty(size, make_options(dtype, device, requires_grad));
+        }, py::arg("size"), py::kw_only(), py::arg("dtype") = py::none(), py::arg("device") = py::none(),
+           py::arg("requires_grad") = false)
+        .def("new_zeros", [](const raxis::Tensor& self, raxis::VecOrInt size,
+                             std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
+            return self.new_zeros(size, make_options(dtype, device, requires_grad));
+        }, py::arg("size"), py::kw_only(), py::arg("dtype") = py::none(), py::arg("device") = py::none(),
+           py::arg("requires_grad") = false)
+        .def("new_ones", [](const raxis::Tensor& self, raxis::VecOrInt size,
+                            std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
+            return self.new_ones(size, make_options(dtype, device, requires_grad));
+        }, py::arg("size"), py::kw_only(), py::arg("dtype") = py::none(), py::arg("device") = py::none(),
+           py::arg("requires_grad") = false)
+        .def("new_full", [](const raxis::Tensor& self, raxis::VecOrInt size, raxis::Scalar fill_value,
+                            std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
+            return self.new_full(size, fill_value, make_options(dtype, device, requires_grad));
+        }, py::arg("size"), py::arg("fill_value"), py::kw_only(), py::arg("dtype") = py::none(),
+           py::arg("device") = py::none(), py::arg("requires_grad") = false)
+        // As raxis.tensor(data), but with self's dtype and device by default
+        .def("new_tensor", [](const raxis::Tensor& self, py::object data,
+                              std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
+            py::object tensor = py::module_::import("raxis._C").attr("tensor");
+            return tensor(data, dtype.value_or(self.dtype()), device.value_or(self.device()), requires_grad)
+                .cast<raxis::Tensor>();
+        }, py::arg("data"), py::kw_only(), py::arg("dtype") = py::none(), py::arg("device") = py::none(),
+           py::arg("requires_grad") = false)
+        .def("element_size", [](const raxis::Tensor& self) { return self.dtype().itemsize(); })
+        .def_property_readonly("itemsize", [](const raxis::Tensor& self) { return self.dtype().itemsize(); })
+        .def_property_readonly("nbytes", [](const raxis::Tensor& self) {
+            return self.numel() * static_cast<int64_t>(self.dtype().itemsize());
+        })
+        .def("nelement", &raxis::Tensor::numel)
+        .def("ndimension", &raxis::Tensor::ndim)
+        .def("is_floating_point", [](const raxis::Tensor& self) { return self.dtype().is_floating(); })
         .def("pin_memory", &raxis::Tensor::pin_memory)
         .def("is_pinned", &raxis::Tensor::is_pinned)
         .def("cpu", &raxis::Tensor::cpu)

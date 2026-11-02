@@ -187,7 +187,7 @@ del _result_type
 
 for _name in ("empty", "zeros", "ones", "rand", "randn"):
     globals()[_name] = _sizes_as_varargs(globals()[_name])
-for _name in ("reshape", "view", "permute", "expand", "flip"):
+for _name in ("reshape", "view", "permute", "expand", "flip", "repeat", "new_empty", "new_zeros", "new_ones"):
     setattr(Tensor, _name, _method_sizes_as_varargs(getattr(Tensor, _name)))
 del _name
 

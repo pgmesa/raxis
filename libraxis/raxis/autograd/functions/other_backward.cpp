@@ -485,6 +485,29 @@ TensorList ExpandBackward0::apply(const TensorList& grads) {
 }
 
 
+RepeatBackward0::RepeatBackward0(const Tensor& self, IntArrayRef repeats)
+    : self_shape_(self.shape()), repeats_(repeats.begin(), repeats.end()) {}
+
+std::string RepeatBackward0::name() const { return "RepeatBackward0"; }
+
+// From: torch/csrc/autograd/FunctionsManual.cpp (repeat_backward)
+// The gradient [r0 * a0, r1 * a1] seen as [r0, a0, r1, a1]: summing the r
+// dims adds the gradients of every copy of each element (with a repeat of 0
+// the grad is empty and the sum gives zeros)
+TensorList RepeatBackward0::apply(const TensorList& grads) {
+    const int64_t ndim = static_cast<int64_t>(repeats_.size());
+    const int64_t new_dims = ndim - static_cast<int64_t>(self_shape_.size());
+    DimVector split_shape;
+    DimVector repeat_dims;
+    for (int64_t d = 0; d < ndim; ++d) {
+        repeat_dims.push_back(2 * d);
+        split_shape.push_back(repeats_[d]);
+        split_shape.push_back(d < new_dims ? 1 : self_shape_[d - new_dims]);
+    }
+    return {grads[0].reshape(split_shape).sum(repeat_dims).reshape(self_shape_)};
+}
+
+
 SelectBackward0::SelectBackward0(const Tensor& self, int64_t dim, int64_t index)
     : self_shape_(self.shape()), dim_(dim), index_(index) {}
 

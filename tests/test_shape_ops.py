@@ -357,3 +357,65 @@ def test_data_ptr_follows_the_offset():
         assert r_delta == t_delta == view(t).storage_offset() * itemsize
     assert r.transpose(0, 1).data_ptr() == r.data_ptr()
     assert r.clone().data_ptr() != r.data_ptr()
+
+
+# ===========================================================================
+# repeat, view_as / reshape_as / expand_as
+# ===========================================================================
+
+REPEAT_CASES = [
+    ((3,),      (2,)),
+    ((2, 3),    (2, 1)),
+    ((2, 3),    (1, 3)),
+    ((2, 3),    (2, 2, 2)),     # a new leading dim
+    ((2, 1, 3), (1, 4, 1)),
+    ((),        (3, 2)),
+    ((2, 3),    (0, 2)),        # empty result
+]
+
+
+@pytest.mark.parametrize("shape,repeats", REPEAT_CASES)
+def test_repeat(shape, repeats, device):
+    r, t = make_pair(randf(*shape), device)
+    r_out, t_out = r.repeat(repeats), t.repeat(repeats)
+    check_match(r_out, t_out)
+    assert r_out.is_contiguous()
+
+
+def test_repeat_varargs_and_strided_input(device):
+    r, t = make_pair(randf(4, 6), device)
+    r, t = r[:, ::2].transpose(0, 1), t[:, ::2].transpose(0, 1)
+    check_match(r.repeat(2, 3), t.repeat(2, 3))
+    out = r.repeat(1, 1)
+    out.zero_()
+    assert r.abs().sum().item() > 0, "repeat must copy, not alias"
+
+
+@pytest.mark.parametrize("shape,repeats", REPEAT_CASES)
+def test_repeat_backward(shape, repeats, device):
+    r, t = make_grad_pair(randf(*shape), device)
+    w = randf(*t.repeat(repeats).shape, seed=7)
+    rw, tw = make_pair(w, device)
+    (r.repeat(repeats) * rw).sum().backward()
+    (t.repeat(repeats) * tw).sum().backward()
+    check_match(r.grad, t.grad)
+    assert r.repeat(repeats).grad_fn.name() == t.repeat(repeats).grad_fn.name()
+
+
+def test_repeat_errors():
+    r, t = make_pair(randf(2, 3))
+    for repeats in [(2,), (2, -1)]:
+        with pytest.raises(RuntimeError):
+            t.repeat(repeats)
+        with pytest.raises(RuntimeError):
+            r.repeat(repeats)
+
+
+def test_view_reshape_expand_as(device):
+    r, t = make_pair(randf(2, 6), device)
+    r_other, t_other = make_pair(randf(3, 4), device)
+    check_match(r.view_as(r_other), t.view_as(t_other))
+    check_match(r.transpose(0, 1).reshape_as(r_other), t.transpose(0, 1).reshape_as(t_other))
+    r_row, t_row = make_pair(randf(1, 4), device)
+    check_match(r_row.expand_as(r_other), t_row.expand_as(t_other))
+    assert r_row.expand_as(r_other).stride() == t_row.expand_as(t_other).stride()

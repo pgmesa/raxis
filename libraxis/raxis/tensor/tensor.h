@@ -175,6 +175,11 @@ public:
     Tensor flatten(int64_t start_dim = 0, int64_t end_dim = -1) const;
     Tensor expand(IntArrayRef shape) const;
     Tensor broadcast_to(IntArrayRef shape) const;
+    Tensor view_as(const Tensor& other) const;
+    Tensor reshape_as(const Tensor& other) const;
+    Tensor expand_as(const Tensor& other) const;
+    // Not a view: copies self repeats[d] times along each dim
+    Tensor repeat(IntArrayRef repeats) const;
 
     // ========================= Indexing =========================
     Tensor index(ArrayRef<indexing::TensorIndex> indices) const;
@@ -197,6 +202,12 @@ public:
     /// without the CPU (so .to("cuda", non_blocking=true) does not wait)
     Tensor pin_memory() const;
     bool is_pinned() const;
+
+    // New tensors with self's dtype and device unless options say otherwise
+    Tensor new_empty(IntArrayRef shape, TensorOptions options = {}) const;
+    Tensor new_zeros(IntArrayRef shape, TensorOptions options = {}) const;
+    Tensor new_ones(IntArrayRef shape, TensorOptions options = {}) const;
+    Tensor new_full(IntArrayRef shape, Scalar fill_value, TensorOptions options = {}) const;
 
     Tensor& fill_(Scalar value) const;
     Tensor& zero_() const;

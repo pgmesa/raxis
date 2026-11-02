@@ -298,6 +298,17 @@ private:
     DimVector self_shape_;
 };
 
+class RAXIS_API RepeatBackward0 : public Node {
+public:
+    RepeatBackward0(const Tensor& self, IntArrayRef repeats);
+    std::string name() const override;
+    TensorList apply(const TensorList& grads) override;
+
+private:
+    DimVector self_shape_;
+    DimVector repeats_;
+};
+
 class RAXIS_API SelectBackward0 : public Node {
 public:
     SelectBackward0(const Tensor& self, int64_t dim, int64_t index);

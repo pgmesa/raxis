@@ -209,6 +209,17 @@ Tensor broadcast_to(const Tensor& self, IntArrayRef shape) {
     return expand(self, shape);
 }
 
+Tensor repeat(const Tensor& self, IntArrayRef repeats) {
+    Tensor result = ops::repeat(self, repeats);
+    if (autograd::requires_autograd(self)) {
+        auto grad_fn = std::make_shared<autograd::RepeatBackward0>(self, repeats);
+        grad_fn->set_num_inputs(1);
+        autograd::set_next_edges(grad_fn, self);
+        autograd::set_autograd_meta(result, grad_fn);
+    }
+    return result;
+}
+
 
 // ============================================================
 // where / clamp
