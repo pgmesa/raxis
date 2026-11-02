@@ -10,6 +10,7 @@
 #include <cuda_runtime.h>
 
 #include <raxis/core/dtype.h>
+#include <raxis/core/type_cast.h>
 #include <raxis/core/device_guard.h>
 #include <raxis/cuda/cuda_exception.h>
 #include <raxis/cuda/cuda_functions.h>
@@ -63,8 +64,8 @@ __device__ inline dest_t fetch_and_cast(DtypeKind src, const char* ptr) {
         case DtypeKind::Uint8:   return static_cast<dest_t>(*reinterpret_cast<const uint8_t*>(ptr));
         case DtypeKind::Int32:   return static_cast<dest_t>(*reinterpret_cast<const int32_t*>(ptr));
         case DtypeKind::Int64:   return static_cast<dest_t>(*reinterpret_cast<const int64_t*>(ptr));
-        case DtypeKind::Float32: return static_cast<dest_t>(*reinterpret_cast<const float*>(ptr));
-        case DtypeKind::Float64: return static_cast<dest_t>(*reinterpret_cast<const double*>(ptr));
+        case DtypeKind::Float32: return cast_to<dest_t>(*reinterpret_cast<const float*>(ptr));
+        case DtypeKind::Float64: return cast_to<dest_t>(*reinterpret_cast<const double*>(ptr));
         default:                 return dest_t{};
     }
 }
@@ -73,7 +74,7 @@ template <typename src_t>
 __device__ inline void cast_and_store(DtypeKind dest, char* ptr, src_t value) {
     switch (dest) {
         case DtypeKind::Bool:    *reinterpret_cast<bool*>(ptr) = static_cast<bool>(value); break;
-        case DtypeKind::Uint8:   *reinterpret_cast<uint8_t*>(ptr) = static_cast<uint8_t>(value); break;
+        case DtypeKind::Uint8:   *reinterpret_cast<uint8_t*>(ptr) = cast_to<uint8_t>(value); break;
         case DtypeKind::Int32:   *reinterpret_cast<int32_t*>(ptr) = static_cast<int32_t>(value); break;
         case DtypeKind::Int64:   *reinterpret_cast<int64_t*>(ptr) = static_cast<int64_t>(value); break;
         case DtypeKind::Float32: *reinterpret_cast<float*>(ptr) = static_cast<float>(value); break;

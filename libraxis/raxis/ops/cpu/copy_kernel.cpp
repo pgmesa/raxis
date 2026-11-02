@@ -4,6 +4,7 @@
 #include <raxis/ops/copy.h>
 
 #include <raxis/core/dtype.h>
+#include <raxis/core/type_cast.h>
 #include <raxis/tensor/tensor_iterator.h>
 
 
@@ -29,7 +30,7 @@ void copy_kernel(TensorIterator& iter, bool /*non_blocking*/) {
         dtype_inp.dispatch_all_types([&]<typename src_T>(std::type_identity<src_T>) {
             dtype_out.dispatch_all_types([&]<typename dest_T>(std::type_identity<dest_T>) {
                 cpu_kernel(iter, [](src_T x) -> dest_T {
-                    return static_cast<dest_T>(x);
+                    return cast_to<dest_T>(x);
                 });
             });
         });
