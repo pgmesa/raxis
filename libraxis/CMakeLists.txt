@@ -1,6 +1,14 @@
 cmake_minimum_required(VERSION 3.22 FATAL_ERROR)
 
-project(raxis VERSION 0.1.0 LANGUAGES CXX)
+# One version for the Python package and the C++ library (RaxisConfigVersion,
+# build_config.h): the one in raxis/__init__.py
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/../raxis/__init__.py" RAXIS_VERSION_LINE
+    REGEX "^__version__ = \"[0-9]+\\.[0-9]+\\.[0-9]+\"")
+string(REGEX MATCH "[0-9]+\\.[0-9]+\\.[0-9]+" RAXIS_VERSION "${RAXIS_VERSION_LINE}")
+if(NOT RAXIS_VERSION)
+    message(FATAL_ERROR "No __version__ = \"X.Y.Z\" in ../raxis/__init__.py")
+endif()
+project(raxis VERSION ${RAXIS_VERSION} LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
