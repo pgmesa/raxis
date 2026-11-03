@@ -263,14 +263,23 @@ void TensorIterator::compute_shape(const TensorIteratorConfig& config) {
 }
 
 // From: aten/src/ATen/TensorIterator.cpp (mark_resize_outputs)
+// Outputs cannot be broadcast: an output of another shape is either resized
+// (out= that is not also an input) or an error. Without the check, b.add_(a)
+// with b of shape [3, 1] and a of shape [3, 4] would get a stride of 0 and
+// write each row's four sums into the same element
 void TensorIterator::mark_resize_outputs(const TensorIteratorConfig& config) {
-    if (config.static_shape_.has_value() || !config.resize_outputs_) return;
+    if (config.static_shape_.has_value()) return;
 
     for (int i = 0; i < num_outputs_; i++) {
         Operand& op = operands_[i];
-        if (op.tensor().defined() && !op.is_read_write && op.tensor().shape() != IntArrayRef(shape_)) {
+        if (!op.tensor().defined() || op.tensor().shape() == IntArrayRef(shape_)) continue;
+        if (config.resize_outputs_ && !op.is_read_write) {
             op.will_resize = true;
+            continue;
         }
+        // A reduction's output has the reduced shape, not the input's
+        RAXIS_CHECK(is_reduction_, "output with shape ", op.tensor().shape(),
+                    " doesn't match the broadcast shape ", IntArrayRef(shape_));
     }
 }
 
