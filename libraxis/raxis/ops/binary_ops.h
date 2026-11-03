@@ -27,11 +27,6 @@ DECLARE_DISPATCH(binary_fn, logical_and_stub);
 DECLARE_DISPATCH(binary_fn, logical_or_stub);
 
 
-RAXIS_API Tensor& add_out(const Tensor& a, const Tensor& b, Tensor& out);
-RAXIS_API Tensor& sub_out(const Tensor& a, const Tensor& b, Tensor& out);
-RAXIS_API Tensor& mul_out(const Tensor& a, const Tensor& b, Tensor& out);
-RAXIS_API Tensor& div_out(const Tensor& a, const Tensor& b, Tensor& out);
-
 // --- Differentiable ---
 // Arithmetic
 RAXIS_DECLARE_BINARY_ARITHMETIC(add);
@@ -46,8 +41,11 @@ RAXIS_DECLARE_BINARY_REVERSED(div)
 // Elementwise
 RAXIS_DECLARE_BINARY_OP(maximum);
 RAXIS_DECLARE_BINARY_OP(minimum);
+RAXIS_DECLARE_BINARY_OP_OUT(maximum);
+RAXIS_DECLARE_BINARY_OP_OUT(minimum);
 
 // --- Non-differentiable ---
+// Their out= variants need no autograd check: only the version of out moves
 // Comparison
 RAXIS_API Tensor gt(const Tensor& a, const Tensor& b);
 RAXIS_API Tensor gt(const Tensor& a, Scalar s);
@@ -61,9 +59,23 @@ RAXIS_API Tensor eq(const Tensor& a, const Tensor& b);
 RAXIS_API Tensor eq(const Tensor& a, Scalar s);
 RAXIS_API Tensor ne(const Tensor& a, const Tensor& b);
 RAXIS_API Tensor ne(const Tensor& a, Scalar s);
+RAXIS_API Tensor& gt_out(const Tensor& a, const Tensor& b, Tensor& out);
+RAXIS_API Tensor& gt_out(const Tensor& a, Scalar s, Tensor& out);
+RAXIS_API Tensor& ge_out(const Tensor& a, const Tensor& b, Tensor& out);
+RAXIS_API Tensor& ge_out(const Tensor& a, Scalar s, Tensor& out);
+RAXIS_API Tensor& lt_out(const Tensor& a, const Tensor& b, Tensor& out);
+RAXIS_API Tensor& lt_out(const Tensor& a, Scalar s, Tensor& out);
+RAXIS_API Tensor& le_out(const Tensor& a, const Tensor& b, Tensor& out);
+RAXIS_API Tensor& le_out(const Tensor& a, Scalar s, Tensor& out);
+RAXIS_API Tensor& eq_out(const Tensor& a, const Tensor& b, Tensor& out);
+RAXIS_API Tensor& eq_out(const Tensor& a, Scalar s, Tensor& out);
+RAXIS_API Tensor& ne_out(const Tensor& a, const Tensor& b, Tensor& out);
+RAXIS_API Tensor& ne_out(const Tensor& a, Scalar s, Tensor& out);
  
 // Logical
 RAXIS_API Tensor logical_and(const Tensor& a, const Tensor& b);
 RAXIS_API Tensor logical_or(const Tensor& a, const Tensor& b);
+RAXIS_API Tensor& logical_and_out(const Tensor& a, const Tensor& b, Tensor& out);
+RAXIS_API Tensor& logical_or_out(const Tensor& a, const Tensor& b, Tensor& out);
 
 }

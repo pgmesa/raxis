@@ -67,12 +67,18 @@ DECLARE_DISPATCH(pow_tensor_scalar_fn, pow_tensor_scalar_stub);
 RAXIS_API Tensor pow(const Tensor& base, const Tensor& exp);
 RAXIS_API Tensor pow(const Tensor& base, Scalar exp);
 RAXIS_API Tensor pow(Scalar base, const Tensor& exp);
+RAXIS_API Tensor& pow_out(const Tensor& base, const Tensor& exp, Tensor& out);
+RAXIS_API Tensor& pow_out(const Tensor& base, Scalar exp, Tensor& out);
+RAXIS_API Tensor& pow_out(Scalar base, const Tensor& exp, Tensor& out);
 
 namespace ops {
 
 RAXIS_API Tensor pow(const Tensor& base, const Tensor& exp);
 RAXIS_API Tensor pow(const Tensor& base, Scalar exp);
 RAXIS_API Tensor pow(Scalar base, const Tensor& exp);
+RAXIS_API Tensor& pow_out(const Tensor& base, const Tensor& exp, Tensor& out);
+RAXIS_API Tensor& pow_out(const Tensor& base, Scalar exp, Tensor& out);
+RAXIS_API Tensor& pow_out(Scalar base, const Tensor& exp, Tensor& out);
 
 }
 

@@ -185,6 +185,28 @@ for _name in ("max", "min", "sort", "topk"):
     setattr(Tensor, _name, _named_result(getattr(Tensor, _name), _result_type))
 del _result_type
 
+def _return_out(fn):
+    """pybind11 wraps the tensor an out= overload returns in a new Python
+    object. Return the `out` that was passed instead, as torch does."""
+    @_functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        out = kwargs.get("out")
+        result = fn(*args, **kwargs)
+        return result if out is None else out
+    return wrapper
+
+
+# The functions with out= (the elementwise ones for now)
+_OUT_FUNCTIONS = (
+    "add", "sub", "mul", "div", "maximum", "minimum", "pow",
+    "gt", "ge", "lt", "le", "eq", "ne", "logical_and", "logical_or", "logical_not",
+    "neg", "abs", "sign", "ceil", "floor", "round", "exp", "expm1", "log", "log2",
+    "log10", "log1p", "sqrt", "rsqrt", "reciprocal", "sigmoid", "sin", "cos", "tan",
+    "asin", "acos", "atan", "sinh", "cosh", "tanh", "erf", "erfc",
+)
+for _name in _OUT_FUNCTIONS:
+    globals()[_name] = _return_out(globals()[_name])
+
 for _name in ("empty", "zeros", "ones", "rand", "randn"):
     globals()[_name] = _sizes_as_varargs(globals()[_name])
 for _name in ("reshape", "view", "permute", "expand", "flip", "repeat", "new_empty", "new_zeros", "new_ones"):

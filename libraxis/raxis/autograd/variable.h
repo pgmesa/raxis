@@ -1,5 +1,6 @@
 #pragma once
 
+#include <initializer_list>
 #include <memory>
 #include <utility>
 
@@ -127,6 +128,12 @@ RAXIS_API void save_original_self(Node& grad_fn, const Tensor& self);
 
 // From: torch/csrc/autograd/variable.cpp (bump_version)
 RAXIS_API void bump_version(const Tensor& self);
+
+// From: torch/csrc/autograd/VariableTypeUtils.h (throw_error_out_requires_grad)
+// A differentiable op with out= writes a tensor that has no place in the
+// graph, so it cannot be recorded: with grad mode on, none of its arguments,
+// out included, may require grad
+RAXIS_API void check_out_no_grad(const char* op_name, std::initializer_list<const Tensor*> args);
 
 // From: torch/csrc/autograd/variable.cpp (rebase_history)
 // grad_fn becomes the history of self. If self is a view, the op wrote a

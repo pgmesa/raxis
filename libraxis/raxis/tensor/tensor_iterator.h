@@ -46,6 +46,8 @@ struct RAXIS_API Operand {
     StrideVector stride_bytes;
     bool is_output = false;
     bool is_read_write = false;
+    /// A defined output of another shape that this op resizes (out=)
+    bool will_resize = false;
 
     /// The desired device and type for the operand. For inputs, this specifies
     /// that the input should be converted to this type if necessary. For outputs,
@@ -129,6 +131,16 @@ public:
     //   fill_ can disable it.
     TensorIteratorConfig& check_mem_overlap(const bool _check) {
         check_mem_overlap_ = _check;
+        return *this;
+    }
+
+    // From: aten/src/ATen/TensorIterator.h (resize_outputs)
+    // Sets the resize_outputs_ flag, false by default (PyTorch's default is
+    // true; here only the out= variants set it). If true, a defined output
+    // that is not also an input does not take part in broadcasting, and it
+    // is resized when its shape is not the result's (resize_output)
+    TensorIteratorConfig& resize_outputs(bool _resize) {
+        resize_outputs_ = _resize;
         return *this;
     }
 
@@ -233,6 +245,7 @@ private:
     std::optional<Device> static_device_ = std::nullopt;
     bool allow_cpu_scalars_ = false;
     bool is_reduction_ = false;
+    bool resize_outputs_ = false;
     bool check_mem_overlap_ = true;
     bool check_all_same_dtype_ = true;
     bool check_all_same_device_ = true;
@@ -507,6 +520,7 @@ private:
     void populate_operands(TensorIteratorConfig&);
     void compute_mem_overlaps(const TensorIteratorConfig&);
     void compute_shape(const TensorIteratorConfig&);
+    void mark_resize_outputs(const TensorIteratorConfig&);
     void check_output_shapes();
     void compute_types(const TensorIteratorConfig&);
     Dtype compute_common_dtype();

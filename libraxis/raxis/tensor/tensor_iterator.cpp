@@ -24,6 +24,7 @@
 
 #include <raxis/tensor/tensor.h>
 #include <raxis/tensor/factories.h>
+#include <raxis/tensor/resize.h>
 #include <raxis/tensor/shape_utils.h>
 #include <raxis/tensor/type_promotion.h>
 #include <raxis/tensor/memory_overlap.h>
@@ -155,6 +156,8 @@ void TensorIterator::build(TensorIteratorConfig& config) {
     compute_mem_overlaps(config);
     // Compute the broadcasted shape
     compute_shape(config);
+    // Mark outputs of another shape to be resized (out=)
+    mark_resize_outputs(config);
     // Compute the result dtype and device
     compute_types(config);
 
@@ -238,6 +241,9 @@ void TensorIterator::compute_shape(const TensorIteratorConfig& config) {
     // First pass: compute shape from inputs and defined outputs (with broadcasting)
     for (Operand& op: operands_) {
         if (!op.tensor().defined()) continue;
+        // An output that gets resized does not take part (an in-place output
+        // still does, as the input it also is)
+        if (config.resize_outputs_ && op.is_output) continue;
         
         IntArrayRef shape = op.tensor().shape();
         if (shape.empty()) has_scalars = true;
@@ -256,9 +262,22 @@ void TensorIterator::compute_shape(const TensorIteratorConfig& config) {
     all_ops_are_scalars_ = !has_tensors;
 }
 
+// From: aten/src/ATen/TensorIterator.cpp (mark_resize_outputs)
+void TensorIterator::mark_resize_outputs(const TensorIteratorConfig& config) {
+    if (config.static_shape_.has_value() || !config.resize_outputs_) return;
+
+    for (int i = 0; i < num_outputs_; i++) {
+        Operand& op = operands_[i];
+        if (op.tensor().defined() && !op.is_read_write && op.tensor().shape() != IntArrayRef(shape_)) {
+            op.will_resize = true;
+        }
+    }
+}
+
 void TensorIterator::compute_strides(const TensorIteratorConfig& config) {
     for (Operand& op: operands_) {
-        if (!op.tensor().defined()) continue;
+        // An output to resize is laid out later, as an undefined one
+        if (!op.tensor().defined() || op.will_resize) continue;
 
         IntArrayRef original_shape = config.static_shape_? shape_ : op.tensor().shape();
         IntArrayRef original_stride = op.tensor().strides();
@@ -448,6 +467,13 @@ void TensorIterator::compute_types(const TensorIteratorConfig& config) {
         if (common_device == DeviceType::CPU) {
             if (config.cast_common_dtype_to_outputs_ && op.is_output && op.current_dtype != common_dtype_) {
                 RAXIS_INTERNAL_ASSERT(op.tensor().defined());
+                if (op.will_resize) {
+                    // The result is computed in a temporary and copied into
+                    // the output at the end: give both the result's shape
+                    // now, contiguous (PyTorch lays them out as the inputs)
+                    resize_output(op.tensor(), shape_);
+                    op.will_resize = false;
+                }
                 op.exchange_tensor(MaybeOwned<Tensor>::owned(
                     empty_like(op.tensor(), common_dtype_, MemoryFormat::Contiguous)
                 ));
@@ -501,9 +527,10 @@ bool TensorIterator::fast_setup() {
     }
 
     // Check all defined operands are contiguous
-    // Undefined outputs are skipped, they will be allocated contiguously
+    // Undefined outputs are skipped, they will be allocated contiguously,
+    // and so are outputs to resize
     for (const Operand& op : operands_) {
-        if (!op.tensor().defined()) {
+        if (!op.tensor().defined() || op.will_resize) {
             continue;
         }
         if (!op.tensor().is_contiguous()) {
@@ -516,6 +543,8 @@ bool TensorIterator::fast_setup() {
         Operand& op = operands_[i];
         if (!op.tensor().defined()) {
             op.set_tensor(MaybeOwned<Tensor>::owned(empty(shape_, output_options(op))));
+        } else if (op.will_resize) {
+            resize_output(op.tensor(), shape_);
         }
         op.current_dtype = op.target_dtype;
     }
@@ -629,6 +658,10 @@ DimVector TensorIterator::invert_perm(IntArrayRef input) const {
 
 void TensorIterator::set_output(int64_t output_idx, IntArrayRef shape, IntArrayRef strides) {
     Operand& op = operands_[output_idx];
+    if (op.will_resize) {
+        resize_output(op.tensor(), shape, strides);
+        return;
+    }
     if (op.tensor().defined()) return;
     
     if (strides.empty()) {
@@ -642,7 +675,7 @@ void TensorIterator::set_output(int64_t output_idx, IntArrayRef shape, IntArrayR
 void TensorIterator::allocate_outputs() {
     for (int out_idx = 0; out_idx < num_outputs_; out_idx++) {
         Operand& op = operands_[out_idx];
-        if (op.tensor().defined()) continue;
+        if (op.tensor().defined() && !op.will_resize) continue;
         
         RAXIS_INTERNAL_ASSERT(op.is_type_defined(), "no type for operand", out_idx);
 

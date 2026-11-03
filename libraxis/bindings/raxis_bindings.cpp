@@ -17,6 +17,7 @@
 #include <raxis/util/build_config.h>
 #include <raxis/ops/dispatch_stub.h>
 #include <raxis/util/parallel.h>
+#include <raxis/util/warning.h>
 #include <raxis/autograd/grad_mode.h>
 #include <raxis/autograd/graph.h>
 #include <raxis/autograd/saved_variable.h>
@@ -55,6 +56,14 @@ static raxis::TensorOptions make_options(
 
 PYBIND11_MODULE(_C, c) {
     c.doc() = "Raxis Python bindings";
+
+    // RAXIS_WARN goes to Python's warnings module, as TORCH_WARN does; with
+    // warnings as errors the exception propagates out of the op
+    raxis::set_warning_handler([](const std::string& message) {
+        if (PyErr_WarnEx(PyExc_UserWarning, message.c_str(), 1) != 0) {
+            throw py::error_already_set();
+        }
+    });
    
     c.def("get_build_config", &raxis::get_build_config, "Get build configuration");
     c.def("get_cpu_capability", []() -> std::string {
@@ -1584,6 +1593,71 @@ PYBIND11_MODULE(_C, c) {
     c.def("relu_",
         py::overload_cast<raxis::Tensor&>(&raxis::relu_),
         py::arg("input"));
+    // out= overloads. A call with out= matches these and one without it the
+    // overloads above. They return out (raxis/__init__.py hands back the same
+    // Python object, as torch)
+#define RAXIS_BIND_UNARY_OUT(name)                                                  c.def(#name, [](const raxis::Tensor& input, raxis::Tensor& out) {                   return raxis::name##_out(input, out);                                       }, py::arg("input"), py::kw_only(), py::arg("out"));
+#define RAXIS_BIND_BINARY_OUT(name, Other, arg0, arg1)                              c.def(#name, [](const raxis::Tensor& a, Other b, raxis::Tensor& out) {              return raxis::name##_out(a, b, out);                                        }, py::arg(arg0), py::arg(arg1), py::kw_only(), py::arg("out"));
+    RAXIS_BIND_BINARY_OUT(add, const raxis::Tensor&, "t1", "t2")
+    RAXIS_BIND_BINARY_OUT(add, raxis::Scalar, "t1", "value")
+    RAXIS_BIND_BINARY_OUT(sub, const raxis::Tensor&, "t1", "t2")
+    RAXIS_BIND_BINARY_OUT(sub, raxis::Scalar, "t1", "value")
+    RAXIS_BIND_BINARY_OUT(mul, const raxis::Tensor&, "t1", "t2")
+    RAXIS_BIND_BINARY_OUT(mul, raxis::Scalar, "t1", "value")
+    RAXIS_BIND_BINARY_OUT(div, const raxis::Tensor&, "t1", "t2")
+    RAXIS_BIND_BINARY_OUT(div, raxis::Scalar, "t1", "value")
+    RAXIS_BIND_BINARY_OUT(gt, const raxis::Tensor&, "input", "other")
+    RAXIS_BIND_BINARY_OUT(gt, raxis::Scalar, "input", "other")
+    RAXIS_BIND_BINARY_OUT(ge, const raxis::Tensor&, "input", "other")
+    RAXIS_BIND_BINARY_OUT(ge, raxis::Scalar, "input", "other")
+    RAXIS_BIND_BINARY_OUT(lt, const raxis::Tensor&, "input", "other")
+    RAXIS_BIND_BINARY_OUT(lt, raxis::Scalar, "input", "other")
+    RAXIS_BIND_BINARY_OUT(le, const raxis::Tensor&, "input", "other")
+    RAXIS_BIND_BINARY_OUT(le, raxis::Scalar, "input", "other")
+    RAXIS_BIND_BINARY_OUT(eq, const raxis::Tensor&, "input", "other")
+    RAXIS_BIND_BINARY_OUT(eq, raxis::Scalar, "input", "other")
+    RAXIS_BIND_BINARY_OUT(ne, const raxis::Tensor&, "input", "other")
+    RAXIS_BIND_BINARY_OUT(ne, raxis::Scalar, "input", "other")
+    RAXIS_BIND_BINARY_OUT(maximum, const raxis::Tensor&, "input", "other")
+    RAXIS_BIND_BINARY_OUT(minimum, const raxis::Tensor&, "input", "other")
+    RAXIS_BIND_BINARY_OUT(logical_and, const raxis::Tensor&, "input", "other")
+    RAXIS_BIND_BINARY_OUT(logical_or, const raxis::Tensor&, "input", "other")
+    RAXIS_BIND_BINARY_OUT(pow, const raxis::Tensor&, "base", "exponent")
+    RAXIS_BIND_BINARY_OUT(pow, raxis::Scalar, "base", "exponent")
+    c.def("pow", [](raxis::Scalar base, const raxis::Tensor& exponent, raxis::Tensor& out) {
+        return raxis::pow_out(base, exponent, out);
+    }, py::arg("base"), py::arg("exponent"), py::kw_only(), py::arg("out"));
+    RAXIS_BIND_UNARY_OUT(neg)
+    RAXIS_BIND_UNARY_OUT(abs)
+    RAXIS_BIND_UNARY_OUT(sign)
+    RAXIS_BIND_UNARY_OUT(ceil)
+    RAXIS_BIND_UNARY_OUT(floor)
+    RAXIS_BIND_UNARY_OUT(round)
+    RAXIS_BIND_UNARY_OUT(exp)
+    RAXIS_BIND_UNARY_OUT(expm1)
+    RAXIS_BIND_UNARY_OUT(log)
+    RAXIS_BIND_UNARY_OUT(log2)
+    RAXIS_BIND_UNARY_OUT(log10)
+    RAXIS_BIND_UNARY_OUT(log1p)
+    RAXIS_BIND_UNARY_OUT(sqrt)
+    RAXIS_BIND_UNARY_OUT(rsqrt)
+    RAXIS_BIND_UNARY_OUT(reciprocal)
+    RAXIS_BIND_UNARY_OUT(sigmoid)
+    RAXIS_BIND_UNARY_OUT(sin)
+    RAXIS_BIND_UNARY_OUT(cos)
+    RAXIS_BIND_UNARY_OUT(tan)
+    RAXIS_BIND_UNARY_OUT(asin)
+    RAXIS_BIND_UNARY_OUT(acos)
+    RAXIS_BIND_UNARY_OUT(atan)
+    RAXIS_BIND_UNARY_OUT(sinh)
+    RAXIS_BIND_UNARY_OUT(cosh)
+    RAXIS_BIND_UNARY_OUT(tanh)
+    RAXIS_BIND_UNARY_OUT(erf)
+    RAXIS_BIND_UNARY_OUT(erfc)
+    RAXIS_BIND_UNARY_OUT(logical_not)
+#undef RAXIS_BIND_UNARY_OUT
+#undef RAXIS_BIND_BINARY_OUT
+
     c.def("softmax", &raxis::softmax, py::arg("input"), py::arg("dim"));
     c.def("log_softmax", &raxis::log_softmax, py::arg("input"), py::arg("dim"));
     c.def("dropout", &raxis::dropout,

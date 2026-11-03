@@ -313,6 +313,15 @@ void bump_version(const Tensor& self) {
     self.unsafe_get_tensor_impl()->storage()->bump_version();
 }
 
+void check_out_no_grad(const char* op_name, std::initializer_list<const Tensor*> args) {
+    if (!GradMode::is_enabled()) return;
+    for (const Tensor* arg : args) {
+        RAXIS_CHECK(!arg->defined() || !arg->requires_grad(),
+            op_name, "(): functions with out=... arguments don't support automatic "
+            "differentiation, but one of the arguments requires grad.");
+    }
+}
+
 void rebase_history(const Tensor& self, NodePtr grad_fn, uint32_t output_nr) {
     detail::TensorImpl* impl = self.unsafe_get_tensor_impl();
     if (impl->is_view()) {

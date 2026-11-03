@@ -83,6 +83,7 @@ RAXIS_DECLARE_UNARY_ARITHMETIC(erfc)
 // Non-differentiable
 RAXIS_API Tensor isnan(const Tensor& self);
 RAXIS_API Tensor logical_not(const Tensor& self);
+RAXIS_API Tensor& logical_not_out(const Tensor& self, Tensor& out);
 RAXIS_API Tensor& logical_not_(Tensor& self);
 
 } // namespace raxis

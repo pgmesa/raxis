@@ -1,10 +1,12 @@
 #include <raxis/ops/unary_ops.h>
 
+#include <raxis/ops/copy.h>
 #include <raxis/ops/dispatch_stub.h>
 
 #include <raxis/util/exception.h>
 
 #include <raxis/tensor/tensor.h>
+#include <raxis/tensor/resize.h>
 #include <raxis/tensor/tensor_iterator.h>
 #include <raxis/tensor/detail/tensor_impl.h>
 #include <raxis/tensor/detail/storage_impl.h>
@@ -13,14 +15,19 @@
 namespace raxis {
 
 #define RAXIS_UNARY_OP(name, config, stub)                  \
-    Tensor name(const Tensor& self) {                       \
-        Tensor out;                                         \
+    Tensor& name##_out(const Tensor& self, Tensor& out) {   \
         auto iter = iterator::config()                      \
+            .resize_outputs(true)                           \
             .add_output(out)                                \
             .add_input(self)                                \
             .build();                                       \
         stub(iter.device_type(), iter);                     \
-        return iter.get_output(0);                          \
+        out = iter.get_output(0);                           \
+        return out;                                         \
+    }                                                       \
+    Tensor name(const Tensor& self) {                       \
+        Tensor out;                                         \
+        return ops::name##_out(self, out);                  \
     }                                                       \
     Tensor& name##_(Tensor& self) {                         \
         auto iter = iterator::config()                      \
@@ -33,19 +40,40 @@ namespace raxis {
 
 namespace ops {
 
-Tensor neg(const Tensor& self) {
+namespace {
+
+// ceil, floor and round of an integer tensor are the tensor itself
+Tensor& copy_into_out(const Tensor& self, Tensor& out) {
+    if (!out.defined()) {
+        out = self.clone();
+        return out;
+    }
+    resize_output(out, self.shape());
+    copy(self, out);
+    return out;
+}
+
+} // anonymous namespace
+
+Tensor& neg_out(const Tensor& self, Tensor& out) {
     RAXIS_CHECK(!self.dtype().is_bool(),
         "Negation, the `-` operator, on a bool tensor is not supported. "
         "Use `logical_not()` instead.");
 
-    Tensor out;
     auto iter = iterator::unary_op_config()
+        .resize_outputs(true)
         .add_output(out)
         .add_input(self)
         .build();
 
     neg_stub(iter.device_type(), iter);
-    return iter.get_output(0);
+    out = iter.get_output(0);
+    return out;
+}
+
+Tensor neg(const Tensor& self) {
+    Tensor out;
+    return ops::neg_out(self, out);
 }
 
 Tensor& neg_(Tensor& self) {
@@ -66,17 +94,26 @@ RAXIS_UNARY_OP(abs, unary_op_config, abs_stub)
 RAXIS_UNARY_OP(sign, unary_op_config, sign_stub)
 
 // Integer identity ops
+Tensor& ceil_out(const Tensor& self, Tensor& out) {
+    if (self.dtype().is_integral(/*include_bool=*/true)) {
+        return copy_into_out(self, out);
+    }
+    auto iter = iterator::unary_op_config()
+        .resize_outputs(true)
+        .add_output(out)
+        .add_input(self)
+        .build();
+    ceil_stub(iter.device_type(), iter);
+    out = iter.get_output(0);
+    return out;
+}
+
 Tensor ceil(const Tensor& self) {
     if (self.dtype().is_integral(/*include_bool=*/true)) {
         return self.clone();
     }
     Tensor out;
-    auto iter = iterator::unary_op_config()
-        .add_output(out)
-        .add_input(self)
-        .build();
-    ceil_stub(iter.device_type(), iter);
-    return iter.get_output(0);
+    return ops::ceil_out(self, out);
 }
 
 Tensor& ceil_(Tensor& self) {
@@ -91,17 +128,26 @@ Tensor& ceil_(Tensor& self) {
     return self;
 }
 
+Tensor& floor_out(const Tensor& self, Tensor& out) {
+    if (self.dtype().is_integral(/*include_bool=*/true)) {
+        return copy_into_out(self, out);
+    }
+    auto iter = iterator::unary_op_config()
+        .resize_outputs(true)
+        .add_output(out)
+        .add_input(self)
+        .build();
+    floor_stub(iter.device_type(), iter);
+    out = iter.get_output(0);
+    return out;
+}
+
 Tensor floor(const Tensor& self) {
     if (self.dtype().is_integral(/*include_bool=*/true)) {
         return self.clone();
     }
     Tensor out;
-    auto iter = iterator::unary_op_config()
-        .add_output(out)
-        .add_input(self)
-        .build();
-    floor_stub(iter.device_type(), iter);
-    return iter.get_output(0);
+    return ops::floor_out(self, out);
 }
 
 Tensor& floor_(Tensor& self) {
@@ -116,17 +162,26 @@ Tensor& floor_(Tensor& self) {
     return self;
 }
 
+Tensor& round_out(const Tensor& self, Tensor& out) {
+    if (self.dtype().is_integral(/*include_bool=*/true)) {
+        return copy_into_out(self, out);
+    }
+    auto iter = iterator::unary_op_config()
+        .resize_outputs(true)
+        .add_output(out)
+        .add_input(self)
+        .build();
+    round_stub(iter.device_type(), iter);
+    out = iter.get_output(0);
+    return out;
+}
+
 Tensor round(const Tensor& self) {
     if (self.dtype().is_integral(/*include_bool=*/true)) {
         return self.clone();
     }
     Tensor out;
-    auto iter = iterator::unary_op_config()
-        .add_output(out)
-        .add_input(self)
-        .build();
-    round_stub(iter.device_type(), iter);
-    return iter.get_output(0);
+    return ops::round_out(self, out);
 }
 
 Tensor& round_(Tensor& self) {
@@ -172,14 +227,39 @@ Tensor isnan(const Tensor& self) {
     return self != self;
 }
 
-Tensor logical_not(const Tensor& self) {
-    Tensor out;
+namespace {
+
+Tensor& logical_not_into(const Tensor& self, Tensor& out) {
+    // The kernel writes bools: an out of another dtype gets them converted
+    if (out.defined() && !out.dtype().is_bool()) {
+        Tensor result;
+        logical_not_into(self, result);
+        resize_output(out, result.shape());
+        copy(result, out);
+        return out;
+    }
     auto iter = iterator::comparison_op_config()
+        .resize_outputs(true)
         .add_output(out)
         .add_input(self)
         .build();
     logical_not_stub(iter.device_type(), iter);
-    return iter.get_output(0);
+    out = iter.get_output(0);
+    return out;
+}
+
+} // anonymous namespace
+
+Tensor logical_not(const Tensor& self) {
+    Tensor out;
+    return logical_not_into(self, out);
+}
+
+// Not differentiable: only the version of out moves
+Tensor& logical_not_out(const Tensor& self, Tensor& out) {
+    logical_not_into(self, out);
+    out.unsafe_get_tensor_impl()->storage()->bump_version();
+    return out;
 }
 
 Tensor& logical_not_(Tensor& self) {
