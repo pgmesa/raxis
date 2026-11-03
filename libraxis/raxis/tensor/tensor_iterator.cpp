@@ -11,6 +11,8 @@
 #include <raxis/core/dtype.h>
 #include <raxis/core/types.h>
 
+#include <raxis/ops/copy.h>
+
 #include <raxis/util/exception.h>
 #include <raxis/util/range.h>
 #include <raxis/util/function_ref.h>
@@ -65,7 +67,7 @@ void Operand::exchange_tensor(MaybeOwned<Tensor>&& new_tensor) {
 }
 
 void Operand::restore_original_tensor() {
-    RAXIS_INTERNAL_ASSERT(!original_tensor_, "No original tensor to restore");
+    RAXIS_INTERNAL_ASSERT(original_tensor_.has_value(), "No original tensor to restore");
     tensor_ = std::move(*original_tensor_);
     original_tensor_.reset();
 }
@@ -133,10 +135,11 @@ void TensorIterator::cast_outputs() {
         Operand& op = operands_[out_idx];
         if (!op.has_exchanged()) continue;
         
-        const Tensor& original_tensor = op.original_tensor();
+        Tensor original_tensor = op.original_tensor();
         const Tensor& tensor = op.tensor();
 
-        original_tensor.copy_(tensor);
+        // The kernel's write, not a new one: no autograd, no version bump
+        copy(tensor, original_tensor);
         op.restore_original_tensor();
     }
 }
