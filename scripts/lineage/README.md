@@ -3,9 +3,13 @@
 What made my earlier projects slow, measured. They back the numbers of the
 blog series; they are not part of the library.
 
-Run them on Windows from a venv with PyTorch, on a clone of
-[synapgrad](https://github.com/pgmesa/synapgrad) and a built
-[synapx](https://github.com/pgmesa/synapx), both on `PYTHONPATH`.
+Run them from the raxis venv, with [synapx](https://github.com/pgmesa/synapx)
+0.4.0 from PyPI (it runs on the same torch 2.14 as the tests) and a clone of
+[synapgrad](https://github.com/pgmesa/synapgrad) on `PYTHONPATH`:
+
+```bash
+PYTHONPATH=<synapgrad clone> uv run --with "synapx==0.4.0" python scripts/lineage/training_split.py synapx:mlp
+```
 
 | Script | What it measures |
 |---|---|
