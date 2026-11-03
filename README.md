@@ -1,4 +1,14 @@
-# Raxis
+<div align="center">
+  <img src="docs/assets/raxis-header.svg" alt="Raxis" width="440">
+  <br><br>
+  <p><em>PyTorch's core, reforged one axis at a time.</em></p>
+  <a href="https://pypi.org/project/raxis/"><img src="https://img.shields.io/pypi/v/raxis?label=pypi&labelColor=3e2731&color=f77622" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/raxis/"><img src="https://img.shields.io/pypi/pyversions/raxis?labelColor=3e2731&color=f77622" alt="Python versions"></a>
+  <a href="https://pypi.org/project/raxis-cuda13/"><img src="https://img.shields.io/badge/backends-CPU%20%7C%20CUDA-f77622?labelColor=3e2731" alt="Backends: CPU and CUDA"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/pypi/l/raxis?labelColor=3e2731&color=f77622" alt="License"></a>
+</div>
+
+---
 
 Raxis is a from-scratch re-implementation of the core of PyTorch, the ATen
 tensor library and the autograd engine, in C++20 with Python bindings. It is
