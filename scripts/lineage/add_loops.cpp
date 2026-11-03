@@ -4,6 +4,7 @@
 // modulo:   unravel the flat index with a division per dimension and element.
 // strided:  an odometer over the outer dims and an inner loop that advances the
 //           pointers by strides read at runtime.
+// recursive: one call per outer dim instead of the odometer, same inner loop.
 // kernels:  the same odometer, but the inner loop is picked from the strides
 //           (all contiguous, or one operand with stride 0).
 // flat:     out[i] = a[i] + b[i], only valid for contiguous operands.
@@ -130,6 +131,28 @@ NOINLINE static void add_strided(const Operands& op) {
 }
 
 
+// One nested loop per dimension, written as a function that calls itself for
+// the next dimension. No division either; the innermost dim is the same loop.
+static void recurse(const Operands& op, size_t d, const float* a, const float* b, float* out) {
+    const size_t last = op.shape.size() - 1;
+    if (d == last) {
+        inner_strided(a, b, out, op.shape[d], op.strides_a[d], op.strides_b[d], op.strides_out[d]);
+        return;
+    }
+    for (int64_t i = 0; i < op.shape[d]; ++i) {
+        recurse(op, d + 1, a, b, out);
+        a += op.strides_a[d];
+        b += op.strides_b[d];
+        out += op.strides_out[d];
+    }
+}
+
+
+NOINLINE static void add_recursive(const Operands& op) {
+    recurse(op, 0, op.a, op.b, op.out);
+}
+
+
 NOINLINE static void add_kernels(const Operands& op) {
     const size_t last = op.shape.size() - 1;
     const int64_t sa = op.strides_a[last], sb = op.strides_b[last], so = op.strides_out[last];
@@ -195,6 +218,7 @@ static void run_case(const char* name, std::vector<int64_t> shape, std::vector<i
     add_modulo(op);
     report(name, "modulo", add_modulo, op, 21);
     report(name, "strided", add_strided, op, 101);
+    report(name, "recursive", add_recursive, op, 101);
     report(name, "kernels", add_kernels, op, 101);
     if (numel == numel_b) {
         report(name, "flat", add_flat, op, 101);
