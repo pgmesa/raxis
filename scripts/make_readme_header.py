@@ -68,7 +68,7 @@ CHIMNEY_ABOVE = 2    # rows the chimney rises above the top of the body
 SMOKE_RISE = 4       # rows a puff of smoke climbs before it fades
 
 # Time, in seconds
-CYCLE = 12.0                     # sweep + fire + calm, repeated forever
+CYCLE = 8.0                      # sweep + fire + calm, repeated forever
 FILL_STEP = 0.008                # between two letter pixels filling
 SWEEP_STEP, SWEEP_FLASH = 0.010, 0.03
 FIRE_FOR = 2.4
