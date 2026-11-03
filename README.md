@@ -193,6 +193,35 @@ model, with its `model.py` unchanged except for the imports, and samples from
 it. `raxis.save` and `raxis.load` use PyTorch's checkpoint format, so a model
 trained with one library can be sampled with the other.
 
+## Use from C++
+
+`libraxis` is a C++20 library with a CMake package, so a C++ project can use
+the tensors, the ops and autograd without Python:
+
+```cmake
+find_package(Raxis CONFIG REQUIRED)
+target_link_libraries(my_app PRIVATE Raxis::Raxis)
+```
+
+```cpp
+#include <raxis/raxis.h>
+
+auto a = raxis::arange(0, 6).reshape({2, 3}).to(raxis::dtypes::Float32).requires_grad_(true);
+auto y = a.exp().matmul(raxis::ones({3, 2})).sum();
+y.backward();
+std::cout << a.grad() << "\n";
+```
+
+Build and install it from `libraxis/` with CMake (`cmake --install`), shared by
+default. `-DRAXIS_BUILD_STATIC=ON` (CMake 3.24+) builds a static library
+instead, to link into a program with no `libraxis` next to it: the package then
+installs SLEEF and mimalloc with it, finds MKL again in the consuming project,
+and `Raxis::Raxis` links the whole archive, because the CPU kernels register
+themselves from static initializers that a linker would otherwise drop. The
+whole library with static MKL is about 30 MB, against more than 300 MB for
+libtorch's CPU library. The CUDA backend needs the shared build. The C++ API
+follows PyTorch's ATen, but it is not documented yet and may still change.
+
 ## License
 
 MIT. Raxis includes code derived from PyTorch (BSD-3-Clause) and links SLEEF,
