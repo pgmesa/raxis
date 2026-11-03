@@ -12,11 +12,3 @@ if (MSVC)
 else()
     target_compile_options(add_loops_avx2 PRIVATE -mavx2)
 endif()
-
-# git clone https://github.com/pgmesa/multitensor, then -DMULTITENSOR_DIR=<clone>
-if (MULTITENSOR_DIR)
-    set(CPPTENSOR "${MULTITENSOR_DIR}/C++/cpptensor")
-    add_executable(multitensor_check multitensor_check.cpp
-        "${CPPTENSOR}/tensor.cpp" "${CPPTENSOR}/dtype.cpp" "${CPPTENSOR}/utils.cpp")
-    target_include_directories(multitensor_check PRIVATE "${CPPTENSOR}")
-endif()
