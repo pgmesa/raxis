@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.22 FATAL_ERROR)
+
 project(raxis VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -26,9 +27,49 @@ list(FILTER RAXIS_SOURCES EXCLUDE REGEX ".*_kernel\\.cpp$")
 # raxis/cuda and raxis/ops/cuda build libraxis_cuda (see "CUDA" below)
 list(FILTER RAXIS_SOURCES EXCLUDE REGEX "/cuda/")
 
-add_library(raxis SHARED ${RAXIS_SOURCES})
-set_target_properties(raxis PROPERTIES EXPORT_NAME Raxis)
-add_library(Raxis::Raxis ALIAS raxis)
+option(RAXIS_BUILD_STATIC "Build libraxis as a static library, for C++ projects" OFF)
+
+if(RAXIS_BUILD_STATIC)
+    if(CMAKE_VERSION VERSION_LESS 3.24)
+        message(FATAL_ERROR "RAXIS_BUILD_STATIC needs CMake 3.24 or newer (WHOLE_ARCHIVE)")
+    endif()
+    add_library(raxis STATIC ${RAXIS_SOURCES})
+    target_compile_definitions(raxis PUBLIC RAXIS_STATIC)
+    set_target_properties(raxis PROPERTIES EXPORT_NAME RaxisArchive)
+    # The CPU kernels (REGISTER_DISPATCH) and the CPU allocator register
+    # themselves from static initializers, in object files that nothing else
+    # references. A linker only takes the objects of an archive that resolve a
+    # symbol, so it would drop them and every op would find an empty stub.
+    # Consumers link Raxis::Raxis, which links the whole archive (libtorch's
+    # static build has the same requirement)
+    add_library(raxis_whole_archive INTERFACE)
+    # install(EXPORT) does not rename targets inside $<LINK_LIBRARY>, so the
+    # installed package names the archive by its exported name
+    target_link_libraries(raxis_whole_archive INTERFACE
+        "$<BUILD_INTERFACE:$<LINK_LIBRARY:WHOLE_ARCHIVE,raxis>>"
+        "$<INSTALL_INTERFACE:$<LINK_LIBRARY:WHOLE_ARCHIVE,Raxis::RaxisArchive>>"
+    )
+    set_target_properties(raxis_whole_archive PROPERTIES EXPORT_NAME Raxis)
+    add_library(Raxis::Raxis ALIAS raxis_whole_archive)
+else()
+    add_library(raxis SHARED ${RAXIS_SOURCES})
+    set_target_properties(raxis PROPERTIES EXPORT_NAME Raxis)
+    add_library(Raxis::Raxis ALIAS raxis)
+endif()
+
+# Static dependencies (SLEEF, mimalloc) go inside a shared libraxis. A static
+# libraxis cannot contain them, so its consumers link them too: the target in
+# the build tree, and once installed the archive installed next to libraxis
+# as Raxis::<name> (RaxisConfig.cmake creates those targets)
+set(RAXIS_BUNDLED_ARCHIVES "")
+function(raxis_link_static_dependency dep name)
+    if(RAXIS_BUILD_STATIC)
+        target_link_libraries(raxis PRIVATE $<BUILD_INTERFACE:${dep}> $<INSTALL_INTERFACE:Raxis::${name}>)
+        set(RAXIS_BUNDLED_ARCHIVES ${RAXIS_BUNDLED_ARCHIVES} "${dep}:${name}" PARENT_SCOPE)
+    else()
+        target_link_libraries(raxis PRIVATE ${dep})
+    endif()
+endfunction()
 
 target_compile_definitions(raxis PRIVATE RAXIS_BUILD)
 
@@ -60,6 +101,7 @@ target_include_directories(raxis
 # BLAS
 option(RAXIS_USE_BLAS "Build with BLAS library for accelerated linear algebra" ON)
 option(RAXIS_USE_MKL "Prefer Intel MKL over generic BLAS (x86 only)" ON)
+set(RAXIS_LINKS_MKL_TARGET OFF)
 
 if(RAXIS_USE_BLAS)
     set(RAXIS_BLAS_FOUND FALSE)
@@ -72,6 +114,9 @@ if(RAXIS_USE_BLAS)
         if(MKL_FOUND)
             target_compile_definitions(raxis PRIVATE RAXIS_BUILD_WITH_BLAS=1 RAXIS_BUILD_WITH_MKL=1)
             target_link_libraries(raxis PRIVATE MKL::MKL)
+            # Read by RaxisConfig.cmake.in: a static libraxis passes MKL::MKL
+            # on to its consumers, who must find MKL the same way
+            set(RAXIS_LINKS_MKL_TARGET ${RAXIS_BUILD_STATIC})
             set(RAXIS_BLAS_INFO "Intel MKL (threading: ${MKL_THREADING})")
             set(RAXIS_BLAS_FOUND TRUE)
 
@@ -173,7 +218,7 @@ if(RAXIS_USE_MIMALLOC)
     add_subdirectory(third_party/mimalloc ${CMAKE_BINARY_DIR}/mimalloc EXCLUDE_FROM_ALL)
     set_property(TARGET mimalloc-static PROPERTY FOLDER "dependencies")
 
-    target_link_libraries(raxis PRIVATE mimalloc-static)
+    raxis_link_static_dependency(mimalloc-static mimalloc)
     target_compile_definitions(raxis PRIVATE RAXIS_USE_MIMALLOC=1)
     set(RAXIS_ALLOC_INFO "mimalloc")
 else()
@@ -237,7 +282,7 @@ if(RAXIS_USE_SIMD)
     add_subdirectory(third_party/sleef ${CMAKE_BINARY_DIR}/sleef EXCLUDE_FROM_ALL)
     set_property(TARGET sleef PROPERTY FOLDER "dependencies")
 
-    target_link_libraries(raxis PRIVATE sleef)
+    raxis_link_static_dependency(sleef sleef)
     target_compile_definitions(raxis PRIVATE SLEEF_STATIC_LIBS=1)
 endif()
 
@@ -275,6 +320,11 @@ if(RAXIS_USE_CUDA)
         "${RAXIS_LIB_DIR}/ops/cuda/*.cpp"
         "${RAXIS_LIB_DIR}/ops/cuda/*.cu"
     )
+    if(RAXIS_BUILD_STATIC)
+        # libraxis_cuda links libraxis: with a static one it would carry its
+        # own copy of the library state (dispatch tables, allocators)
+        message(FATAL_ERROR "RAXIS_USE_CUDA needs a shared libraxis (RAXIS_BUILD_STATIC OFF)")
+    endif()
     add_library(raxis_cuda SHARED ${RAXIS_CUDA_SOURCES})
     # The static runtime: no cudart library to ship, only the driver is needed
     # cuBLAS has no static library on Windows; the wheels will depend on
@@ -353,6 +403,11 @@ message(STATUS "")
 message(STATUS "Raxis build configuration:")
 message(STATUS "  Version:        ${PROJECT_VERSION}")
 message(STATUS "  Compiler:       ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
+if(RAXIS_BUILD_STATIC)
+    message(STATUS "  Library:        static")
+else()
+    message(STATUS "  Library:        shared")
+endif()
 message(STATUS "  Build type:     ${CMAKE_BUILD_TYPE}")
 message(STATUS "  CXX flags:      ${RAXIS_CXX_FLAGS}")
 message(STATUS "  Parallel:       ${RAXIS_PARALLEL_INFO}")
@@ -391,7 +446,13 @@ endif()
 # plus the Python module when it is built
 include(CMakePackageConfigHelpers)
 
-install(TARGETS raxis
+if(RAXIS_BUILD_STATIC)
+    set(RAXIS_EXPORTED_TARGETS raxis raxis_whole_archive)
+else()
+    set(RAXIS_EXPORTED_TARGETS raxis)
+endif()
+
+install(TARGETS ${RAXIS_EXPORTED_TARGETS}
     EXPORT      raxisTargets
     RUNTIME     DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY     DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -419,6 +480,34 @@ install(DIRECTORY ${RAXIS_LIB_DIR}/
         PATTERN "*.h"
         # PATTERN "detail" EXCLUDE
 )
+
+# The archives of the static dependencies, under fixed names, and the
+# imported targets RaxisConfig.cmake creates for them, with the system
+# libraries they link themselves (mimalloc's on Windows, libm, ...)
+set(RAXIS_BUNDLED_FILE "${CMAKE_CURRENT_BINARY_DIR}/RaxisBundledTargets.cmake")
+file(WRITE "${RAXIS_BUNDLED_FILE}" "# Generated by libraxis/CMakeLists.txt\n")
+foreach(entry ${RAXIS_BUNDLED_ARCHIVES})
+    string(REPLACE ":" ";" entry "${entry}")
+    list(GET entry 0 dep)
+    list(GET entry 1 name)
+    set(file_name "${CMAKE_STATIC_LIBRARY_PREFIX}raxis_${name}${CMAKE_STATIC_LIBRARY_SUFFIX}")
+    install(FILES $<TARGET_FILE:${dep}> DESTINATION ${CMAKE_INSTALL_LIBDIR} RENAME ${file_name})
+    get_target_property(dep_links ${dep} INTERFACE_LINK_LIBRARIES)
+    if(NOT dep_links)
+        set(dep_links "")
+    endif()
+    # Plain library names only: targets and generator expressions of the
+    # dependency's own build do not exist for the consumer
+    list(FILTER dep_links EXCLUDE REGEX "::|\$<")
+    file(APPEND "${RAXIS_BUNDLED_FILE}"
+        "add_library(Raxis::${name} STATIC IMPORTED)\n"
+        "set_target_properties(Raxis::${name} PROPERTIES\n"
+        "    IMPORTED_LOCATION \"\${_raxis_prefix}/${CMAKE_INSTALL_LIBDIR}/${file_name}\"\n"
+        "    INTERFACE_LINK_LIBRARIES \"${dep_links}\")\n")
+endforeach()
+if(RAXIS_BUILD_STATIC)
+    install(FILES "${RAXIS_BUNDLED_FILE}" DESTINATION "${CMAKE_INSTALL_DATADIR}/cmake/raxis")
+endif()
 
 write_basic_package_version_file(
     "${CMAKE_CURRENT_BINARY_DIR}/RaxisConfigVersion.cmake"

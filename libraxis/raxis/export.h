@@ -1,6 +1,12 @@
 #pragma once
 
-#if defined(_WIN32) || defined(_WIN64)
+// A static libraxis (RAXIS_BUILD_STATIC) is part of the program that links
+// it: nothing to export or import
+#if defined(RAXIS_STATIC)
+
+  #define RAXIS_API
+
+#elif defined(_WIN32) || defined(_WIN64)
 
   #ifdef RAXIS_BUILD
     #define RAXIS_API __declspec(dllexport)

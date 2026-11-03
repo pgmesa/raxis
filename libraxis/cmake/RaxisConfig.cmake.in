@@ -1,4 +1,3 @@
-
 @PACKAGE_INIT@
 
 # Dependencies in the link interface of Raxis::Raxis must exist as targets
@@ -6,6 +5,23 @@
 include(CMakeFindDependencyMacro)
 if(@RAXIS_LINKS_OPENMP_TARGET@)
     find_dependency(OpenMP)
+endif()
+
+# A static libraxis passes MKL on to the program that links it, found with
+# the same settings libraxis was built with (MKL's CMake package must be on
+# CMAKE_PREFIX_PATH)
+if(@RAXIS_LINKS_MKL_TARGET@)
+    set(MKL_LINK "static")
+    set(MKL_INTERFACE_FULL "intel_lp64")
+    set(MKL_THREADING "intel_thread")
+    find_dependency(MKL CONFIG)
+endif()
+
+# A static libraxis also passes on SLEEF and mimalloc, installed next to it
+if(@RAXIS_BUILD_STATIC@)
+    set(_raxis_prefix "${PACKAGE_PREFIX_DIR}")
+    include("${CMAKE_CURRENT_LIST_DIR}/RaxisBundledTargets.cmake")
+    unset(_raxis_prefix)
 endif()
 
 # Load the exported targets
