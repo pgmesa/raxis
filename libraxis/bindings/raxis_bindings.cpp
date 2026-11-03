@@ -2097,4 +2097,29 @@ PYBIND11_MODULE(_C, c) {
 
     accumulate_grad.def_property_readonly("variable", &raxis::autograd::AccumulateGrad::variable);
 
+    // What the TensorIterator of a binary elementwise op (add, mul, ...) ends
+    // up with after broadcasting, reordering and coalescing: the loop's shape
+    // and every operand's strides in bytes, inner dimension first (operand 0
+    // is the output). For the articles and for tests; PyTorch has no such API
+    c.def("_binary_iterator_state", [](const raxis::Tensor& a, const raxis::Tensor& b,
+                                       std::optional<raxis::Tensor> out) {
+        raxis::Tensor result = out.value_or(raxis::Tensor());
+        auto iter = raxis::iterator::binary_op_config()
+            .resize_outputs(true)
+            .add_output(result)
+            .add_input(a)
+            .add_input(b)
+            .build();
+        py::list strides;
+        for (int64_t i = 0; i < iter.num_operands(); i++) {
+            strides.append(std::vector<int64_t>(iter.strides(i).begin(), iter.strides(i).end()));
+        }
+        py::dict d;
+        d["shape"] = std::vector<int64_t>(iter.shape().begin(), iter.shape().end());
+        d["strides"] = strides;
+        d["common_dtype"] = iter.common_dtype();
+        d["output"] = iter.get_output(0);
+        return d;
+    }, py::arg("a"), py::arg("b"), py::arg("out") = py::none());
+
 } // pybind11_module

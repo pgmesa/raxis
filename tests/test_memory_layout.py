@@ -64,6 +64,67 @@ def test_full_overlap_is_allowed():
     check_match(r, t)
 
 
+INTO_BROADCAST_OPERAND = [
+    ("add_",    lambda L, a, b: b.add_(a)),
+    ("add out", lambda L, a, b: L.add(a, b, out=b)),
+    ("mul_",    lambda L, a, b: b.mul_(a)),
+]
+
+
+@pytest.mark.parametrize("name,op", INTO_BROADCAST_OPERAND, ids=[c[0] for c in INTO_BROADCAST_OPERAND])
+def test_output_cannot_be_broadcast(name, op):
+    # b is broadcast to a's shape as an input; as the output it would need a
+    # stride of 0, and every row's sums would land in one element
+    r_a, t_a = make_pair(randf(3, 4))
+    r_b, t_b = make_pair(randf(3, 1, seed=1))
+    with pytest.raises(RuntimeError, match=r"output with shape \[3, 1\] doesn't match the broadcast shape \[3, 4\]"):
+        op(torch, t_a, t_b)
+    with pytest.raises(RuntimeError, match=r"output with shape \[3, 1\] doesn't match the broadcast shape \[3, 4\]"):
+        op(raxis, r_a, r_b)
+
+
+def test_too_hard_overlap_is_not_detected():
+    # Two strided views of one storage that do overlap: the check gives up
+    # (neither is dense), as in torch, and the loop reads values it already
+    # wrote. Pinned here because the TensorIterator article shows it
+    r = raxis.arange(10.0)
+    t = torch.arange(10.0)
+    raxis.add(r[:-2:2], 0, out=r[2::2])
+    torch.add(t[:-2:2], 0, out=t[2::2])
+    assert r[2::2].tolist() == t[2::2].tolist() == [0.0, 0.0, 0.0, 0.0]
+
+
+COALESCE_CASES = [
+    # (label, a, b, loop shape, strides in bytes of out, a, b; inner dim first)
+    ("same shape", lambda: (raxis.ones(1000, 1000), raxis.ones(1000, 1000)),
+     [1000000], [[4], [4], [4]]),
+    ("column", lambda: (raxis.ones(1000, 1000), raxis.ones(1000, 1)),
+     [1000, 1000], [[4, 4000], [4, 4000], [0, 4]]),
+    ("expanded scalar", lambda: (raxis.ones(1000, 1000), raxis.ones(1, 1).expand(1000, 1000)),
+     [1000000], [[4], [4], [0]]),
+    ("3-D middle", lambda: (raxis.ones(100, 100, 100), raxis.ones(100, 1, 100)),
+     [100, 100, 100], [[4, 400, 40000], [4, 400, 40000], [4, 0, 400]]),
+    ("3-D first", lambda: (raxis.ones(100, 100, 100), raxis.ones(1, 100, 100)),
+     [10000, 100], [[4, 40000], [4, 40000], [4, 0]]),
+    ("every other column, M even", lambda: (raxis.ones(6, 10)[:, ::2], raxis.ones(6, 10)[:, ::2]),
+     [30], [[4], [8], [8]]),
+    ("every other column, M odd", lambda: (raxis.ones(6, 5)[:, ::2], raxis.ones(6, 5)[:, ::2]),
+     [3, 6], [[4, 12], [8, 20], [8, 20]]),
+    ("both transposed", lambda: (raxis.ones(1000, 1000).t(), raxis.ones(1000, 1000).t()),
+     [1000000], [[4], [4], [4]]),
+    ("one transposed", lambda: (raxis.ones(1000, 1000), raxis.ones(1000, 1000).t()),
+     [1000, 1000], [[4, 4000], [4, 4000], [4000, 4]]),
+]
+
+
+@pytest.mark.parametrize("label,make,shape,strides", COALESCE_CASES, ids=[c[0] for c in COALESCE_CASES])
+def test_binary_iterator_coalesces(label, make, shape, strides):
+    a, b = make()
+    state = raxis._C._binary_iterator_state(a, b)
+    assert state["shape"] == shape
+    assert state["strides"] == strides
+
+
 def test_disjoint_slices_are_allowed():
     r, t = make_pair(randf(10))
     r[:5].add_(r[5:])
