@@ -198,14 +198,22 @@ void index_select_cpu(const Tensor& result, const Tensor& self, int64_t dim, con
 
     if (self.ndim() <= 1) {
         // Plain element copies
-        int64_t self_stride = self.ndim() == 0 ? 1 : self.strides()[dim];
-        int64_t result_stride = result.ndim() == 0 ? 1 : result.strides()[dim];
+        // Everything the loop reads is a local of the lambda, as in torch. Read
+        // through the [&] captures, the compiler would have to reload them after
+        // every store to result_ptr (MSVC assumes a float store can change an
+        // int64_t), and the loop ran ~1.5x slower.
         self.dtype().dispatch_all_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+            const int64_t self_stride = self.ndim() == 0 ? 1 : self.strides()[dim];
+            const int64_t result_stride = result.ndim() == 0 ? 1 : result.strides()[dim];
+            const int64_t n = numel;
+            const int64_t size = self_dim_size;
+            const int64_t* idx = index_data;
             const scalar_t* self_ptr = self.data_ptr<scalar_t>();
             scalar_t* result_ptr = result.mutable_data_ptr<scalar_t>();
-            for (int64_t i = 0; i < numel; i++) {
-                check(index_data[i]);
-                result_ptr[i * result_stride] = self_ptr[index_data[i] * self_stride];
+            for (int64_t i = 0; i < n; i++) {
+                const int64_t self_i = idx[i];
+                RAXIS_CHECK_INDEX(self_i >= 0 && self_i < size, "index out of range in self");
+                result_ptr[i * result_stride] = self_ptr[self_i * self_stride];
             }
         });
         return;
