@@ -245,6 +245,18 @@ inline Vectorized<int32_t> operator^(const Vectorized<int32_t>& a, const Vectori
     return _mm256_xor_si256(a, b);
 }
 
+// From: aten/src/ATen/cpu/vec/vec256/vec256_int.h
+// Per-lane shifts. A count read as unsigned is 32 or more when it is too
+// large or negative: vpsllvd then gives 0 and vpsravd fills with the sign,
+// which is what torch defines for those shifts
+inline Vectorized<int32_t> operator<<(const Vectorized<int32_t>& a, const Vectorized<int32_t>& b) {
+    return _mm256_sllv_epi32(a, b);
+}
+
+inline Vectorized<int32_t> operator>>(const Vectorized<int32_t>& a, const Vectorized<int32_t>& b) {
+    return _mm256_srav_epi32(a, b);
+}
+
 inline Vectorized<int32_t> Vectorized<int32_t>::eq(const Vectorized<int32_t>& other) const {
     return (*this == other) & Vectorized<int32_t>(1);
 }
@@ -522,6 +534,24 @@ inline Vectorized<int64_t> operator|(const Vectorized<int64_t>& a, const Vectori
 template <>
 inline Vectorized<int64_t> operator^(const Vectorized<int64_t>& a, const Vectorized<int64_t>& b) {
     return _mm256_xor_si256(a, b);
+}
+
+// From: aten/src/ATen/cpu/vec/vec256/vec256_int.h
+inline Vectorized<int64_t> operator<<(const Vectorized<int64_t>& a, const Vectorized<int64_t>& b) {
+    return _mm256_sllv_epi64(a, b);
+}
+
+// AVX2 has no arithmetic right shift of int64 lanes (vpsravq is AVX-512):
+// shift logically, then put the sign bits back into the top. Counts below 0
+// or above 64 become 64, which leaves only the sign (0 or -1)
+inline Vectorized<int64_t> operator>>(const Vectorized<int64_t>& a, const Vectorized<int64_t>& b) {
+    const __m256i zero = _mm256_set1_epi64x(0);
+    const __m256i max_shift = _mm256_set1_epi64x(64);
+    const __m256i out_of_range = _mm256_or_si256(_mm256_cmpgt_epi64(zero, b), _mm256_cmpgt_epi64(b, max_shift));
+    const __m256i shift = _mm256_blendv_epi8(b, max_shift, out_of_range);
+    const __m256i sign_bits = _mm256_cmpgt_epi64(zero, a);
+    const __m256i sign_ext = _mm256_sllv_epi64(sign_bits, _mm256_sub_epi64(max_shift, shift));
+    return _mm256_or_si256(_mm256_srlv_epi64(a, shift), sign_ext);
 }
 
 inline Vectorized<int64_t> Vectorized<int64_t>::eq(const Vectorized<int64_t>& other) const {

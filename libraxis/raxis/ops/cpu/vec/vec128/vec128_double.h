@@ -237,6 +237,11 @@ public:
         return Sleef_powd2_u10(values_, exponent);
     }
 
+    // Exact, as std::fmod
+    Vectorized fmod(const Vectorized& divisor) const {
+        return Sleef_fmodd2(values_, divisor);
+    }
+
     // --- Comparisons ---
 
     Vectorized operator==(const Vectorized& other) const {

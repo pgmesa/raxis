@@ -296,6 +296,14 @@ public:
         return map([](T x) -> T { return static_cast<T>(std::erfc(static_cast<double>(x))); });
     }
 
+    Vectorized fmod(const Vectorized& divisor) const {
+        Vectorized result;
+        for (int i = 0; i < kSize; i++) {
+            result.values_[i] = std::fmod(values_[i], divisor.values_[i]);
+        }
+        return result;
+    }
+
     Vectorized pow(const Vectorized& exponent) const {
         Vectorized result;
         for (int i = 0; i < kSize; i++) {
