@@ -100,16 +100,18 @@ case("a(250000, 4) + b(250000, 1): rows of 4",
 case("a(250000, 4) + b(1, 1): merged, one row",
      lambda L: (rand(L, 250000, 4), rand(L, 1, 1), empty(L, 250000, 4)), add_out)
 
-print("-- the first operand decides: a + b vs b + a, b = c.permute(2, 0, 1), 256^3 floats")
-M = 256
-case("a + b (new output)", lambda L: (rand(L, M, M, M), permute(L, rand(L, M, M, M), 2, 0, 1)),
-     lambda L, a, b: a + b, repeat=10)
-case("b + a (new output)", lambda L: (rand(L, M, M, M), permute(L, rand(L, M, M, M), 2, 0, 1)),
-     lambda L, a, b: b + a, repeat=10)
-case("a + b, out=c", lambda L: (rand(L, M, M, M), permute(L, rand(L, M, M, M), 2, 0, 1), empty(L, M, M, M)),
-     add_out, repeat=10)
-case("b + a, out=c", lambda L: (permute(L, rand(L, M, M, M), 2, 0, 1), rand(L, M, M, M), empty(L, M, M, M)),
-     add_out, repeat=10)
+# 300^3 is the general case; 256^3 adds the cache-set trap of a power-of-two
+# size (rows of 1 KB, planes of 256 KB), which slows down both orders
+for M in (300, 256):
+    print(f"-- the first operand decides: a + b vs b + a, b = c.permute(2, 0, 1), {M}^3 floats")
+    case("a + b (new output)", lambda L: (rand(L, M, M, M), permute(L, rand(L, M, M, M), 2, 0, 1)),
+         lambda L, a, b: a + b, repeat=10)
+    case("b + a (new output)", lambda L: (rand(L, M, M, M), permute(L, rand(L, M, M, M), 2, 0, 1)),
+         lambda L, a, b: b + a, repeat=10)
+    case("a + b, out=c", lambda L: (rand(L, M, M, M), permute(L, rand(L, M, M, M), 2, 0, 1), empty(L, M, M, M)),
+         add_out, repeat=10)
+    case("b + a, out=c", lambda L: (permute(L, rand(L, M, M, M), 2, 0, 1), rand(L, M, M, M), empty(L, M, M, M)),
+         add_out, repeat=10)
 
 print("-- types: computing in the common dtype")
 case("float64 + float64, out=float64",
