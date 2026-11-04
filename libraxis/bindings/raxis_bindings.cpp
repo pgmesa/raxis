@@ -689,6 +689,10 @@ PYBIND11_MODULE(_C, c) {
 
         .def("zero_", 
             py::overload_cast<>(&raxis::Tensor::zero_, py::const_))
+        .def("resize_", [](const raxis::Tensor& self, raxis::VecOrInt shape) -> raxis::Tensor {
+            self.resize_(shape);
+            return self;
+        }, py::arg("shape"))
         .def("fill_", 
             py::overload_cast<raxis::Scalar>(&raxis::Tensor::fill_, py::const_))
         .def("uniform_",

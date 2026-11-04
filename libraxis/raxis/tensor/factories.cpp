@@ -123,9 +123,9 @@ Tensor empty(IntArrayRef shape, TensorOptions options) {
     size_t nbytes = static_cast<size_t>(compute_numel(shape)) * dtype.itemsize();
     // The CUDA allocator allocates on the current device
     DeviceGuard guard(options.device());
-    auto data_ptr = get_allocator(options.device().type())->allocate(nbytes);
+    Allocator* allocator = get_allocator(options.device().type());
     Tensor t(std::make_shared<detail::TensorImpl>(
-        std::move(data_ptr), nbytes, shape, std::nullopt, dtype)
+        allocator->allocate(nbytes), nbytes, shape, std::nullopt, dtype, allocator)
     );
     set_requires_grad(t, options);
     return t;
@@ -137,9 +137,9 @@ Tensor empty_strided(IntArrayRef shape, IntArrayRef strides, TensorOptions optio
     Dtype dtype = options.dtype();
     size_t nbytes = compute_numel_from_strides(shape, strides) * dtype.itemsize();
     DeviceGuard guard(options.device());
-    auto data_ptr = get_allocator(options.device().type())->allocate(nbytes);
+    Allocator* allocator = get_allocator(options.device().type());
     Tensor t(std::make_shared<detail::TensorImpl>(
-        std::move(data_ptr), nbytes, shape, strides, dtype)
+        allocator->allocate(nbytes), nbytes, shape, strides, dtype, allocator)
     );
     set_requires_grad(t, options);
     return t;

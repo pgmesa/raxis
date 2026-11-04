@@ -87,16 +87,35 @@ class TestResize:
         assert r_out.stride() == t_out.stride()
         check_match(r_out, t_out)
 
-    def test_wrong_shape_warns(self, device):
+    def test_wrong_shape_raises(self, device):
+        # Deliberate difference: torch resizes and warns that it will stop
+        # (pytorch#41027); raxis raises already
         r_a, t_a = make_pair(randf(3, 4), device)
         r_out, t_out = empty_pair((5,), "float32", device)
-        with pytest.warns(UserWarning, match="was resized since it had shape") as raxis_warnings:
+        with pytest.raises(RuntimeError, match="cannot be resized: it has shape \\[5\\]"):
             raxis.exp(r_a, out=r_out)
-        with pytest.warns(UserWarning) as torch_warnings:
+        with pytest.warns(UserWarning, match="was resized since it had shape"):
             torch.exp(t_a, out=t_out)
-        # torch appends where in its source it was raised
-        assert str(torch_warnings[0].message).startswith(str(raxis_warnings[0].message))
-        check_match(r_out, t_out)
+
+    def test_zero_elements_reuse_the_storage(self, device):
+        # The pattern torch's warning recommends: t.resize_(0), then out=t
+        for lib in (raxis, torch):
+            t = lib.empty(100, device=device)
+            address = t.data_ptr()
+            t.resize_(0)
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                lib.add(lib.ones(4, device=device), lib.ones(4, device=device), out=t)
+            assert t.data_ptr() == address and tuple(t.shape) == (4,)
+
+    def test_zero_element_view_does_not_write_its_base(self, device):
+        # torch resizes x[3:3] inside x's storage and writes into x; raxis
+        # gives the view new memory instead
+        x = raxis.zeros(10, device=device)
+        out = x[3:3]
+        raxis.add(raxis.ones(4, device=device), raxis.ones(4, device=device), out=out)
+        assert out.tolist() == [2.0] * 4
+        assert x.tolist() == [0.0] * 10
 
     def test_right_shape_keeps_its_strides(self, device):
         r_a, t_a = make_pair(randf(3, 4), device)

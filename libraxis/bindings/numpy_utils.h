@@ -89,6 +89,10 @@ py::array tensor_to_numpy(py::object self, const Tensor& a) {
     DimVector strides_ = a.byte_strides();
     std::vector<ssize_t> strides(strides_.begin(), strides_.end());
 
+    // From: torch/csrc/utils/tensor_numpy.cpp (tensor_to_numpy): the array
+    // reads this memory directly, so resize_ must not move it from now on
+    a.storage()->set_resizable(false);
+
     return py::array(
         numpy_dtype(a.dtype()),    // dtype
         std::move(shape),                     // shape

@@ -29,7 +29,8 @@ public:
         size_t nbytes,
         IntArrayRef shape,
         std::optional<IntArrayRef> strides,
-        Dtype dtype);
+        Dtype dtype,
+        Allocator* allocator = nullptr);
 
     TensorImpl(
         std::shared_ptr<StorageImpl> storage,
@@ -69,6 +70,10 @@ public:
     // of src; autograd and view fields stay. Only for set_data.
     void shallow_copy_from(const TensorImpl& src);
 
+    // New shape and strides over the same storage and offset (resize_). The
+    // caller makes sure the storage is large enough
+    void set_shape_and_strides(IntArrayRef shape, IntArrayRef strides);
+
     // -- Autograd --
     autograd::AutogradMeta* autograd_meta() const;
     void set_autograd_meta(std::unique_ptr<autograd::AutogradMeta> meta);
@@ -92,8 +97,9 @@ public:
     void set_view_version(uint32_t version) { view_version_ = version; }
 
 private:
-    // Shape and strides only change in shallow_copy_from, so the layout
-    // properties are computed there instead of on every check
+    // Shape and strides only change in shallow_copy_from and
+    // set_shape_and_strides, so the layout properties are computed there
+    // instead of on every check
     void compute_layout();
 
     std::shared_ptr<StorageImpl> storage_;

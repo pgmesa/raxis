@@ -211,6 +211,8 @@ public:
 
     Tensor& fill_(Scalar value) const;
     Tensor& zero_() const;
+    // A new shape over the same storage, which grows if needed (resize.h)
+    const Tensor& resize_(IntArrayRef shape) const;
     Tensor& uniform_(double low = 0.0, double high = 1.0) const;
     Tensor& normal_(double mean = 0.0, double std = 1.0) const;
     Tensor& randint_(int64_t low, int64_t high) const;

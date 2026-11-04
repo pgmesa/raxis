@@ -32,7 +32,8 @@ inline void bind_untyped_storage(py::module_& c) {
         .def(py::init([](int64_t nbytes) {
             RAXIS_CHECK(nbytes >= 0, "UntypedStorage: negative size ", nbytes);
             const size_t size = static_cast<size_t>(nbytes);
-            return std::make_shared<StorageImpl>(get_allocator(DeviceType::CPU)->allocate(size), size);
+            Allocator* allocator = get_allocator(DeviceType::CPU);
+            return std::make_shared<StorageImpl>(allocator->allocate(size), size, allocator);
         }), py::arg("nbytes"))
         .def("nbytes", &StorageImpl::nbytes)
         .def("data_ptr", [](const StorageImpl& self) {
@@ -49,6 +50,8 @@ inline void bind_untyped_storage(py::module_& c) {
             RAXIS_CHECK(self.device().is_cpu(),
                 "UntypedStorage: only a CPU storage exposes its bytes, this one is on ", self.device());
             const auto nbytes = static_cast<py::ssize_t>(self.nbytes());
+            // The buffer reads this memory directly: it must not move
+            self.set_resizable(false);
             return py::buffer_info(self.mutable_data(), 1, py::format_descriptor<uint8_t>::format(), 1,
                                    {nbytes}, {py::ssize_t(1)});
         });

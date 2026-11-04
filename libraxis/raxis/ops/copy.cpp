@@ -53,8 +53,8 @@ Tensor to_copy(const Tensor& self, Dtype dtype, Device device, bool non_blocking
 Tensor pin_memory(const Tensor& self) {
     RAXIS_CHECK(self.is_cpu(), "cannot pin a ", self.device(), " tensor: only dense CPU tensors can be pinned");
     const size_t nbytes = compute_numel_from_strides(self.shape(), self.strides()) * self.dtype().itemsize();
-    auto storage = std::make_shared<detail::StorageImpl>(
-        get_cuda_hooks().pinned_memory_allocator()->allocate(nbytes), nbytes);
+    Allocator* allocator = get_cuda_hooks().pinned_memory_allocator();
+    auto storage = std::make_shared<detail::StorageImpl>(allocator->allocate(nbytes), nbytes, allocator);
     Tensor out = from_storage(std::move(storage), 0, self.shape(), self.strides(), self.dtype());
     copy(self, out);
     return out;

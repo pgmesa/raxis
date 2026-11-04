@@ -25,8 +25,9 @@ TensorImpl::TensorImpl(
     size_t nbytes,
     IntArrayRef shape,
     std::optional<IntArrayRef> strides,
-    Dtype dtype
-) : storage_(std::make_shared<StorageImpl>(std::move(data), nbytes)),
+    Dtype dtype,
+    Allocator* allocator
+) : storage_(std::make_shared<StorageImpl>(std::move(data), nbytes, allocator)),
     storage_offset_(0),
     shape_(shape),
     strides_(strides.value_or(compute_strides(shape))),
@@ -113,6 +114,13 @@ void TensorImpl::shallow_copy_from(const TensorImpl& src) {
     dtype_ = src.dtype_;
     numel_ = src.numel_;
     is_wrapped_number_ = src.is_wrapped_number_;
+    compute_layout();
+}
+
+void TensorImpl::set_shape_and_strides(IntArrayRef shape, IntArrayRef strides) {
+    shape_ = DimVector(shape);
+    strides_ = DimVector(strides);
+    numel_ = compute_numel(shape);
     compute_layout();
 }
 

@@ -20,6 +20,7 @@
 #include <raxis/tensor/tensor_options.h>
 #include <raxis/tensor/factories.h>
 #include <raxis/tensor/formatting.h>
+#include <raxis/tensor/resize.h>
 #include <raxis/tensor/tensor_indexing.h>
 #include <raxis/tensor/tensor_shape.h>
 
@@ -497,6 +498,10 @@ Tensor& Tensor::fill_(Scalar value) const {
 
 Tensor& Tensor::zero_() const {
     return ::raxis::zero_(const_cast<Tensor&>(*this));
+}
+
+const Tensor& Tensor::resize_(IntArrayRef shape) const {
+    return ::raxis::resize_(*this, shape);
 }
 
 Tensor& Tensor::uniform_(double low, double high) const {

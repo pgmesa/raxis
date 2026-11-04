@@ -67,7 +67,7 @@ def nonzero(self, *, as_tuple: typing.Literal[True]) -> tuple[Tensor, ...]: ...'
 # Shapes also taken as separate ints (x.view(3, 4), raxis.zeros(3, 4)), see
 # _sizes_as_varargs in raxis/__init__.py
 TENSOR_SIZE_VARARGS = ['view', 'reshape', 'permute', 'expand', 'flip', 'repeat',
-                       'new_empty', 'new_zeros', 'new_ones']
+                       'new_empty', 'new_zeros', 'new_ones', 'resize_']
 FUNCTION_SIZE_VARARGS = ['empty', 'zeros', 'ones', 'rand', 'randn']
 
 
@@ -132,9 +132,13 @@ def unwrap_python_methods() -> None:
     (*args, **kwargs). Only this process sees the change."""
     import raxis
     for name, attr in list(vars(raxis.Tensor).items()):
-        wrapped = getattr(attr, '__wrapped__', None)
-        if wrapped is not None:
-            setattr(raxis.Tensor, name, wrapped)
+        # Down to the pybind11 method: resize_ has two wrappers (sizes as
+        # varargs, then return self)
+        original = attr
+        while getattr(original, '__wrapped__', None) is not None:
+            original = original.__wrapped__
+        if original is not attr:
+            setattr(raxis.Tensor, name, original)
 
 
 def postprocess_stub(stub_path: Path) -> None:
