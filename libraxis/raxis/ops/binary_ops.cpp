@@ -256,6 +256,80 @@ Tensor minimum(const Tensor& a, const Tensor& b) {
     return ops::minimum_out(a, b, out);
 }
 
+namespace {
+
+// The kernels have no bool case (torch: "remainder_cpu" not implemented for
+// 'Bool'); checked after build(), once the common dtype is known
+template<typename Stub>
+Tensor& integer_division_op_out(const char* name, const Tensor& a, const Tensor& b, Tensor& out, Stub& stub) {
+    auto iter = iterator::binary_op_config()
+        .resize_outputs(true)
+        .add_output(out)
+        .add_input(a)
+        .add_input(b)
+        .build();
+
+    RAXIS_CHECK_NOT_IMPLEMENTED(!iter.common_dtype().is_bool(),
+        "\"", name, "\" not implemented for '", iter.common_dtype().name(), "'");
+    stub(iter.device_type(), iter);
+    out = iter.get_output(0);
+    return out;
+}
+
+} // anonymous namespace
+
+Tensor& remainder_out(const Tensor& a, const Tensor& b, Tensor& out) {
+    return integer_division_op_out("remainder", a, b, out, remainder_stub);
+}
+
+Tensor& fmod_out(const Tensor& a, const Tensor& b, Tensor& out) {
+    return integer_division_op_out("fmod", a, b, out, fmod_stub);
+}
+
+Tensor& remainder_out(const Tensor& a, Scalar s, Tensor& out) { return ops::remainder_out(a, wrapped_scalar_tensor(s), out); }
+Tensor& fmod_out(const Tensor& a, Scalar s, Tensor& out)      { return ops::fmod_out(a, wrapped_scalar_tensor(s), out); }
+
+Tensor remainder(const Tensor& a, const Tensor& b) { Tensor out; return ops::remainder_out(a, b, out); }
+Tensor remainder(const Tensor& a, Scalar s)        { Tensor out; return ops::remainder_out(a, wrapped_scalar_tensor(s), out); }
+Tensor remainder(Scalar s, const Tensor& b)        { Tensor out; return ops::remainder_out(wrapped_scalar_tensor(s), b, out); }
+Tensor fmod(const Tensor& a, const Tensor& b)      { Tensor out; return ops::fmod_out(a, b, out); }
+Tensor fmod(const Tensor& a, Scalar s)             { Tensor out; return ops::fmod_out(a, wrapped_scalar_tensor(s), out); }
+
+Tensor& remainder_(Tensor& a, const Tensor& b) { return ops::remainder_out(a, b, a); }
+Tensor& remainder_(Tensor& a, Scalar s)        { return ops::remainder_out(a, wrapped_scalar_tensor(s), a); }
+Tensor& fmod_(Tensor& a, const Tensor& b)      { return ops::fmod_out(a, b, a); }
+Tensor& fmod_(Tensor& a, Scalar s)             { return ops::fmod_out(a, wrapped_scalar_tensor(s), a); }
+
+// From: aten/src/ATen/native/BinaryOps.cpp (div_out with a rounding mode)
+// Unlike the true division, the inputs keep their dtype: 7 // 2 is 3, an
+// int64
+Tensor& div_out(const Tensor& a, const Tensor& b, std::string_view rounding_mode, Tensor& out) {
+    if (rounding_mode == "trunc") {
+        return integer_division_op_out("div_trunc", a, b, out, div_trunc_stub);
+    }
+    RAXIS_CHECK(rounding_mode == "floor",
+        "div expected rounding_mode to be one of None, 'trunc', or 'floor' but found '", rounding_mode, "'");
+    return integer_division_op_out("div_floor", a, b, out, div_floor_stub);
+}
+
+Tensor div(const Tensor& a, const Tensor& b, std::string_view rounding_mode) {
+    Tensor out;
+    return ops::div_out(a, b, rounding_mode, out);
+}
+
+Tensor div(const Tensor& a, Scalar s, std::string_view rounding_mode) {
+    Tensor out;
+    return ops::div_out(a, wrapped_scalar_tensor(s), rounding_mode, out);
+}
+
+Tensor& div_(Tensor& a, const Tensor& b, std::string_view rounding_mode) {
+    return ops::div_out(a, b, rounding_mode, a);
+}
+
+Tensor& div_(Tensor& a, Scalar s, std::string_view rounding_mode) {
+    return ops::div_out(a, wrapped_scalar_tensor(s), rounding_mode, a);
+}
+
 } // namespace ops
 
 DEFINE_DISPATCH(add_stub);
@@ -265,6 +339,10 @@ DEFINE_DISPATCH(div_stub);
 
 DEFINE_DISPATCH(maximum_stub);
 DEFINE_DISPATCH(minimum_stub);
+DEFINE_DISPATCH(div_trunc_stub);
+DEFINE_DISPATCH(div_floor_stub);
+DEFINE_DISPATCH(remainder_stub);
+DEFINE_DISPATCH(fmod_stub);
 
 namespace {
  
@@ -342,6 +420,62 @@ Tensor& logical_or_out(const Tensor& a, const Tensor& b, Tensor& out) {
     return written(comparison_op_out(a, b, out, logical_or_stub));
 }
 
+namespace {
+
+// Integer tensors cannot require grad, so the bitwise ops need no autograd
+// wrapper: only the version of what they write moves
+template<typename Stub>
+Tensor& bitwise_op_out(const char* name, bool allow_bool, const Tensor& a, const Tensor& b, Tensor& out, Stub& stub) {
+    auto iter = iterator::binary_op_config()
+        .resize_outputs(true)
+        .add_output(out)
+        .add_input(a)
+        .add_input(b)
+        .build();
+
+    const Dtype dtype = iter.common_dtype();
+    RAXIS_CHECK_NOT_IMPLEMENTED(dtype.is_integral(allow_bool),
+        "\"", name, "\" not implemented for '", dtype.name(), "'");
+    stub(iter.device_type(), iter);
+    out = iter.get_output(0);
+    return out;
+}
+
+} // anonymous namespace
+
+#define RAXIS_DEFINE_BITWISE_OP(op_name, allow_bool, stub)                     \
+    Tensor& op_name##_out(const Tensor& a, const Tensor& b, Tensor& out) {     \
+        return written(bitwise_op_out(#op_name, allow_bool, a, b, out, stub)); \
+    }                                                                          \
+    Tensor& op_name##_out(const Tensor& a, Scalar s, Tensor& out) {            \
+        return op_name##_out(a, wrapped_scalar_tensor(s), out);                \
+    }                                                                          \
+    Tensor op_name(const Tensor& a, const Tensor& b) {                         \
+        Tensor out;                                                            \
+        return bitwise_op_out(#op_name, allow_bool, a, b, out, stub);          \
+    }                                                                          \
+    Tensor op_name(const Tensor& a, Scalar s) {                                \
+        return op_name(a, wrapped_scalar_tensor(s));                           \
+    }                                                                          \
+    Tensor op_name(Scalar s, const Tensor& b) {                                \
+        return op_name(wrapped_scalar_tensor(s), b);                           \
+    }                                                                          \
+    Tensor& op_name##_(Tensor& a, const Tensor& b) {                           \
+        return op_name##_out(a, b, a);                                         \
+    }                                                                          \
+    Tensor& op_name##_(Tensor& a, Scalar s) {                                  \
+        return op_name##_out(a, wrapped_scalar_tensor(s), a);                  \
+    }
+
+// For bool, & | ^ are and, or, xor; shifts have no bool case, as in torch
+RAXIS_DEFINE_BITWISE_OP(bitwise_and, true, bitwise_and_stub)
+RAXIS_DEFINE_BITWISE_OP(bitwise_or, true, bitwise_or_stub)
+RAXIS_DEFINE_BITWISE_OP(bitwise_xor, true, bitwise_xor_stub)
+RAXIS_DEFINE_BITWISE_OP(bitwise_left_shift, false, lshift_stub)
+RAXIS_DEFINE_BITWISE_OP(bitwise_right_shift, false, rshift_stub)
+
+#undef RAXIS_DEFINE_BITWISE_OP
+
 
 DEFINE_DISPATCH(gt_stub);
 DEFINE_DISPATCH(ge_stub);
@@ -351,5 +485,10 @@ DEFINE_DISPATCH(eq_stub);
 DEFINE_DISPATCH(ne_stub);
 DEFINE_DISPATCH(logical_and_stub);
 DEFINE_DISPATCH(logical_or_stub);
+DEFINE_DISPATCH(bitwise_and_stub);
+DEFINE_DISPATCH(bitwise_or_stub);
+DEFINE_DISPATCH(bitwise_xor_stub);
+DEFINE_DISPATCH(lshift_stub);
+DEFINE_DISPATCH(rshift_stub);
 
 }

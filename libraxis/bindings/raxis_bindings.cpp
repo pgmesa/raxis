@@ -615,6 +615,81 @@ PYBIND11_MODULE(_C, c) {
         .def("__rtruediv__",
             py::overload_cast<raxis::Scalar>(&raxis::Tensor::rdiv, py::const_),
             py::arg("other"))
+
+        // %, //, &, |, ^, << and >>, as torch's
+        .def("__mod__", [](const raxis::Tensor& self, const raxis::Tensor& other) { return raxis::remainder(self, other); },
+            py::arg("other"))
+        .def("__mod__", [](const raxis::Tensor& self, raxis::Scalar other) { return raxis::remainder(self, other); },
+            py::arg("other"))
+        .def("__rmod__", [](const raxis::Tensor& self, raxis::Scalar other) { return raxis::remainder(other, self); },
+            py::arg("other"))
+        .def("__imod__", [](raxis::Tensor& self, const raxis::Tensor& other) -> raxis::Tensor& { return raxis::remainder_(self, other); },
+            py::arg("other"))
+        .def("__imod__", [](raxis::Tensor& self, raxis::Scalar other) -> raxis::Tensor& { return raxis::remainder_(self, other); },
+            py::arg("other"))
+        .def("__floordiv__", [](const raxis::Tensor& self, const raxis::Tensor& other) { return raxis::floor_divide(self, other); },
+            py::arg("other"))
+        .def("__floordiv__", [](const raxis::Tensor& self, raxis::Scalar other) { return raxis::floor_divide(self, other); },
+            py::arg("other"))
+        .def("__rfloordiv__", [](const raxis::Tensor& self, raxis::Scalar other) { return raxis::floor_divide(other, self); },
+            py::arg("other"))
+        .def("__ifloordiv__", [](raxis::Tensor& self, const raxis::Tensor& other) -> raxis::Tensor& { return raxis::floor_divide_(self, other); },
+            py::arg("other"))
+        .def("__ifloordiv__", [](raxis::Tensor& self, raxis::Scalar other) -> raxis::Tensor& { return raxis::floor_divide_(self, other); },
+            py::arg("other"))
+        .def("__and__", [](const raxis::Tensor& self, const raxis::Tensor& other) { return raxis::bitwise_and(self, other); },
+            py::arg("other"))
+        .def("__and__", [](const raxis::Tensor& self, raxis::Scalar other) { return raxis::bitwise_and(self, other); },
+            py::arg("other"))
+        .def("__rand__", [](const raxis::Tensor& self, raxis::Scalar other) { return raxis::bitwise_and(self, other); },
+            py::arg("other"))
+        .def("__iand__", [](raxis::Tensor& self, const raxis::Tensor& other) -> raxis::Tensor& { return raxis::bitwise_and_(self, other); },
+            py::arg("other"))
+        .def("__iand__", [](raxis::Tensor& self, raxis::Scalar other) -> raxis::Tensor& { return raxis::bitwise_and_(self, other); },
+            py::arg("other"))
+        .def("__or__", [](const raxis::Tensor& self, const raxis::Tensor& other) { return raxis::bitwise_or(self, other); },
+            py::arg("other"))
+        .def("__or__", [](const raxis::Tensor& self, raxis::Scalar other) { return raxis::bitwise_or(self, other); },
+            py::arg("other"))
+        .def("__ror__", [](const raxis::Tensor& self, raxis::Scalar other) { return raxis::bitwise_or(self, other); },
+            py::arg("other"))
+        .def("__ior__", [](raxis::Tensor& self, const raxis::Tensor& other) -> raxis::Tensor& { return raxis::bitwise_or_(self, other); },
+            py::arg("other"))
+        .def("__ior__", [](raxis::Tensor& self, raxis::Scalar other) -> raxis::Tensor& { return raxis::bitwise_or_(self, other); },
+            py::arg("other"))
+        .def("__xor__", [](const raxis::Tensor& self, const raxis::Tensor& other) { return raxis::bitwise_xor(self, other); },
+            py::arg("other"))
+        .def("__xor__", [](const raxis::Tensor& self, raxis::Scalar other) { return raxis::bitwise_xor(self, other); },
+            py::arg("other"))
+        .def("__rxor__", [](const raxis::Tensor& self, raxis::Scalar other) { return raxis::bitwise_xor(self, other); },
+            py::arg("other"))
+        .def("__ixor__", [](raxis::Tensor& self, const raxis::Tensor& other) -> raxis::Tensor& { return raxis::bitwise_xor_(self, other); },
+            py::arg("other"))
+        .def("__ixor__", [](raxis::Tensor& self, raxis::Scalar other) -> raxis::Tensor& { return raxis::bitwise_xor_(self, other); },
+            py::arg("other"))
+        .def("__lshift__", [](const raxis::Tensor& self, const raxis::Tensor& other) { return raxis::bitwise_left_shift(self, other); },
+            py::arg("other"))
+        .def("__lshift__", [](const raxis::Tensor& self, raxis::Scalar other) { return raxis::bitwise_left_shift(self, other); },
+            py::arg("other"))
+        .def("__rlshift__", [](const raxis::Tensor& self, raxis::Scalar other) { return raxis::bitwise_left_shift(other, self); },
+            py::arg("other"))
+        .def("__ilshift__", [](raxis::Tensor& self, const raxis::Tensor& other) -> raxis::Tensor& { return raxis::bitwise_left_shift_(self, other); },
+            py::arg("other"))
+        .def("__ilshift__", [](raxis::Tensor& self, raxis::Scalar other) -> raxis::Tensor& { return raxis::bitwise_left_shift_(self, other); },
+            py::arg("other"))
+        .def("__rshift__", [](const raxis::Tensor& self, const raxis::Tensor& other) { return raxis::bitwise_right_shift(self, other); },
+            py::arg("other"))
+        .def("__rshift__", [](const raxis::Tensor& self, raxis::Scalar other) { return raxis::bitwise_right_shift(self, other); },
+            py::arg("other"))
+        .def("__rrshift__", [](const raxis::Tensor& self, raxis::Scalar other) { return raxis::bitwise_right_shift(other, self); },
+            py::arg("other"))
+        .def("__irshift__", [](raxis::Tensor& self, const raxis::Tensor& other) -> raxis::Tensor& { return raxis::bitwise_right_shift_(self, other); },
+            py::arg("other"))
+        .def("__irshift__", [](raxis::Tensor& self, raxis::Scalar other) -> raxis::Tensor& { return raxis::bitwise_right_shift_(self, other); },
+            py::arg("other"))
+        // 2 ** t
+        .def("__rpow__", [](const raxis::Tensor& self, raxis::Scalar base) { return raxis::pow(base, self); },
+            py::arg("other"))
         
         // Functions to access operations
         .def("clone", &raxis::Tensor::clone,
@@ -768,6 +843,84 @@ PYBIND11_MODULE(_C, c) {
             py::overload_cast<raxis::Scalar>(&raxis::Tensor::div_, py::const_),
             py::arg("other"))
 
+        // div with rounding_mode=None is the true division above
+        .def("div", [](const raxis::Tensor& self, const raxis::Tensor& other, std::optional<std::string> rounding_mode) {
+            return rounding_mode ? raxis::div(self, other, *rounding_mode) : raxis::div(self, other);
+        }, py::arg("other"), py::kw_only(), py::arg("rounding_mode"))
+        .def("div", [](const raxis::Tensor& self, raxis::Scalar other, std::optional<std::string> rounding_mode) {
+            return rounding_mode ? raxis::div(self, other, *rounding_mode) : raxis::div(self, other);
+        }, py::arg("other"), py::kw_only(), py::arg("rounding_mode"))
+        .def("div_", [](raxis::Tensor& self, const raxis::Tensor& other, std::optional<std::string> rounding_mode) -> raxis::Tensor& {
+            return rounding_mode ? raxis::div_(self, other, *rounding_mode) : raxis::div_(self, other);
+        }, py::arg("other"), py::kw_only(), py::arg("rounding_mode"))
+        .def("div_", [](raxis::Tensor& self, raxis::Scalar other, std::optional<std::string> rounding_mode) -> raxis::Tensor& {
+            return rounding_mode ? raxis::div_(self, other, *rounding_mode) : raxis::div_(self, other);
+        }, py::arg("other"), py::kw_only(), py::arg("rounding_mode"))
+        .def("remainder", [](const raxis::Tensor& self, const raxis::Tensor& other) { return raxis::remainder(self, other); },
+            py::arg("other"))
+        .def("remainder", [](const raxis::Tensor& self, raxis::Scalar other) { return raxis::remainder(self, other); },
+            py::arg("other"))
+        .def("remainder_", [](raxis::Tensor& self, const raxis::Tensor& other) -> raxis::Tensor& { return raxis::remainder_(self, other); },
+            py::arg("other"))
+        .def("remainder_", [](raxis::Tensor& self, raxis::Scalar other) -> raxis::Tensor& { return raxis::remainder_(self, other); },
+            py::arg("other"))
+        .def("fmod", [](const raxis::Tensor& self, const raxis::Tensor& other) { return raxis::fmod(self, other); },
+            py::arg("other"))
+        .def("fmod", [](const raxis::Tensor& self, raxis::Scalar other) { return raxis::fmod(self, other); },
+            py::arg("other"))
+        .def("fmod_", [](raxis::Tensor& self, const raxis::Tensor& other) -> raxis::Tensor& { return raxis::fmod_(self, other); },
+            py::arg("other"))
+        .def("fmod_", [](raxis::Tensor& self, raxis::Scalar other) -> raxis::Tensor& { return raxis::fmod_(self, other); },
+            py::arg("other"))
+        .def("floor_divide", [](const raxis::Tensor& self, const raxis::Tensor& other) { return raxis::floor_divide(self, other); },
+            py::arg("other"))
+        .def("floor_divide", [](const raxis::Tensor& self, raxis::Scalar other) { return raxis::floor_divide(self, other); },
+            py::arg("other"))
+        .def("floor_divide_", [](raxis::Tensor& self, const raxis::Tensor& other) -> raxis::Tensor& { return raxis::floor_divide_(self, other); },
+            py::arg("other"))
+        .def("floor_divide_", [](raxis::Tensor& self, raxis::Scalar other) -> raxis::Tensor& { return raxis::floor_divide_(self, other); },
+            py::arg("other"))
+        .def("bitwise_and", [](const raxis::Tensor& self, const raxis::Tensor& other) { return raxis::bitwise_and(self, other); },
+            py::arg("other"))
+        .def("bitwise_and", [](const raxis::Tensor& self, raxis::Scalar other) { return raxis::bitwise_and(self, other); },
+            py::arg("other"))
+        .def("bitwise_and_", [](raxis::Tensor& self, const raxis::Tensor& other) -> raxis::Tensor& { return raxis::bitwise_and_(self, other); },
+            py::arg("other"))
+        .def("bitwise_and_", [](raxis::Tensor& self, raxis::Scalar other) -> raxis::Tensor& { return raxis::bitwise_and_(self, other); },
+            py::arg("other"))
+        .def("bitwise_or", [](const raxis::Tensor& self, const raxis::Tensor& other) { return raxis::bitwise_or(self, other); },
+            py::arg("other"))
+        .def("bitwise_or", [](const raxis::Tensor& self, raxis::Scalar other) { return raxis::bitwise_or(self, other); },
+            py::arg("other"))
+        .def("bitwise_or_", [](raxis::Tensor& self, const raxis::Tensor& other) -> raxis::Tensor& { return raxis::bitwise_or_(self, other); },
+            py::arg("other"))
+        .def("bitwise_or_", [](raxis::Tensor& self, raxis::Scalar other) -> raxis::Tensor& { return raxis::bitwise_or_(self, other); },
+            py::arg("other"))
+        .def("bitwise_xor", [](const raxis::Tensor& self, const raxis::Tensor& other) { return raxis::bitwise_xor(self, other); },
+            py::arg("other"))
+        .def("bitwise_xor", [](const raxis::Tensor& self, raxis::Scalar other) { return raxis::bitwise_xor(self, other); },
+            py::arg("other"))
+        .def("bitwise_xor_", [](raxis::Tensor& self, const raxis::Tensor& other) -> raxis::Tensor& { return raxis::bitwise_xor_(self, other); },
+            py::arg("other"))
+        .def("bitwise_xor_", [](raxis::Tensor& self, raxis::Scalar other) -> raxis::Tensor& { return raxis::bitwise_xor_(self, other); },
+            py::arg("other"))
+        .def("bitwise_left_shift", [](const raxis::Tensor& self, const raxis::Tensor& other) { return raxis::bitwise_left_shift(self, other); },
+            py::arg("other"))
+        .def("bitwise_left_shift", [](const raxis::Tensor& self, raxis::Scalar other) { return raxis::bitwise_left_shift(self, other); },
+            py::arg("other"))
+        .def("bitwise_left_shift_", [](raxis::Tensor& self, const raxis::Tensor& other) -> raxis::Tensor& { return raxis::bitwise_left_shift_(self, other); },
+            py::arg("other"))
+        .def("bitwise_left_shift_", [](raxis::Tensor& self, raxis::Scalar other) -> raxis::Tensor& { return raxis::bitwise_left_shift_(self, other); },
+            py::arg("other"))
+        .def("bitwise_right_shift", [](const raxis::Tensor& self, const raxis::Tensor& other) { return raxis::bitwise_right_shift(self, other); },
+            py::arg("other"))
+        .def("bitwise_right_shift", [](const raxis::Tensor& self, raxis::Scalar other) { return raxis::bitwise_right_shift(self, other); },
+            py::arg("other"))
+        .def("bitwise_right_shift_", [](raxis::Tensor& self, const raxis::Tensor& other) -> raxis::Tensor& { return raxis::bitwise_right_shift_(self, other); },
+            py::arg("other"))
+        .def("bitwise_right_shift_", [](raxis::Tensor& self, raxis::Scalar other) -> raxis::Tensor& { return raxis::bitwise_right_shift_(self, other); },
+            py::arg("other"))
+
         // Reversed
         .def("rsub",
             py::overload_cast<const raxis::Tensor&>(&raxis::Tensor::rsub, py::const_),
@@ -915,7 +1068,12 @@ PYBIND11_MODULE(_C, c) {
         // Unary operators
         .def("__neg__", &raxis::Tensor::neg)
         .def("__abs__", &raxis::Tensor::abs)
-        .def("__invert__", &raxis::Tensor::logical_not)
+        .def("__invert__", [](const raxis::Tensor& self) {
+            if (!self.dtype().is_integral(/*include_bool=*/true)) {
+                throw py::type_error("~ (operator.invert) is only implemented on integer and Boolean-type tensors");
+            }
+            return self.bitwise_not();
+        })
  
         // Unary methods
         .def("isnan", &raxis::Tensor::isnan)
@@ -925,6 +1083,9 @@ PYBIND11_MODULE(_C, c) {
         .def("ceil", &raxis::Tensor::ceil)
         .def("floor", &raxis::Tensor::floor)
         .def("round", &raxis::Tensor::round)
+        .def("trunc", &raxis::Tensor::trunc)
+        .def("frac", &raxis::Tensor::frac)
+        .def("bitwise_not", &raxis::Tensor::bitwise_not)
         .def("exp", &raxis::Tensor::exp)
         .def("log", &raxis::Tensor::log)
         .def("sqrt", &raxis::Tensor::sqrt)
@@ -982,6 +1143,9 @@ PYBIND11_MODULE(_C, c) {
         .def("ceil_", &raxis::Tensor::ceil_)
         .def("floor_", &raxis::Tensor::floor_)
         .def("round_", &raxis::Tensor::round_)
+        .def("trunc_", &raxis::Tensor::trunc_)
+        .def("frac_", &raxis::Tensor::frac_)
+        .def("bitwise_not_", &raxis::Tensor::bitwise_not_)
         .def("exp_", &raxis::Tensor::exp_)
         .def("log_", &raxis::Tensor::log_)
         .def("sqrt_", &raxis::Tensor::sqrt_)
@@ -1530,6 +1694,63 @@ PYBIND11_MODULE(_C, c) {
         py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::logical_or),
         py::arg("input"), py::arg("other"));
 
+    // Integer division, remainders and bitwise ops
+    c.def("div", [](const raxis::Tensor& input, const raxis::Tensor& other, std::optional<std::string> rounding_mode) {
+        return rounding_mode ? raxis::div(input, other, *rounding_mode) : raxis::div(input, other);
+    }, py::arg("input"), py::arg("other"), py::kw_only(), py::arg("rounding_mode"));
+    c.def("div", [](const raxis::Tensor& input, raxis::Scalar other, std::optional<std::string> rounding_mode) {
+        return rounding_mode ? raxis::div(input, other, *rounding_mode) : raxis::div(input, other);
+    }, py::arg("input"), py::arg("other"), py::kw_only(), py::arg("rounding_mode"));
+    c.def("remainder", py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::remainder),
+        py::arg("input"), py::arg("other"));
+    c.def("remainder", py::overload_cast<const raxis::Tensor&, raxis::Scalar>(&raxis::remainder),
+        py::arg("input"), py::arg("other"));
+    c.def("remainder", py::overload_cast<raxis::Scalar, const raxis::Tensor&>(&raxis::remainder),
+        py::arg("input"), py::arg("other"));
+    c.def("fmod", py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::fmod),
+        py::arg("input"), py::arg("other"));
+    c.def("fmod", py::overload_cast<const raxis::Tensor&, raxis::Scalar>(&raxis::fmod),
+        py::arg("input"), py::arg("other"));
+    c.def("floor_divide", py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::floor_divide),
+        py::arg("input"), py::arg("other"));
+    c.def("floor_divide", py::overload_cast<const raxis::Tensor&, raxis::Scalar>(&raxis::floor_divide),
+        py::arg("input"), py::arg("other"));
+    c.def("floor_divide", py::overload_cast<raxis::Scalar, const raxis::Tensor&>(&raxis::floor_divide),
+        py::arg("input"), py::arg("other"));
+    c.def("bitwise_and", py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::bitwise_and),
+        py::arg("input"), py::arg("other"));
+    c.def("bitwise_and", py::overload_cast<const raxis::Tensor&, raxis::Scalar>(&raxis::bitwise_and),
+        py::arg("input"), py::arg("other"));
+    c.def("bitwise_and", py::overload_cast<raxis::Scalar, const raxis::Tensor&>(&raxis::bitwise_and),
+        py::arg("input"), py::arg("other"));
+    c.def("bitwise_or", py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::bitwise_or),
+        py::arg("input"), py::arg("other"));
+    c.def("bitwise_or", py::overload_cast<const raxis::Tensor&, raxis::Scalar>(&raxis::bitwise_or),
+        py::arg("input"), py::arg("other"));
+    c.def("bitwise_or", py::overload_cast<raxis::Scalar, const raxis::Tensor&>(&raxis::bitwise_or),
+        py::arg("input"), py::arg("other"));
+    c.def("bitwise_xor", py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::bitwise_xor),
+        py::arg("input"), py::arg("other"));
+    c.def("bitwise_xor", py::overload_cast<const raxis::Tensor&, raxis::Scalar>(&raxis::bitwise_xor),
+        py::arg("input"), py::arg("other"));
+    c.def("bitwise_xor", py::overload_cast<raxis::Scalar, const raxis::Tensor&>(&raxis::bitwise_xor),
+        py::arg("input"), py::arg("other"));
+    c.def("bitwise_left_shift", py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::bitwise_left_shift),
+        py::arg("input"), py::arg("other"));
+    c.def("bitwise_left_shift", py::overload_cast<const raxis::Tensor&, raxis::Scalar>(&raxis::bitwise_left_shift),
+        py::arg("input"), py::arg("other"));
+    c.def("bitwise_left_shift", py::overload_cast<raxis::Scalar, const raxis::Tensor&>(&raxis::bitwise_left_shift),
+        py::arg("input"), py::arg("other"));
+    c.def("bitwise_right_shift", py::overload_cast<const raxis::Tensor&, const raxis::Tensor&>(&raxis::bitwise_right_shift),
+        py::arg("input"), py::arg("other"));
+    c.def("bitwise_right_shift", py::overload_cast<const raxis::Tensor&, raxis::Scalar>(&raxis::bitwise_right_shift),
+        py::arg("input"), py::arg("other"));
+    c.def("bitwise_right_shift", py::overload_cast<raxis::Scalar, const raxis::Tensor&>(&raxis::bitwise_right_shift),
+        py::arg("input"), py::arg("other"));
+    c.def("trunc", py::overload_cast<const raxis::Tensor&>(&raxis::trunc), py::arg("input"));
+    c.def("frac", py::overload_cast<const raxis::Tensor&>(&raxis::frac), py::arg("input"));
+    c.def("bitwise_not", py::overload_cast<const raxis::Tensor&>(&raxis::bitwise_not), py::arg("input"));
+
 
     // Unary Ops
     c.def("isnan",
@@ -1637,6 +1858,9 @@ PYBIND11_MODULE(_C, c) {
     RAXIS_BIND_UNARY_OUT(ceil)
     RAXIS_BIND_UNARY_OUT(floor)
     RAXIS_BIND_UNARY_OUT(round)
+    RAXIS_BIND_UNARY_OUT(trunc)
+    RAXIS_BIND_UNARY_OUT(frac)
+    RAXIS_BIND_UNARY_OUT(bitwise_not)
     RAXIS_BIND_UNARY_OUT(exp)
     RAXIS_BIND_UNARY_OUT(expm1)
     RAXIS_BIND_UNARY_OUT(log)
@@ -1659,6 +1883,30 @@ PYBIND11_MODULE(_C, c) {
     RAXIS_BIND_UNARY_OUT(erf)
     RAXIS_BIND_UNARY_OUT(erfc)
     RAXIS_BIND_UNARY_OUT(logical_not)
+    RAXIS_BIND_BINARY_OUT(remainder, const raxis::Tensor&, "input", "other")
+    RAXIS_BIND_BINARY_OUT(remainder, raxis::Scalar, "input", "other")
+    RAXIS_BIND_BINARY_OUT(fmod, const raxis::Tensor&, "input", "other")
+    RAXIS_BIND_BINARY_OUT(fmod, raxis::Scalar, "input", "other")
+    RAXIS_BIND_BINARY_OUT(floor_divide, const raxis::Tensor&, "input", "other")
+    RAXIS_BIND_BINARY_OUT(floor_divide, raxis::Scalar, "input", "other")
+    RAXIS_BIND_BINARY_OUT(bitwise_and, const raxis::Tensor&, "input", "other")
+    RAXIS_BIND_BINARY_OUT(bitwise_and, raxis::Scalar, "input", "other")
+    RAXIS_BIND_BINARY_OUT(bitwise_or, const raxis::Tensor&, "input", "other")
+    RAXIS_BIND_BINARY_OUT(bitwise_or, raxis::Scalar, "input", "other")
+    RAXIS_BIND_BINARY_OUT(bitwise_xor, const raxis::Tensor&, "input", "other")
+    RAXIS_BIND_BINARY_OUT(bitwise_xor, raxis::Scalar, "input", "other")
+    RAXIS_BIND_BINARY_OUT(bitwise_left_shift, const raxis::Tensor&, "input", "other")
+    RAXIS_BIND_BINARY_OUT(bitwise_left_shift, raxis::Scalar, "input", "other")
+    RAXIS_BIND_BINARY_OUT(bitwise_right_shift, const raxis::Tensor&, "input", "other")
+    RAXIS_BIND_BINARY_OUT(bitwise_right_shift, raxis::Scalar, "input", "other")
+    c.def("div", [](const raxis::Tensor& input, const raxis::Tensor& other, std::optional<std::string> rounding_mode,
+                    raxis::Tensor& out) -> raxis::Tensor& {
+        return rounding_mode ? raxis::div_out(input, other, *rounding_mode, out) : raxis::div_out(input, other, out);
+    }, py::arg("input"), py::arg("other"), py::kw_only(), py::arg("rounding_mode"), py::arg("out"));
+    c.def("div", [](const raxis::Tensor& input, raxis::Scalar other, std::optional<std::string> rounding_mode,
+                    raxis::Tensor& out) -> raxis::Tensor& {
+        return rounding_mode ? raxis::div_out(input, other, *rounding_mode, out) : raxis::div_out(input, other, out);
+    }, py::arg("input"), py::arg("other"), py::kw_only(), py::arg("rounding_mode"), py::arg("out"));
 #undef RAXIS_BIND_UNARY_OUT
 #undef RAXIS_BIND_BINARY_OUT
 

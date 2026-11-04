@@ -1039,6 +1039,190 @@ class TestRoundTrips:
 
 
 # ===========================================================================
+# INTEGER DIVISION, REMAINDERS AND BITWISE OPS (//, %, fmod, &, |, ^, ~, <<, >>)
+# ===========================================================================
+
+def check_exact(r, t, context=""):
+    """Same dtype, shape and bits (NaN equal to NaN)."""
+    r_np, t_np = np.array(r.cpu()), t.cpu().numpy()
+    assert r_np.dtype == t_np.dtype, f"{context}: {r_np.dtype} vs {t_np.dtype}"
+    assert r_np.shape == t_np.shape, f"{context}: {r_np.shape} vs {t_np.shape}"
+    np.testing.assert_array_equal(r_np, t_np, err_msg=context)
+
+
+def special_floats(dtype):
+    """Dividends and divisors with the corner cases first: signed zeros,
+    infinities, NaN, huge / tiny ratios, exact multiples, then normals."""
+    rng = np.random.default_rng(3)
+    a = rng.normal(0, 10, 300).astype(dtype)
+    b = rng.normal(0, 3, 300).astype(dtype)
+    a[:20] = [0, -0.0, np.inf, -np.inf, np.nan, 1e-30, -1e30, 3, -3, 7.5, -7.5, 1, -1, 2, 5, 0.5, -0.5, 1e30, -1e-30, 6]
+    b[:20] = [3, 3, 3, -3, 2, 1e-30, 7, 0, -0.0, np.inf, -np.inf, 0.1, -0.1, 3, -2, 0.25, 0.3, 1e-30, 3, -1.5]
+    return a, b
+
+
+def random_ints(dtype, n=300, seed=4):
+    rng = np.random.default_rng(seed)
+    if dtype == np.uint8:
+        return rng.integers(0, 256, n).astype(dtype), rng.integers(1, 256, n).astype(dtype)
+    a = rng.integers(-1000, 1000, n).astype(dtype)
+    b = rng.integers(-50, 50, n).astype(dtype)
+    b[b == 0] = 7
+    info = np.iinfo(dtype)
+    # INT_MIN % -1 overflows in C; torch defines it as 0 (and // as INT_MIN)
+    a[:3], b[:3] = [info.min, info.min, info.max], [-1, 3, -1]
+    return a, b
+
+
+FLOAT_DTYPES = [np.float32, np.float64]
+INT_DTYPES = [np.int32, np.int64, np.uint8]
+
+DIVISION_OPS = [
+    ("%", lambda m, a, b: a % b),
+    ("remainder", lambda m, a, b: m.remainder(a, b)),
+    ("fmod", lambda m, a, b: m.fmod(a, b)),
+    ("//", lambda m, a, b: a // b),
+    ("floor_divide", lambda m, a, b: m.floor_divide(a, b)),
+    ("div floor", lambda m, a, b: m.div(a, b, rounding_mode="floor")),
+    ("div trunc", lambda m, a, b: a.div(b, rounding_mode="trunc")),
+]
+
+
+class TestDivisionAndBitwise:
+
+    @pytest.mark.parametrize("name,op", DIVISION_OPS, ids=[o[0] for o in DIVISION_OPS])
+    @pytest.mark.parametrize("dtype", FLOAT_DTYPES, ids=["float32", "float64"])
+    def test_division_floats(self, name, op, dtype, device):
+        a, b = special_floats(dtype)
+        r_a, t_a = make_pair(a, device)
+        r_b, t_b = make_pair(b, device)
+        check_exact(op(raxis, r_a, r_b), op(torch, t_a, t_b), context=name)
+        # Strided: the scalar loop instead of the vector one
+        check_exact(op(raxis, r_a[::3], r_b[::3]), op(torch, t_a[::3], t_b[::3]), context=f"{name} strided")
+
+    @pytest.mark.parametrize("name,op", DIVISION_OPS, ids=[o[0] for o in DIVISION_OPS])
+    @pytest.mark.parametrize("dtype", INT_DTYPES, ids=["int32", "int64", "uint8"])
+    def test_division_ints(self, name, op, dtype, device):
+        a, b = random_ints(dtype)
+        if name == "div trunc":
+            # torch.div(INT_MIN, -1, rounding_mode="trunc") kills the process
+            # (SIGFPE); raxis returns INT_MIN, as the floor mode does
+            a, b = a[1:], b[1:]
+        r_a, t_a = make_pair(a, device)
+        r_b, t_b = make_pair(b, device)
+        check_exact(op(raxis, r_a, r_b), op(torch, t_a, t_b), context=name)
+
+    @pytest.mark.parametrize("scalar", [2.5, -1.5, 3, -4])
+    def test_division_with_scalars(self, scalar, device):
+        a, _ = special_floats(np.float32)
+        ints, _ = random_ints(np.int64)
+        for data in (a[20:], ints):
+            r, t = make_pair(data, device)
+            check_exact(r % scalar, t % scalar, context=f"% {scalar}")
+            check_exact(raxis.fmod(r, scalar), torch.fmod(t, scalar), context=f"fmod {scalar}")
+            check_exact(r // scalar, t // scalar, context=f"// {scalar}")
+            check_exact(scalar % (r.abs() + 1), scalar % (t.abs() + 1), context=f"{scalar} %")
+            check_exact(scalar // (r.abs() + 1), scalar // (t.abs() + 1), context=f"{scalar} //")
+
+    def test_promotion(self, device):
+        for r, t in [
+            (raxis.tensor([7, -7], dtype=raxis.int32, device=device) % raxis.tensor([3], device=device),
+             torch.tensor([7, -7], dtype=torch.int32, device=device) % torch.tensor([3], device=device)),
+            (raxis.tensor([7, -7], device=device) // 2.5, torch.tensor([7, -7], device=device) // 2.5),
+            (raxis.tensor([7, -7], device=device) % 2, torch.tensor([7, -7], device=device) % 2),
+            (raxis.tensor([255], dtype=raxis.uint8, device=device) & 300,
+             torch.tensor([255], dtype=torch.uint8, device=device) & 300),
+        ]:
+            check_exact(r, t)
+
+    def test_integer_division_by_zero_raises(self):
+        # torch raises on the CPU; a CUDA kernel cannot, so there it gives what
+        # the hardware does (in both libraries)
+        r = raxis.tensor([5, -5])
+        zero = raxis.zeros(2, dtype=raxis.int64)
+        for op in (lambda: r % zero, lambda: raxis.fmod(r, zero), lambda: r // zero,
+                   lambda: raxis.div(r, zero, rounding_mode="trunc"), lambda: r % 0):
+            with pytest.raises(RuntimeError, match="ZeroDivisionError"):
+                op()
+
+    @pytest.mark.parametrize("op", ["__and__", "__or__", "__xor__"])
+    @pytest.mark.parametrize("dtype", INT_DTYPES + [np.bool_], ids=["int32", "int64", "uint8", "bool"])
+    def test_bitwise(self, op, dtype, device):
+        if dtype == np.bool_:
+            rng = np.random.default_rng(5)
+            a, b = rng.random(300) > 0.5, rng.random(300) > 0.5
+        else:
+            a, b = random_ints(dtype)
+        r_a, t_a = make_pair(a, device)
+        r_b, t_b = make_pair(b, device)
+        check_exact(getattr(r_a, op)(r_b), getattr(t_a, op)(t_b), context=op)
+        check_exact(getattr(r_a, op)(1), getattr(t_a, op)(1), context=f"{op} scalar")
+        name = "bitwise_" + op.strip("_")
+        check_exact(getattr(raxis, name)(r_a, r_b), getattr(torch, name)(t_a, t_b), context=name)
+        check_exact(~r_a, ~t_a, context="~")
+        check_exact(raxis.bitwise_not(r_a), torch.bitwise_not(t_a), context="bitwise_not")
+
+    @pytest.mark.parametrize("dtype", INT_DTYPES, ids=["int32", "int64", "uint8"])
+    def test_shifts(self, dtype, device):
+        a, _ = random_ints(dtype)
+        # Negative and too-large shifts are defined: 0 for <<, the sign for >>
+        shifts = np.random.default_rng(6).integers(-3, 70, a.size).astype(dtype)
+        r_a, t_a = make_pair(a, device)
+        r_s, t_s = make_pair(shifts, device)
+        check_exact(r_a << r_s, t_a << t_s, context="<<")
+        check_exact(r_a >> r_s, t_a >> t_s, context=">>")
+        check_exact(r_a << 3, t_a << 3, context="<< 3")
+        check_exact(r_a >> 2, t_a >> 2, context=">> 2")
+        check_exact(1 << (r_s % 7), 1 << (t_s % 7), context="1 <<")
+        check_exact(raxis.bitwise_right_shift(r_a, r_s), torch.bitwise_right_shift(t_a, t_s))
+
+    @pytest.mark.parametrize("dtype", FLOAT_DTYPES + INT_DTYPES,
+                             ids=["float32", "float64", "int32", "int64", "uint8"])
+    def test_trunc_frac(self, dtype, device):
+        a = special_floats(dtype)[0] if dtype in FLOAT_DTYPES else random_ints(dtype)[0]
+        r, t = make_pair(a, device)
+        check_exact(r.trunc(), t.trunc(), context="trunc")
+        check_exact(raxis.trunc(r), torch.trunc(t), context="raxis.trunc")
+        if dtype in FLOAT_DTYPES:
+            check_exact(r.frac(), t.frac(), context="frac")
+            check_exact(raxis.frac(r[::2]), torch.frac(t[::2]), context="frac strided")
+
+    def test_rpow(self, device):
+        r, t = make_pair(randf(10, 20), device)
+        check_match(2 ** r, 2 ** t, context="2 ** x")
+        check_match(0.5 ** r, 0.5 ** t, context="0.5 ** x")
+
+    def test_inplace(self, device):
+        for op in ("__imod__", "__ifloordiv__", "__iand__", "__ior__", "__ixor__", "__ilshift__", "__irshift__"):
+            r = raxis.tensor([5, -5, 7, 12], device=device)
+            t = torch.tensor([5, -5, 7, 12], device=device)
+            getattr(r, op)(3)
+            getattr(t, op)(3)
+            check_exact(r, t, context=op)
+        for name in ("remainder_", "fmod_", "floor_divide_", "trunc_", "frac_"):
+            r, t = make_pair(special_floats(np.float32)[0][20:], device)
+            args = () if name in ("trunc_", "frac_") else (1.5,)
+            getattr(r, name)(*args)
+            getattr(t, name)(*args)
+            check_exact(r, t, context=name)
+        r, t = make_pair(np.array([5.0, -5.0, 7.5], dtype=np.float32), device)
+        r.div_(2, rounding_mode="floor")
+        t.div_(2, rounding_mode="floor")
+        check_exact(r, t, context="div_ floor")
+
+    def test_unsupported_dtypes(self):
+        f, i, b = raxis.tensor([1.5]), raxis.tensor([3]), raxis.tensor([True])
+        for op in (lambda: f & f, lambda: f | 1, lambda: f << 1, lambda: b << b, lambda: b % b,
+                   lambda: b // b, lambda: i.frac(), lambda: raxis.bitwise_not(f)):
+            with pytest.raises(NotImplementedError):
+                op()
+        with pytest.raises(TypeError, match="only implemented on integer and Boolean"):
+            ~f
+        with pytest.raises(RuntimeError, match="rounding_mode"):
+            raxis.div(f, f, rounding_mode="round")
+
+
+# ===========================================================================
 # FACTORIES
 # ===========================================================================
 

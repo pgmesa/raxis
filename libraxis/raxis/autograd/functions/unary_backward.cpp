@@ -22,6 +22,12 @@ TensorList NegBackward0::apply(const TensorList& grads) {
     return {-grads[0]};
 }
 
+std::string FracBackward0::name() const { return "FracBackward0"; }
+
+TensorList FracBackward0::apply(const TensorList& grads) {
+    return {grads[0]};
+}
+
 
 AbsBackward0::AbsBackward0(const Tensor& self) {
     self_.save(self);

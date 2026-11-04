@@ -36,6 +36,8 @@ void floating_unary_kernel(TensorIterator& iter) {
 RAXIS_FLOATING_UNARY_OP(ceil, ::ceil(a))
 RAXIS_FLOATING_UNARY_OP(floor, ::floor(a))
 RAXIS_FLOATING_UNARY_OP(round, ::nearbyint(a))
+RAXIS_FLOATING_UNARY_OP(trunc, ::trunc(a))
+RAXIS_FLOATING_UNARY_OP(frac, a - ::trunc(a))
 RAXIS_FLOATING_UNARY_OP(exp, ::exp(a))
 RAXIS_FLOATING_UNARY_OP(expm1, ::expm1(a))
 RAXIS_FLOATING_UNARY_OP(log, ::log(a))
@@ -115,6 +117,24 @@ void sign_kernel_cuda(TensorIterator& iter) {
     });
 }
 
+// ~ of a bool promotes it to int (~true is -2): bool is !a
+template <typename T>
+struct BitwiseNotFunctor {
+    __device__ T operator()(T a) const {
+        if constexpr (std::is_same_v<T, bool>) {
+            return !a;
+        } else {
+            return static_cast<T>(~a);
+        }
+    }
+};
+
+void bitwise_not_kernel_cuda(TensorIterator& iter) {
+    iter.common_dtype().dispatch_integral_and_bool_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+        cuda::gpu_kernel(iter, BitwiseNotFunctor<scalar_t>());
+    });
+}
+
 void logical_not_kernel_cuda(TensorIterator& iter) {
     iter.common_dtype().dispatch_all_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
         cuda::gpu_kernel(iter, LogicalNotFunctor<scalar_t>());
@@ -130,6 +150,9 @@ REGISTER_DISPATCH(logical_not_stub, &logical_not_kernel_cuda);
 REGISTER_DISPATCH(ceil_stub, &floating_unary_kernel<ceil_functor>);
 REGISTER_DISPATCH(floor_stub, &floating_unary_kernel<floor_functor>);
 REGISTER_DISPATCH(round_stub, &floating_unary_kernel<round_functor>);
+REGISTER_DISPATCH(trunc_stub, &floating_unary_kernel<trunc_functor>);
+REGISTER_DISPATCH(frac_stub, &floating_unary_kernel<frac_functor>);
+REGISTER_DISPATCH(bitwise_not_stub, &bitwise_not_kernel_cuda);
 REGISTER_DISPATCH(exp_stub, &floating_unary_kernel<exp_functor>);
 REGISTER_DISPATCH(expm1_stub, &floating_unary_kernel<expm1_functor>);
 REGISTER_DISPATCH(log_stub, &floating_unary_kernel<log_functor>);

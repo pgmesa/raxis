@@ -1,6 +1,7 @@
 #include <raxis/ops/binary_ops.h>
 #include <raxis/ops/unary_ops.h>
 #include <raxis/ops/pow.h>
+#include <raxis/ops/scalar_ops.h>
 
 #include <raxis/autograd/variable.h>
 
@@ -42,6 +43,8 @@ RAXIS_AUTOGRAD_UNARY_OUT(sign)
 RAXIS_AUTOGRAD_UNARY_OUT(ceil)
 RAXIS_AUTOGRAD_UNARY_OUT(floor)
 RAXIS_AUTOGRAD_UNARY_OUT(round)
+RAXIS_AUTOGRAD_UNARY_OUT(trunc)
+RAXIS_AUTOGRAD_UNARY_OUT(frac)
 RAXIS_AUTOGRAD_UNARY_OUT(exp)
 RAXIS_AUTOGRAD_UNARY_OUT(expm1)
 RAXIS_AUTOGRAD_UNARY_OUT(log)
@@ -76,6 +79,32 @@ RAXIS_AUTOGRAD_BINARY_OUT(maximum)
 RAXIS_AUTOGRAD_BINARY_OUT(minimum)
 RAXIS_AUTOGRAD_BINARY_OUT(pow)
 RAXIS_AUTOGRAD_BINARY_SCALAR_OUT(pow)
+RAXIS_AUTOGRAD_BINARY_OUT(remainder)
+RAXIS_AUTOGRAD_BINARY_SCALAR_OUT(remainder)
+RAXIS_AUTOGRAD_BINARY_OUT(fmod)
+RAXIS_AUTOGRAD_BINARY_SCALAR_OUT(fmod)
+
+Tensor& div_out(const Tensor& a, const Tensor& b, std::string_view rounding_mode, Tensor& out) {
+    autograd::check_out_no_grad("div", {&a, &b, &out});
+    ops::div_out(a, b, rounding_mode, out);
+    autograd::bump_version(out);
+    return out;
+}
+
+Tensor& div_out(const Tensor& a, Scalar s, std::string_view rounding_mode, Tensor& out) {
+    return div_out(a, wrapped_scalar_tensor(s), rounding_mode, out);
+}
+
+// No derivative: nothing to refuse, only the version of out moves
+Tensor& floor_divide_out(const Tensor& a, const Tensor& b, Tensor& out) {
+    ops::div_out(a, b, "floor", out);
+    autograd::bump_version(out);
+    return out;
+}
+
+Tensor& floor_divide_out(const Tensor& a, Scalar s, Tensor& out) {
+    return floor_divide_out(a, wrapped_scalar_tensor(s), out);
+}
 
 Tensor& pow_out(Scalar base, const Tensor& exp, Tensor& out) {
     autograd::check_out_no_grad("pow", {&exp, &out});

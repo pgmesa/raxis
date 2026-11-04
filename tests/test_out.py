@@ -10,10 +10,13 @@ from test_utils import check_match, device, make_pair, randf, randf_positive  # 
 
 UNARY = ["neg", "abs", "sign", "ceil", "floor", "round", "exp", "expm1", "log", "log2",
          "log10", "log1p", "sqrt", "rsqrt", "reciprocal", "sigmoid", "sin", "cos", "tan",
-         "asin", "acos", "atan", "sinh", "cosh", "tanh", "erf", "erfc", "logical_not"]
+         "asin", "acos", "atan", "sinh", "cosh", "tanh", "erf", "erfc", "logical_not", "trunc", "frac"]
 BINARY = ["add", "sub", "mul", "div", "maximum", "minimum", "pow",
-          "gt", "ge", "lt", "le", "eq", "ne", "logical_and", "logical_or"]
-WITH_SCALAR = ["add", "sub", "mul", "div", "pow", "gt", "ge", "lt", "le", "eq", "ne"]
+          "gt", "ge", "lt", "le", "eq", "ne", "logical_and", "logical_or", "remainder", "fmod",
+          "floor_divide"]
+WITH_SCALAR = ["add", "sub", "mul", "div", "pow", "gt", "ge", "lt", "le", "eq", "ne", "remainder", "fmod",
+               "floor_divide"]
+BITWISE = ["bitwise_and", "bitwise_or", "bitwise_xor", "bitwise_left_shift", "bitwise_right_shift"]
 COMPARISONS = ["gt", "ge", "lt", "le", "eq", "ne", "logical_and", "logical_or"]
 
 
@@ -63,6 +66,34 @@ def test_scalar_base_pow(device):
     raxis.pow(2, r, out=r_out)
     torch.pow(2, t, out=t_out)
     check_match(r_out, t_out)
+
+
+@pytest.mark.parametrize("rounding_mode", ["trunc", "floor"])
+def test_div_rounding_mode(rounding_mode, device):
+    r_a, t_a = make_pair(randf(3, 4) * 10, device)
+    r_out, t_out = empty_pair((3, 4), "float32", device)
+    assert raxis.div(r_a, 0.7, rounding_mode=rounding_mode, out=r_out) is r_out
+    torch.div(t_a, 0.7, rounding_mode=rounding_mode, out=t_out)
+    check_match(r_out, t_out, atol=0)
+    r_b, t_b = make_pair(randf(1, 4, seed=7), device)
+    raxis.div(r_a, r_b, rounding_mode=rounding_mode, out=r_out)
+    torch.div(t_a, t_b, rounding_mode=rounding_mode, out=t_out)
+    check_match(r_out, t_out, atol=0)
+
+
+@pytest.mark.parametrize("name", BITWISE + ["bitwise_not"])
+def test_bitwise(name, device):
+    r_a, t_a = make_pair(np.array([[5, -6, 7], [12, 0, -1]]), device)
+    r_b, t_b = make_pair(np.array([1, 2, 3]), device)
+    r_out, t_out = empty_pair((2, 3), "int64", device)
+    args_r, args_t = ((r_a,), (t_a,)) if name == "bitwise_not" else ((r_a, r_b), (t_a, t_b))
+    assert getattr(raxis, name)(*args_r, out=r_out) is r_out
+    getattr(torch, name)(*args_t, out=t_out)
+    check_match(r_out, t_out, atol=0)
+    if name != "bitwise_not":
+        getattr(raxis, name)(r_a, 2, out=r_out)
+        getattr(torch, name)(t_a, 2, out=t_out)
+        check_match(r_out, t_out, atol=0)
 
 
 @pytest.mark.parametrize("name", ["eq", "logical_and"])

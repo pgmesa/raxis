@@ -673,6 +673,43 @@ Tensor Tensor::minimum(const Tensor& other) const { return ::raxis::minimum(*thi
 Tensor Tensor::pow(const Tensor& exponent) const  { return ::raxis::pow(*this, exponent); }
 Tensor Tensor::pow(Scalar exponent) const         { return ::raxis::pow(*this, exponent); }
 
+Tensor Tensor::remainder(const Tensor& other) const { return ::raxis::remainder(*this, other); }
+Tensor Tensor::remainder(Scalar s) const { return ::raxis::remainder(*this, s); }
+Tensor Tensor::fmod(const Tensor& other) const { return ::raxis::fmod(*this, other); }
+Tensor Tensor::fmod(Scalar s) const { return ::raxis::fmod(*this, s); }
+Tensor Tensor::floor_divide(const Tensor& other) const { return ::raxis::floor_divide(*this, other); }
+Tensor Tensor::floor_divide(Scalar s) const { return ::raxis::floor_divide(*this, s); }
+Tensor Tensor::bitwise_and(const Tensor& other) const { return ::raxis::bitwise_and(*this, other); }
+Tensor Tensor::bitwise_and(Scalar s) const { return ::raxis::bitwise_and(*this, s); }
+Tensor Tensor::bitwise_or(const Tensor& other) const { return ::raxis::bitwise_or(*this, other); }
+Tensor Tensor::bitwise_or(Scalar s) const { return ::raxis::bitwise_or(*this, s); }
+Tensor Tensor::bitwise_xor(const Tensor& other) const { return ::raxis::bitwise_xor(*this, other); }
+Tensor Tensor::bitwise_xor(Scalar s) const { return ::raxis::bitwise_xor(*this, s); }
+Tensor Tensor::bitwise_left_shift(const Tensor& other) const { return ::raxis::bitwise_left_shift(*this, other); }
+Tensor Tensor::bitwise_left_shift(Scalar s) const { return ::raxis::bitwise_left_shift(*this, s); }
+Tensor Tensor::bitwise_right_shift(const Tensor& other) const { return ::raxis::bitwise_right_shift(*this, other); }
+Tensor Tensor::bitwise_right_shift(Scalar s) const { return ::raxis::bitwise_right_shift(*this, s); }
+Tensor& Tensor::remainder_(const Tensor& other) const { return ::raxis::remainder_(const_cast<Tensor&>(*this), other); }
+Tensor& Tensor::remainder_(Scalar s) const { return ::raxis::remainder_(const_cast<Tensor&>(*this), s); }
+Tensor& Tensor::fmod_(const Tensor& other) const { return ::raxis::fmod_(const_cast<Tensor&>(*this), other); }
+Tensor& Tensor::fmod_(Scalar s) const { return ::raxis::fmod_(const_cast<Tensor&>(*this), s); }
+Tensor& Tensor::floor_divide_(const Tensor& other) const { return ::raxis::floor_divide_(const_cast<Tensor&>(*this), other); }
+Tensor& Tensor::floor_divide_(Scalar s) const { return ::raxis::floor_divide_(const_cast<Tensor&>(*this), s); }
+Tensor& Tensor::bitwise_and_(const Tensor& other) const { return ::raxis::bitwise_and_(const_cast<Tensor&>(*this), other); }
+Tensor& Tensor::bitwise_and_(Scalar s) const { return ::raxis::bitwise_and_(const_cast<Tensor&>(*this), s); }
+Tensor& Tensor::bitwise_or_(const Tensor& other) const { return ::raxis::bitwise_or_(const_cast<Tensor&>(*this), other); }
+Tensor& Tensor::bitwise_or_(Scalar s) const { return ::raxis::bitwise_or_(const_cast<Tensor&>(*this), s); }
+Tensor& Tensor::bitwise_xor_(const Tensor& other) const { return ::raxis::bitwise_xor_(const_cast<Tensor&>(*this), other); }
+Tensor& Tensor::bitwise_xor_(Scalar s) const { return ::raxis::bitwise_xor_(const_cast<Tensor&>(*this), s); }
+Tensor& Tensor::bitwise_left_shift_(const Tensor& other) const { return ::raxis::bitwise_left_shift_(const_cast<Tensor&>(*this), other); }
+Tensor& Tensor::bitwise_left_shift_(Scalar s) const { return ::raxis::bitwise_left_shift_(const_cast<Tensor&>(*this), s); }
+Tensor& Tensor::bitwise_right_shift_(const Tensor& other) const { return ::raxis::bitwise_right_shift_(const_cast<Tensor&>(*this), other); }
+Tensor& Tensor::bitwise_right_shift_(Scalar s) const { return ::raxis::bitwise_right_shift_(const_cast<Tensor&>(*this), s); }
+Tensor Tensor::div(const Tensor& other, std::string_view rounding_mode) const { return ::raxis::div(*this, other, rounding_mode); }
+Tensor Tensor::div(Scalar s, std::string_view rounding_mode) const { return ::raxis::div(*this, s, rounding_mode); }
+Tensor& Tensor::div_(const Tensor& other, std::string_view rounding_mode) const { return ::raxis::div_(const_cast<Tensor&>(*this), other, rounding_mode); }
+Tensor& Tensor::div_(Scalar s, std::string_view rounding_mode) const { return ::raxis::div_(const_cast<Tensor&>(*this), s, rounding_mode); }
+
 // =================== Comparison Operations ===================
 Tensor Tensor::gt(const Tensor& other) const { return ::raxis::gt(*this, other); }
 Tensor Tensor::ge(const Tensor& other) const { return ::raxis::ge(*this, other); }
@@ -700,6 +737,8 @@ Tensor Tensor::abs() const { return ::raxis::abs(*this); }
 Tensor Tensor::sign() const { return ::raxis::sign(*this); }
 Tensor Tensor::ceil() const { return ::raxis::ceil(*this); }
 Tensor Tensor::floor() const { return ::raxis::floor(*this); }
+Tensor Tensor::trunc() const { return ::raxis::trunc(*this); }
+Tensor Tensor::frac() const { return ::raxis::frac(*this); }
 Tensor Tensor::round() const { return ::raxis::round(*this); }
 Tensor Tensor::exp() const { return ::raxis::exp(*this); }
 Tensor Tensor::log() const { return ::raxis::log(*this); }
@@ -711,6 +750,7 @@ Tensor Tensor::relu() const { return ::raxis::relu(*this); }
 Tensor Tensor::softmax(int64_t dim) const { return ::raxis::softmax(*this, dim); }
 Tensor Tensor::log_softmax(int64_t dim) const { return ::raxis::log_softmax(*this, dim); }
 Tensor Tensor::logical_not() const { return ::raxis::logical_not(*this); }
+Tensor Tensor::bitwise_not() const { return ::raxis::bitwise_not(*this); }
 Tensor Tensor::expm1() const { return ::raxis::expm1(*this); }
 Tensor Tensor::log2() const { return ::raxis::log2(*this); }
 Tensor Tensor::log10() const { return ::raxis::log10(*this); }
@@ -732,6 +772,8 @@ Tensor& Tensor::abs_() const { return ::raxis::abs_(const_cast<Tensor&>(*this));
 Tensor& Tensor::sign_() const { return ::raxis::sign_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::ceil_() const { return ::raxis::ceil_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::floor_() const { return ::raxis::floor_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::trunc_() const { return ::raxis::trunc_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::frac_() const { return ::raxis::frac_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::round_() const { return ::raxis::round_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::exp_() const { return ::raxis::exp_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::log_() const { return ::raxis::log_(const_cast<Tensor&>(*this)); }
@@ -741,6 +783,7 @@ Tensor& Tensor::reciprocal_() const { return ::raxis::reciprocal_(const_cast<Ten
 Tensor& Tensor::sigmoid_() const { return ::raxis::sigmoid_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::relu_() const { return ::raxis::relu_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::logical_not_() const { return ::raxis::logical_not_(const_cast<Tensor&>(*this)); }
+Tensor& Tensor::bitwise_not_() const { return ::raxis::bitwise_not_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::expm1_() const { return ::raxis::expm1_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::log2_() const { return ::raxis::log2_(const_cast<Tensor&>(*this)); }
 Tensor& Tensor::log10_() const { return ::raxis::log10_(const_cast<Tensor&>(*this)); }
@@ -787,9 +830,34 @@ Tensor& Tensor::operator-=(Scalar s) const { return ::raxis::sub_(const_cast<Ten
 Tensor& Tensor::operator*=(Scalar s) const { return ::raxis::mul_(const_cast<Tensor&>(*this), s); }
 Tensor& Tensor::operator/=(Scalar s) const { return ::raxis::div_(const_cast<Tensor&>(*this), s); }
 
+Tensor Tensor::operator%(const Tensor& other) const { return ::raxis::remainder(*this, other); }
+Tensor Tensor::operator%(Scalar s) const { return ::raxis::remainder(*this, s); }
+Tensor Tensor::operator&(const Tensor& other) const { return ::raxis::bitwise_and(*this, other); }
+Tensor Tensor::operator&(Scalar s) const { return ::raxis::bitwise_and(*this, s); }
+Tensor Tensor::operator|(const Tensor& other) const { return ::raxis::bitwise_or(*this, other); }
+Tensor Tensor::operator|(Scalar s) const { return ::raxis::bitwise_or(*this, s); }
+Tensor Tensor::operator^(const Tensor& other) const { return ::raxis::bitwise_xor(*this, other); }
+Tensor Tensor::operator^(Scalar s) const { return ::raxis::bitwise_xor(*this, s); }
+Tensor Tensor::operator<<(const Tensor& other) const { return ::raxis::bitwise_left_shift(*this, other); }
+Tensor Tensor::operator<<(Scalar s) const { return ::raxis::bitwise_left_shift(*this, s); }
+Tensor Tensor::operator>>(const Tensor& other) const { return ::raxis::bitwise_right_shift(*this, other); }
+Tensor Tensor::operator>>(Scalar s) const { return ::raxis::bitwise_right_shift(*this, s); }
+Tensor& Tensor::operator%=(const Tensor& other) const { return ::raxis::remainder_(const_cast<Tensor&>(*this), other); }
+Tensor& Tensor::operator%=(Scalar s) const { return ::raxis::remainder_(const_cast<Tensor&>(*this), s); }
+Tensor& Tensor::operator&=(const Tensor& other) const { return ::raxis::bitwise_and_(const_cast<Tensor&>(*this), other); }
+Tensor& Tensor::operator&=(Scalar s) const { return ::raxis::bitwise_and_(const_cast<Tensor&>(*this), s); }
+Tensor& Tensor::operator|=(const Tensor& other) const { return ::raxis::bitwise_or_(const_cast<Tensor&>(*this), other); }
+Tensor& Tensor::operator|=(Scalar s) const { return ::raxis::bitwise_or_(const_cast<Tensor&>(*this), s); }
+Tensor& Tensor::operator^=(const Tensor& other) const { return ::raxis::bitwise_xor_(const_cast<Tensor&>(*this), other); }
+Tensor& Tensor::operator^=(Scalar s) const { return ::raxis::bitwise_xor_(const_cast<Tensor&>(*this), s); }
+Tensor& Tensor::operator<<=(const Tensor& other) const { return ::raxis::bitwise_left_shift_(const_cast<Tensor&>(*this), other); }
+Tensor& Tensor::operator<<=(Scalar s) const { return ::raxis::bitwise_left_shift_(const_cast<Tensor&>(*this), s); }
+Tensor& Tensor::operator>>=(const Tensor& other) const { return ::raxis::bitwise_right_shift_(const_cast<Tensor&>(*this), other); }
+Tensor& Tensor::operator>>=(Scalar s) const { return ::raxis::bitwise_right_shift_(const_cast<Tensor&>(*this), s); }
+
 // Unary
 Tensor Tensor::operator-() const { return ::raxis::neg(*this); }
-Tensor Tensor::operator~() const { return ::raxis::logical_not(*this); }
+Tensor Tensor::operator~() const { return ::raxis::bitwise_not(*this); }
 
 // Comparison
 Tensor Tensor::operator> (const Tensor& other) const { return ::raxis::gt(*this, other); }

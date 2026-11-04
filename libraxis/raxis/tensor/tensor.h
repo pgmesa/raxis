@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <cstdint>
 #include <optional>
+#include <string_view>
 
 #include <raxis/export.h>
 #include <raxis/core/dtype.h>
@@ -302,6 +303,44 @@ public:
     Tensor pow(const Tensor& exponent) const;
     Tensor pow(Scalar exponent) const;
 
+    Tensor remainder(const Tensor& other) const;
+    Tensor remainder(Scalar s) const;
+    Tensor fmod(const Tensor& other) const;
+    Tensor fmod(Scalar s) const;
+    Tensor floor_divide(const Tensor& other) const;
+    Tensor floor_divide(Scalar s) const;
+    Tensor bitwise_and(const Tensor& other) const;
+    Tensor bitwise_and(Scalar s) const;
+    Tensor bitwise_or(const Tensor& other) const;
+    Tensor bitwise_or(Scalar s) const;
+    Tensor bitwise_xor(const Tensor& other) const;
+    Tensor bitwise_xor(Scalar s) const;
+    Tensor bitwise_left_shift(const Tensor& other) const;
+    Tensor bitwise_left_shift(Scalar s) const;
+    Tensor bitwise_right_shift(const Tensor& other) const;
+    Tensor bitwise_right_shift(Scalar s) const;
+    Tensor& remainder_(const Tensor& other) const;
+    Tensor& remainder_(Scalar s) const;
+    Tensor& fmod_(const Tensor& other) const;
+    Tensor& fmod_(Scalar s) const;
+    Tensor& floor_divide_(const Tensor& other) const;
+    Tensor& floor_divide_(Scalar s) const;
+    Tensor& bitwise_and_(const Tensor& other) const;
+    Tensor& bitwise_and_(Scalar s) const;
+    Tensor& bitwise_or_(const Tensor& other) const;
+    Tensor& bitwise_or_(Scalar s) const;
+    Tensor& bitwise_xor_(const Tensor& other) const;
+    Tensor& bitwise_xor_(Scalar s) const;
+    Tensor& bitwise_left_shift_(const Tensor& other) const;
+    Tensor& bitwise_left_shift_(Scalar s) const;
+    Tensor& bitwise_right_shift_(const Tensor& other) const;
+    Tensor& bitwise_right_shift_(Scalar s) const;
+    // rounding_mode "trunc" or "floor"
+    Tensor div(const Tensor& other, std::string_view rounding_mode) const;
+    Tensor div(Scalar s, std::string_view rounding_mode) const;
+    Tensor& div_(const Tensor& other, std::string_view rounding_mode) const;
+    Tensor& div_(Scalar s, std::string_view rounding_mode) const;
+
     // =================== Comparison Operations ===================
     Tensor gt(const Tensor& other) const;
     Tensor gt(Scalar s) const;
@@ -328,6 +367,8 @@ public:
     Tensor ceil() const;
     Tensor floor() const;
     Tensor round() const;
+    Tensor trunc() const;
+    Tensor frac() const;
     Tensor exp() const;
     Tensor log() const;
     Tensor sqrt() const;
@@ -338,6 +379,7 @@ public:
     Tensor softmax(int64_t dim) const;
     Tensor log_softmax(int64_t dim) const;
     Tensor logical_not() const;
+    Tensor bitwise_not() const;
     Tensor expm1() const;
     Tensor log2() const;
     Tensor log10() const;
@@ -360,6 +402,8 @@ public:
     Tensor& ceil_() const;
     Tensor& floor_() const;
     Tensor& round_() const;
+    Tensor& trunc_() const;
+    Tensor& frac_() const;
     Tensor& exp_() const;
     Tensor& log_() const;
     Tensor& sqrt_() const;
@@ -368,6 +412,7 @@ public:
     Tensor& sigmoid_() const;
     Tensor& relu_() const;
     Tensor& logical_not_() const;
+    Tensor& bitwise_not_() const;
     Tensor& expm1_() const;
     Tensor& log2_() const;
     Tensor& log10_() const;
@@ -406,7 +451,33 @@ public:
     Tensor& operator/=(const Tensor& other) const;
     Tensor& operator/=(Scalar s) const;
 
-    // Unary
+    // As Python's: % is remainder (the divisor's sign); << and >> are shifts
+    Tensor operator%(const Tensor& other) const;
+    Tensor operator%(Scalar s) const;
+    Tensor operator&(const Tensor& other) const;
+    Tensor operator&(Scalar s) const;
+    Tensor operator|(const Tensor& other) const;
+    Tensor operator|(Scalar s) const;
+    Tensor operator^(const Tensor& other) const;
+    Tensor operator^(Scalar s) const;
+    Tensor operator<<(const Tensor& other) const;
+    Tensor operator<<(Scalar s) const;
+    Tensor operator>>(const Tensor& other) const;
+    Tensor operator>>(Scalar s) const;
+    Tensor& operator%=(const Tensor& other) const;
+    Tensor& operator%=(Scalar s) const;
+    Tensor& operator&=(const Tensor& other) const;
+    Tensor& operator&=(Scalar s) const;
+    Tensor& operator|=(const Tensor& other) const;
+    Tensor& operator|=(Scalar s) const;
+    Tensor& operator^=(const Tensor& other) const;
+    Tensor& operator^=(Scalar s) const;
+    Tensor& operator<<=(const Tensor& other) const;
+    Tensor& operator<<=(Scalar s) const;
+    Tensor& operator>>=(const Tensor& other) const;
+    Tensor& operator>>=(Scalar s) const;
+
+    // Unary (~ is bitwise_not: logical not for bool)
     Tensor operator-() const;
     Tensor operator~() const;
 

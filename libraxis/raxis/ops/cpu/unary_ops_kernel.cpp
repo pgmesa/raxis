@@ -177,6 +177,41 @@ void round_kernel(TensorIterator& iter) {
     });
 }
 
+void trunc_kernel(TensorIterator& iter) {
+    iter.common_dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+        cpu_kernel_vec(iter,
+            [](scalar_t a) -> scalar_t { return std::trunc(a); },
+            [](Vectorized<scalar_t> a) { return a.trunc(); }
+        );
+    });
+}
+
+void frac_kernel(TensorIterator& iter) {
+    iter.common_dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+        cpu_kernel_vec(iter,
+            [](scalar_t a) -> scalar_t { return a - std::trunc(a); },
+            [](Vectorized<scalar_t> a) { return a.frac(); }
+        );
+    });
+}
+
+// From: aten/src/ATen/native/cpu/UnaryOpsKernel.cpp
+// ~ of a C++ bool promotes it to int (~true is -2), so bool is !a
+void bitwise_not_kernel(TensorIterator& iter) {
+    if (iter.common_dtype().is_bool()) {
+        cpu_kernel(iter, [](bool a) -> bool { return !a; });
+        return;
+    }
+    iter.common_dtype().dispatch_integral_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
+        // ~a is a ^ (all bits set)
+        const Vectorized<scalar_t> all_ones(static_cast<scalar_t>(~scalar_t(0)));
+        cpu_kernel_vec(iter,
+            [](scalar_t a) -> scalar_t { return static_cast<scalar_t>(~a); },
+            [=](Vectorized<scalar_t> a) { return a ^ all_ones; }
+        );
+    });
+}
+
 void rsqrt_kernel(TensorIterator& iter) {
     iter.common_dtype().dispatch_floating_types([&]<typename scalar_t>(std::type_identity<scalar_t>) {
         cpu_kernel_vec(iter,
@@ -235,6 +270,9 @@ ALSO_REGISTER_AVX512_DISPATCH(sign_stub, &sign_kernel);
 REGISTER_DISPATCH(ceil_stub, &ceil_kernel);
 REGISTER_DISPATCH(floor_stub, &floor_kernel);
 REGISTER_DISPATCH(round_stub, &round_kernel);
+REGISTER_DISPATCH(trunc_stub, &trunc_kernel);
+REGISTER_DISPATCH(frac_stub, &frac_kernel);
+REGISTER_DISPATCH(bitwise_not_stub, &bitwise_not_kernel);
 ALSO_REGISTER_AVX512_DISPATCH(exp_stub, &exp_kernel);
 ALSO_REGISTER_AVX512_DISPATCH(expm1_stub, &expm1_kernel);
 ALSO_REGISTER_AVX512_DISPATCH(log_stub, &log_kernel);

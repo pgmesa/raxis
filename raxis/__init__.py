@@ -203,6 +203,8 @@ _OUT_FUNCTIONS = (
     "neg", "abs", "sign", "ceil", "floor", "round", "exp", "expm1", "log", "log2",
     "log10", "log1p", "sqrt", "rsqrt", "reciprocal", "sigmoid", "sin", "cos", "tan",
     "asin", "acos", "atan", "sinh", "cosh", "tanh", "erf", "erfc",
+    "remainder", "fmod", "floor_divide", "trunc", "frac", "bitwise_and", "bitwise_or", "bitwise_xor",
+    "bitwise_left_shift", "bitwise_right_shift", "bitwise_not",
 )
 for _name in _OUT_FUNCTIONS:
     globals()[_name] = _return_out(globals()[_name])

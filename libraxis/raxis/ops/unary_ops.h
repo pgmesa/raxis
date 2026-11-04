@@ -26,6 +26,8 @@ DECLARE_DISPATCH(unary_fn, sign_stub);
 DECLARE_DISPATCH(unary_fn, ceil_stub);
 DECLARE_DISPATCH(unary_fn, floor_stub);
 DECLARE_DISPATCH(unary_fn, round_stub);
+DECLARE_DISPATCH(unary_fn, trunc_stub);
+DECLARE_DISPATCH(unary_fn, frac_stub);
 
 DECLARE_DISPATCH(unary_fn, exp_stub);
 DECLARE_DISPATCH(unary_fn, expm1_stub);
@@ -38,6 +40,7 @@ DECLARE_DISPATCH(unary_fn, rsqrt_stub);
 DECLARE_DISPATCH(unary_fn, reciprocal_stub);
 DECLARE_DISPATCH(unary_fn, sigmoid_stub);
 DECLARE_DISPATCH(unary_fn, logical_not_stub);
+DECLARE_DISPATCH(unary_fn, bitwise_not_stub);
 
 DECLARE_DISPATCH(unary_fn, sin_stub);
 DECLARE_DISPATCH(unary_fn, cos_stub);
@@ -58,6 +61,8 @@ RAXIS_DECLARE_UNARY_ARITHMETIC(sign)
 RAXIS_DECLARE_UNARY_ARITHMETIC(ceil)
 RAXIS_DECLARE_UNARY_ARITHMETIC(floor)
 RAXIS_DECLARE_UNARY_ARITHMETIC(round)
+RAXIS_DECLARE_UNARY_ARITHMETIC(trunc)
+RAXIS_DECLARE_UNARY_ARITHMETIC(frac)
 RAXIS_DECLARE_UNARY_ARITHMETIC(exp)
 RAXIS_DECLARE_UNARY_ARITHMETIC(expm1)
 RAXIS_DECLARE_UNARY_ARITHMETIC(log)
@@ -85,5 +90,9 @@ RAXIS_API Tensor isnan(const Tensor& self);
 RAXIS_API Tensor logical_not(const Tensor& self);
 RAXIS_API Tensor& logical_not_out(const Tensor& self, Tensor& out);
 RAXIS_API Tensor& logical_not_(Tensor& self);
+// ~ in Python: integer and bool tensors
+RAXIS_API Tensor bitwise_not(const Tensor& self);
+RAXIS_API Tensor& bitwise_not_out(const Tensor& self, Tensor& out);
+RAXIS_API Tensor& bitwise_not_(Tensor& self);
 
 } // namespace raxis

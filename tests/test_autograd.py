@@ -270,6 +270,52 @@ class TestPowBackward:
 
 
 # ===========================================================================
+# REMAINDER / FMOD / ROUNDED DIVISION / TRUNC / FRAC BACKWARD
+# ===========================================================================
+
+DIVISION_BACKWARD = [
+    ("RemainderBackward1", lambda m, a, b: m.remainder(a, b)),
+    ("RemainderBackward0", lambda m, a, b: a % 1.5),
+    ("FmodBackward1", lambda m, a, b: m.fmod(a, b)),
+    ("FmodBackward0", lambda m, a, b: m.fmod(a, -1.5)),
+    ("DivBackward2", lambda m, a, b: m.div(a, b, rounding_mode="floor")),
+    ("DivBackward2", lambda m, a, b: a.div(3.0, rounding_mode="trunc")),
+    ("TruncBackward0", lambda m, a, b: a.trunc()),
+    ("FracBackward0", lambda m, a, b: a.frac()),
+]
+
+
+class TestDivisionBackward:
+
+    @pytest.mark.parametrize("name,op", DIVISION_BACKWARD, ids=[f"{n}-{i}" for i, (n, _) in enumerate(DIVISION_BACKWARD)])
+    def test_backward(self, name, op, device):
+        # b broadcasts along the rows, so its gradient is a sum
+        r_a, t_a = make_grad_pair(randf(3, 4, seed=1, lo=-10, hi=10), device)
+        r_b, t_b = make_grad_pair(randf(4, seed=2, lo=0.5, hi=3), device)
+        r_out, t_out = op(raxis, r_a, r_b), op(torch, t_a, t_b)
+        assert r_out.grad_fn.name() == t_out.grad_fn.name() == name
+        try_backward(r_out, t_out, [r_a, r_b], [t_a, t_b], context=name)
+
+    def test_inplace(self, device):
+        r_a, t_a = make_grad_pair(randf(3, 4, seed=1, lo=-10, hi=10), device)
+        r_b, t_b = make_grad_pair(randf(4, seed=2, lo=0.5, hi=3), device)
+        r_out, t_out = r_a * 1, t_a * 1
+        r_out.remainder_(r_b)
+        t_out.remainder_(t_b)
+        assert r_out.grad_fn.name() == t_out.grad_fn.name()
+        try_backward(r_out, t_out, [r_a, r_b], [t_a, t_b], context="remainder_")
+
+    def test_floor_divide_has_no_derivative(self):
+        # As torch: the forward works, the backward raises
+        x = raxis.tensor([1.0, 2.0], requires_grad=True)
+        y = x // 2
+        with pytest.raises(RuntimeError, match="floor_divide"):
+            y.sum().backward()
+        with pytest.raises(RuntimeError, match="floor_divide"):
+            (3 // x).sum().backward()
+
+
+# ===========================================================================
 # REDUCTION BACKWARD
 # ===========================================================================
 
@@ -1249,6 +1295,9 @@ RECORDED_OPS = [
     ("mul", (3, 4), lambda x: x * x),
     ("div", (3, 4), lambda x: x / (x + 1)),
     ("maximum", (3, 4), lambda x: raxis.maximum(x, x * 0.5 + 0.2)),
+    ("remainder", (3, 4), lambda x: raxis.remainder(x * 7, x + 0.3)),
+    ("fmod", (3, 4), lambda x: raxis.fmod(-x * 7, x + 0.3)),
+    ("frac", (3, 4), lambda x: (x * 5).frac()),
     ("matmul", (3, 4), lambda x: x.matmul(x.transpose(0, 1))),
     ("bmm", (2, 3, 3), lambda x: x.bmm(x)),
     ("sum dim", (3, 4), lambda x: x.sum(1)),

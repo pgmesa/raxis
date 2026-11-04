@@ -5,6 +5,7 @@
 
 #include <raxis/autograd/variable.h>
 #include <raxis/ops/binary_ops.h>
+#include <raxis/tensor/factories.h>
 
 
 namespace raxis::autograd {
@@ -113,6 +114,101 @@ TensorList DivBackward0::apply(const TensorList& grads) {
         const Tensor& b = b_.unpack();
         grad_b = unbroadcast(-(grad * a_.unpack()) / (b * b), b_shape_);
     }
+
+    return {grad_a, grad_b};
+}
+
+
+DivBackward2::DivBackward2(const Tensor& a, const Tensor& b)
+    : a_requires_grad_(a.requires_grad()),
+      b_requires_grad_(b.requires_grad())
+{
+    if (a_requires_grad_) a_shape_ = DimVector(a.shape());
+    if (b_requires_grad_) b_shape_ = DimVector(b.shape());
+}
+
+std::string DivBackward2::name() const { return "DivBackward2"; }
+
+TensorList DivBackward2::apply(const TensorList& grads) {
+    const Tensor& grad = grads[0];
+    Tensor grad_a, grad_b;
+
+    if (a_requires_grad_)
+        grad_a = zeros(a_shape_, grad.options());
+    if (b_requires_grad_)
+        grad_b = zeros(b_shape_, grad.options());
+
+    return {grad_a, grad_b};
+}
+
+
+RemainderBackward0::RemainderBackward0(const Tensor&, const Tensor&) {}
+
+std::string RemainderBackward0::name() const { return "RemainderBackward0"; }
+
+TensorList RemainderBackward0::apply(const TensorList& grads) {
+    return {grads[0], Tensor{}};
+}
+
+
+RemainderBackward1::RemainderBackward1(const Tensor& a, const Tensor& b)
+    : a_requires_grad_(a.requires_grad()),
+      b_requires_grad_(b.requires_grad())
+{
+    if (a_requires_grad_) a_shape_ = DimVector(a.shape());
+    if (b_requires_grad_) {
+        a_.save(a);
+        b_.save(b);
+        b_shape_ = DimVector(b.shape());
+    }
+}
+
+std::string RemainderBackward1::name() const { return "RemainderBackward1"; }
+
+TensorList RemainderBackward1::apply(const TensorList& grads) {
+    const Tensor& grad = grads[0];
+    Tensor grad_a, grad_b;
+
+    if (a_requires_grad_)
+        grad_a = unbroadcast(grad, a_shape_);
+    if (b_requires_grad_)
+        grad_b = unbroadcast(-grad * div(a_.unpack(), b_.unpack(), "floor"), b_shape_);
+
+    return {grad_a, grad_b};
+}
+
+
+FmodBackward0::FmodBackward0(const Tensor&, const Tensor&) {}
+
+std::string FmodBackward0::name() const { return "FmodBackward0"; }
+
+TensorList FmodBackward0::apply(const TensorList& grads) {
+    return {grads[0], Tensor{}};
+}
+
+
+FmodBackward1::FmodBackward1(const Tensor& a, const Tensor& b)
+    : a_requires_grad_(a.requires_grad()),
+      b_requires_grad_(b.requires_grad())
+{
+    if (a_requires_grad_) a_shape_ = DimVector(a.shape());
+    if (b_requires_grad_) {
+        a_.save(a);
+        b_.save(b);
+        b_shape_ = DimVector(b.shape());
+    }
+}
+
+std::string FmodBackward1::name() const { return "FmodBackward1"; }
+
+TensorList FmodBackward1::apply(const TensorList& grads) {
+    const Tensor& grad = grads[0];
+    Tensor grad_a, grad_b;
+
+    if (a_requires_grad_)
+        grad_a = unbroadcast(grad, a_shape_);
+    if (b_requires_grad_)
+        grad_b = unbroadcast(-grad * div(a_.unpack(), b_.unpack(), "trunc"), b_shape_);
 
     return {grad_a, grad_b};
 }

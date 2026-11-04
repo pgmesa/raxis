@@ -37,5 +37,9 @@ RAXIS_AUTOGRAD_UNARY_ALL_SAVE_RESULT(tan, TanBackward0)
 RAXIS_AUTOGRAD_UNARY_ZERO_GRAD(ceil,  "CeilBackward0")
 RAXIS_AUTOGRAD_UNARY_ZERO_GRAD(floor, "FloorBackward0")
 RAXIS_AUTOGRAD_UNARY_ZERO_GRAD(round, "RoundBackward0")
+RAXIS_AUTOGRAD_UNARY_ZERO_GRAD(trunc, "TruncBackward0")
+
+// x - trunc(x): the gradient passes as it is
+RAXIS_AUTOGRAD_UNARY_ALL_SAVE_NONE(frac, FracBackward0)
 
 } // namespace raxis

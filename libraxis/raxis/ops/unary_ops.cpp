@@ -196,6 +196,64 @@ Tensor& round_(Tensor& self) {
     return self;
 }
 
+Tensor& trunc_out(const Tensor& self, Tensor& out) {
+    if (self.dtype().is_integral(/*include_bool=*/true)) {
+        return copy_into_out(self, out);
+    }
+    auto iter = iterator::unary_op_config()
+        .resize_outputs(true)
+        .add_output(out)
+        .add_input(self)
+        .build();
+    trunc_stub(iter.device_type(), iter);
+    out = iter.get_output(0);
+    return out;
+}
+
+Tensor trunc(const Tensor& self) {
+    if (self.dtype().is_integral(/*include_bool=*/true)) {
+        return self.clone();
+    }
+    Tensor out;
+    return ops::trunc_out(self, out);
+}
+
+Tensor& trunc_(Tensor& self) {
+    if (self.dtype().is_integral(/*include_bool=*/true)) {
+        return self;
+    }
+    auto iter = iterator::unary_op_config()
+        .add_output(self)
+        .add_input(self)
+        .build();
+    trunc_stub(iter.device_type(), iter);
+    return self;
+}
+
+// x - trunc(x): floating tensors only, as torch (an integer has no fraction,
+// but torch raises instead of returning zeros)
+Tensor& frac_out(const Tensor& self, Tensor& out) {
+    RAXIS_CHECK_NOT_IMPLEMENTED(self.dtype().is_floating(),
+        "\"frac\" not implemented for '", self.dtype().name(), "'");
+    auto iter = iterator::unary_op_config()
+        .resize_outputs(true)
+        .add_output(out)
+        .add_input(self)
+        .build();
+    frac_stub(iter.device_type(), iter);
+    out = iter.get_output(0);
+    return out;
+}
+
+Tensor frac(const Tensor& self) {
+    Tensor out;
+    return ops::frac_out(self, out);
+}
+
+Tensor& frac_(Tensor& self) {
+    return ops::frac_out(self, self);
+}
+
 RAXIS_UNARY_OP(exp, unary_float_op_config, exp_stub)
 RAXIS_UNARY_OP(expm1, unary_float_op_config, expm1_stub)
 RAXIS_UNARY_OP(log, unary_float_op_config, log_stub)
@@ -274,12 +332,49 @@ Tensor& logical_not_(Tensor& self) {
     return self;
 }
 
+namespace {
+
+Tensor& bitwise_not_into(const Tensor& self, Tensor& out) {
+    RAXIS_CHECK_NOT_IMPLEMENTED(self.dtype().is_integral(/*include_bool=*/true),
+        "\"bitwise_not\" not implemented for '", self.dtype().name(), "'");
+    auto iter = iterator::unary_op_config()
+        .resize_outputs(true)
+        .add_output(out)
+        .add_input(self)
+        .build();
+    bitwise_not_stub(iter.device_type(), iter);
+    out = iter.get_output(0);
+    return out;
+}
+
+} // anonymous namespace
+
+// Integer and bool tensors cannot require grad: no autograd wrapper
+Tensor bitwise_not(const Tensor& self) {
+    Tensor out;
+    return bitwise_not_into(self, out);
+}
+
+Tensor& bitwise_not_out(const Tensor& self, Tensor& out) {
+    bitwise_not_into(self, out);
+    out.unsafe_get_tensor_impl()->storage()->bump_version();
+    return out;
+}
+
+Tensor& bitwise_not_(Tensor& self) {
+    bitwise_not_into(self, self);
+    self.unsafe_get_tensor_impl()->storage()->bump_version();
+    return self;
+}
+
 DEFINE_DISPATCH(neg_stub);
 DEFINE_DISPATCH(abs_stub);
 DEFINE_DISPATCH(sign_stub);
 DEFINE_DISPATCH(ceil_stub);
 DEFINE_DISPATCH(floor_stub);
 DEFINE_DISPATCH(round_stub);
+DEFINE_DISPATCH(trunc_stub);
+DEFINE_DISPATCH(frac_stub);
 DEFINE_DISPATCH(exp_stub);
 DEFINE_DISPATCH(expm1_stub);
 DEFINE_DISPATCH(log_stub);
@@ -291,6 +386,7 @@ DEFINE_DISPATCH(rsqrt_stub);
 DEFINE_DISPATCH(reciprocal_stub);
 DEFINE_DISPATCH(sigmoid_stub);
 DEFINE_DISPATCH(logical_not_stub);
+DEFINE_DISPATCH(bitwise_not_stub);
 DEFINE_DISPATCH(sin_stub);
 DEFINE_DISPATCH(cos_stub);
 DEFINE_DISPATCH(tan_stub);
