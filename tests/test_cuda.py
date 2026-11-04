@@ -127,6 +127,25 @@ class TestPinnedMemory:
     def address(t):
         return t.untyped_storage().data_ptr()
 
+    @pytest.mark.parametrize("factory", ["empty", "zeros", "ones", "rand", "randn"])
+    def test_factories_pin_memory(self, factory):
+        x = getattr(raxis, factory)(3, 4, pin_memory=True)
+        assert x.is_pinned() and x.device.type == "cpu"
+        assert raxis.full((2,), 1.5, pin_memory=True).is_pinned()
+        assert raxis.arange(5, pin_memory=True).is_pinned()
+        assert raxis.empty_like(x, pin_memory=True).is_pinned()
+        assert not getattr(raxis, factory)(3).is_pinned()
+
+    def test_factories_pin_memory_needs_the_cpu(self):
+        for lib in (raxis, torch):
+            with pytest.raises(RuntimeError, match="Only dense CPU tensors can be pinned"):
+                lib.empty(3, device="cuda", pin_memory=True)
+
+    def test_resized_pinned_tensor_stays_pinned(self):
+        x = raxis.empty(3, pin_memory=True)
+        x.resize_(100000)
+        assert x.is_pinned()
+
     def test_pin_memory(self):
         x = raxis.from_numpy(make((40, 30)))
         p = x.pin_memory()

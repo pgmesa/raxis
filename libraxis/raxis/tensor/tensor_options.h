@@ -96,9 +96,18 @@ struct RAXIS_API TensorOptions {
         return r;
     }
 
+    // From: c10/core/TensorOptions.h (pinned_memory): a CPU tensor from the
+    // pinned (page-locked) allocator, as torch.empty(..., pin_memory=True)
+    [[nodiscard]] TensorOptions pinned_memory(std::optional<bool> pinned) const noexcept {
+        TensorOptions r = *this;
+        r.pinned_memory_ = pinned;
+        return r;
+    }
+
     Dtype dtype() const noexcept { return dtype_or_default(dtype_); }
     Device device() const noexcept { return device_or_default(device_); }
     bool requires_grad() const noexcept { return requires_grad_.value_or(false); }
+    bool pinned_memory() const noexcept { return pinned_memory_.value_or(false); }
 
     bool has_dtype() const noexcept { return dtype_.has_value(); }
     bool has_device() const noexcept { return device_.has_value(); }
@@ -107,6 +116,7 @@ struct RAXIS_API TensorOptions {
     std::optional<Dtype> dtype_opt() const noexcept { return dtype_; }
     std::optional<Device> device_opt() const noexcept { return device_; }
     std::optional<bool> requires_grad_opt() const noexcept { return requires_grad_; }
+    std::optional<bool> pinned_memory_opt() const noexcept { return pinned_memory_; }
 
     /// Right-biased merge: fields set in `other` override fields in `*this`.
     /// Unset fields in `other` are left unchanged.
@@ -115,13 +125,15 @@ struct RAXIS_API TensorOptions {
         if (other.has_dtype()) merged.dtype_ = other.dtype_;
         if (other.has_device()) merged.device_ = other.device_;
         if (other.has_requires_grad()) merged.requires_grad_ = other.requires_grad_;
+        if (other.pinned_memory_.has_value()) merged.pinned_memory_ = other.pinned_memory_;
         return merged;
     }
 
     bool operator==(const TensorOptions& other) const noexcept {
         return dtype() == other.dtype() 
             && device() == other.device() 
-            && requires_grad() == other.requires_grad();
+            && requires_grad() == other.requires_grad()
+            && pinned_memory() == other.pinned_memory();
     }
 
     bool operator!=(const TensorOptions& other) const noexcept {
@@ -132,6 +144,7 @@ private:
     std::optional<Dtype> dtype_;
     std::optional<Device> device_;
     std::optional<bool> requires_grad_;
+    std::optional<bool> pinned_memory_;
 };
 
 // ============================================================================

@@ -1240,80 +1240,80 @@ PYBIND11_MODULE(_C, c) {
         return raxis::python::tensor_from_numpy(arr);
     });
 
-    c.def("empty", [](raxis::VecOrInt shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
-        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
+    c.def("empty", [](raxis::VecOrInt shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, bool pin_memory) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad).pinned_memory(pin_memory);
         return raxis::empty(shape, options);
-    }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false);
+    }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false, py::arg("pin_memory") = false);
 
-    c.def("empty_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, raxis::MemoryFormat memory_format) {
-        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
+    c.def("empty_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, bool pin_memory, raxis::MemoryFormat memory_format) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad).pinned_memory(pin_memory);
         return raxis::empty_like(other, options, memory_format);
     }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false,
-       py::arg_v("memory_format", raxis::MemoryFormat::Preserve, "preserve_format"));
+       py::arg("pin_memory") = false, py::arg_v("memory_format", raxis::MemoryFormat::Preserve, "preserve_format"));
 
-    c.def("zeros", [](raxis::VecOrInt shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
-        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
+    c.def("zeros", [](raxis::VecOrInt shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, bool pin_memory) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad).pinned_memory(pin_memory);
         return raxis::zeros(shape, options);
-    }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false);
+    }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false, py::arg("pin_memory") = false);
 
-    c.def("zeros_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, raxis::MemoryFormat memory_format) {
-        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
+    c.def("zeros_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, bool pin_memory, raxis::MemoryFormat memory_format) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad).pinned_memory(pin_memory);
         return raxis::zeros_like(other, options, memory_format);
     }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false,
-       py::arg_v("memory_format", raxis::MemoryFormat::Preserve, "preserve_format"));
+       py::arg("pin_memory") = false, py::arg_v("memory_format", raxis::MemoryFormat::Preserve, "preserve_format"));
 
-    c.def("ones", [](raxis::VecOrInt shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
-        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
+    c.def("ones", [](raxis::VecOrInt shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, bool pin_memory) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad).pinned_memory(pin_memory);
         return raxis::ones(shape, options);
-    }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false);
+    }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false, py::arg("pin_memory") = false);
 
-    c.def("ones_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, raxis::MemoryFormat memory_format) {
-        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
+    c.def("ones_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, bool pin_memory, raxis::MemoryFormat memory_format) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad).pinned_memory(pin_memory);
         return raxis::ones_like(other, options, memory_format);
     }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false,
-       py::arg_v("memory_format", raxis::MemoryFormat::Preserve, "preserve_format"));
+       py::arg("pin_memory") = false, py::arg_v("memory_format", raxis::MemoryFormat::Preserve, "preserve_format"));
 
-    c.def("full", [](raxis::VecOrInt shape, raxis::Scalar fill_value, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
-        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
+    c.def("full", [](raxis::VecOrInt shape, raxis::Scalar fill_value, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, bool pin_memory) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad).pinned_memory(pin_memory);
         return raxis::full(shape, fill_value, options);
-    }, py::arg("shape"), py::arg("fill_value"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false);
+    }, py::arg("shape"), py::arg("fill_value"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false, py::arg("pin_memory") = false);
 
-    c.def("full_like", [](const raxis::Tensor& other, raxis::Scalar fill_value, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, raxis::MemoryFormat memory_format) {
-        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
+    c.def("full_like", [](const raxis::Tensor& other, raxis::Scalar fill_value, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, bool pin_memory, raxis::MemoryFormat memory_format) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad).pinned_memory(pin_memory);
         return raxis::full_like(other, fill_value, options, memory_format);
     }, py::arg("other"), py::arg("fill_value"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false,
-       py::arg_v("memory_format", raxis::MemoryFormat::Preserve, "preserve_format"));
+       py::arg("pin_memory") = false, py::arg_v("memory_format", raxis::MemoryFormat::Preserve, "preserve_format"));
 
-    c.def("arange", [](raxis::Scalar start, raxis::Scalar end, raxis::Scalar step, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
-        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
+    c.def("arange", [](raxis::Scalar start, raxis::Scalar end, raxis::Scalar step, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, bool pin_memory) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad).pinned_memory(pin_memory);
         return raxis::arange(start, end, step, options);
-    }, py::arg("start"), py::arg("end"), py::arg("step") = 1, py::kw_only(), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false);
-    c.def("arange", [](raxis::Scalar end, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
-        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
+    }, py::arg("start"), py::arg("end"), py::arg("step") = 1, py::kw_only(), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false, py::arg("pin_memory") = false);
+    c.def("arange", [](raxis::Scalar end, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, bool pin_memory) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad).pinned_memory(pin_memory);
         return raxis::arange(end, options);
-    }, py::arg("end"), py::kw_only(), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false);
+    }, py::arg("end"), py::kw_only(), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false, py::arg("pin_memory") = false);
 
-    c.def("rand", [](raxis::VecOrInt shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
-        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
+    c.def("rand", [](raxis::VecOrInt shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, bool pin_memory) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad).pinned_memory(pin_memory);
         return raxis::rand(shape, options);
-    }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false);
+    }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false, py::arg("pin_memory") = false);
 
-    c.def("rand_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, raxis::MemoryFormat memory_format) {
-        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
+    c.def("rand_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, bool pin_memory, raxis::MemoryFormat memory_format) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad).pinned_memory(pin_memory);
         return raxis::rand_like(other, options, memory_format);
     }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false,
-       py::arg_v("memory_format", raxis::MemoryFormat::Preserve, "preserve_format"));
+       py::arg("pin_memory") = false, py::arg_v("memory_format", raxis::MemoryFormat::Preserve, "preserve_format"));
 
-    c.def("randn", [](raxis::VecOrInt shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad) {
-        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
+    c.def("randn", [](raxis::VecOrInt shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, bool pin_memory) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad).pinned_memory(pin_memory);
         return raxis::randn(shape, options);
-    }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false);
+    }, py::arg("shape"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false, py::arg("pin_memory") = false);
 
-    c.def("randn_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, raxis::MemoryFormat memory_format) {
-        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad);
+    c.def("randn_like", [](const raxis::Tensor& other, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device, bool requires_grad, bool pin_memory, raxis::MemoryFormat memory_format) {
+        auto options = raxis::TensorOptions().dtype(dtype).device(device).requires_grad(requires_grad).pinned_memory(pin_memory);
         return raxis::randn_like(other, options, memory_format);
     }, py::arg("other"), py::arg("dtype") = py::none(), py::arg("device") = py::none(), py::arg("requires_grad") = false,
-       py::arg_v("memory_format", raxis::MemoryFormat::Preserve, "preserve_format"));
+       py::arg("pin_memory") = false, py::arg_v("memory_format", raxis::MemoryFormat::Preserve, "preserve_format"));
 
     c.def("randint", [](int64_t low, int64_t high, raxis::VecOrInt shape, std::optional<raxis::Dtype> dtype, std::optional<raxis::Device> device) {
         auto options = raxis::TensorOptions().dtype(dtype).device(device);
