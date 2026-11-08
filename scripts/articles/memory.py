@@ -83,10 +83,10 @@ def independent_loads():
         idx = idx.astype(np.int64)
         out = np.empty(len(idx), dtype=np.float32)
         xt, it, ot = torch.from_numpy(x), torch.from_numpy(idx), torch.from_numpy(out)
-        xr, ir = raxis.from_numpy(x), raxis.from_numpy(idx)
+        xr, ir, outr = raxis.from_numpy(x), raxis.from_numpy(idx), raxis.from_numpy(out.copy())
         t_np = ms(lambda: np.take(x, idx, out=out))
         t_t = ms(lambda: torch.index_select(xt, 0, it, out=ot))
-        t_r = ms(lambda: raxis.index_select(xr, 0, ir))
+        t_r = ms(lambda: raxis.index_select(xr, 0, ir, out=outr))
         k = len(idx) / 1e6
         print(f"{name:>22s}{t_np / k:8.2f}{t_t / k:9.2f}{t_r / k:8.2f}")
 
