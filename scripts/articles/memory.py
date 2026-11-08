@@ -14,6 +14,13 @@ memory article).
    cores first, and packed two per core (both hardware threads of a core
    before the next one). Without either, where the OS puts them changes
    from run to run.
+4. memory/branches.cpp: a filter (keep the x[i] below a threshold) with a
+   branch and without one, for 0% to 100% kept in a random order and for
+   sorted data, and how much of a repeated random array the branch predictor
+   learns.
+5. Integer // and % on a million int64, with positive dividends and with
+   mixed signs, in NumPy, PyTorch and Raxis (Raxis computes them without a
+   branch).
 
     uv run python scripts/articles/memory.py
 """
@@ -46,11 +53,18 @@ def ms(f, repeat=50):
     return statistics.median(times) * 1e3
 
 
-def levels():
+def build():
     subprocess.run(["cmake", "-S", HERE / "memory", "-B", BUILD, "-DCMAKE_BUILD_TYPE=Release"], check=True, capture_output=True)
     subprocess.run(["cmake", "--build", BUILD, "--config", "Release"], check=True, capture_output=True)
-    binary = next(p for p in [BUILD / "Release" / "memory_levels.exe", BUILD / "memory_levels"] if p.exists())
-    output = subprocess.run([binary], check=True, capture_output=True, text=True).stdout
+
+
+def run(name):
+    binary = next(p for p in [BUILD / "Release" / f"{name}.exe", BUILD / name] if p.exists())
+    return subprocess.run([binary], check=True, capture_output=True, text=True).stdout
+
+
+def levels():
+    output = run("memory_levels")
 
     print("Latency of one load, ns")
     print(f"{'working set':>12s}{'random':>10s}{'in order':>10s}")
@@ -91,6 +105,44 @@ def independent_loads():
         print(f"{name:>22s}{t_np / k:8.2f}{t_t / k:9.2f}{t_r / k:8.2f}")
 
 
+def branches():
+    output = run("branches")
+    print("\nFilter x[x < t], ns per element")
+    print(f"{'order':>8s}{'kept':>6s}{'branch':>9s}{'no branch':>11s}")
+    rows = {}
+    for line in output.splitlines():
+        kind, *rest = line.split(",")
+        if kind == "filter":
+            rows.setdefault((rest[0], int(rest[1])), {})[rest[2]] = float(rest[3])
+    for (order, kept), r in rows.items():
+        print(f"{order:>8s}{kept:>5d}%{r['branch']:9.2f}{r['no branch']:11.2f}")
+    print("\nThe random half, from a smaller array run many times, with a branch, ns per element")
+    for line in output.splitlines():
+        kind, *rest = line.split(",")
+        if kind == "repeat":
+            print(f"{int(rest[0]):>10d}{float(rest[2]):8.2f}")
+
+
+def integer_division():
+    torch.set_num_threads(1)
+    raxis.set_num_threads(1)
+    rng = np.random.default_rng(0)
+    n = 1_000_000
+    b = rng.integers(1, 50, n)
+    out = np.empty(n, dtype=np.int64)
+    print("\nInteger // and %, a million int64, ms")
+    print(f"{'dividends':>12s}{'op':>4s}{'NumPy':>8s}{'PyTorch':>9s}{'Raxis':>8s}")
+    for name, a in [("positive", rng.integers(0, 1000, n)), ("mixed signs", rng.integers(-1000, 1000, n))]:
+        ta, tb, to = torch.from_numpy(a), torch.from_numpy(b), torch.from_numpy(out)
+        ra, rb, ro = raxis.from_numpy(a), raxis.from_numpy(b), raxis.from_numpy(out.copy())
+        for op in ["floor_divide", "remainder"]:
+            t_np = ms(lambda: getattr(np, op)(a, b, out=out))
+            t_t = ms(lambda: getattr(torch, op)(ta, tb, out=to))
+            t_r = ms(lambda: getattr(raxis, op)(ra, rb, out=ro))
+            symbol = "//" if op == "floor_divide" else "%"
+            print(f"{name:>12s}{symbol:>4s}{t_np:8.2f}{t_t:9.2f}{t_r:8.2f}")
+
+
 PLACEMENTS = {
     "spread over the cores": {"OMP_PLACES": "cores", "OMP_PROC_BIND": "spread"},
     "two per core": {"OMP_PLACES": "threads", "OMP_PROC_BIND": "close"},
@@ -123,8 +175,11 @@ def main():
     if sys.argv[1:] == ["threads"]:
         threads()
         return
+    build()
     levels()
     independent_loads()
+    branches()
+    integer_division()
     for name, env in PLACEMENTS.items():
         print(f"\nThreads, {name}", flush=True)
         subprocess.run([sys.executable, __file__, "threads"], check=True, env={**os.environ, **env})
