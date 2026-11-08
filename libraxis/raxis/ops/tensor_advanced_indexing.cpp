@@ -18,6 +18,7 @@
 #include <raxis/tensor/tensor_iterator.h>
 #include <raxis/tensor/tensor_shape.h>
 #include <raxis/tensor/memory_overlap.h>
+#include <raxis/tensor/resize.h>
 
 #include <raxis/ops/copy.h>
 #include <raxis/ops/device_check.h>
@@ -160,7 +161,10 @@ Tensor scatter_add(const Tensor& self, int64_t dim, const Tensor& index, const T
 }
 
 
-Tensor index_select(const Tensor& self, int64_t dim, const Tensor& index) {
+// From: aten/src/ATen/native/TensorAdvancedIndexing.cpp (index_select_out_cpu_)
+// An undefined out is allocated; a defined one keeps its strides (the CPU
+// kernel writes through them) and is resized only when it has no elements
+Tensor& index_select_out(const Tensor& self, int64_t dim, const Tensor& index, Tensor& out) {
     check_same_device("index_select", self, index);
     RAXIS_CHECK(index.ndim() <= 1, "index_select(): Index is supposed to be a vector");
     RAXIS_CHECK(index.dtype() == dtypes::Int64 || index.dtype() == dtypes::Int32,
@@ -177,9 +181,31 @@ Tensor index_select(const Tensor& self, int64_t dim, const Tensor& index) {
     if (self.ndim() > 0) {
         result_shape[dim] = numel;
     }
-    Tensor result = empty(result_shape, self.options());
-    index_select_stub(self.device().type(), result, self, dim, index_contig);
-    return result;
+    if (!out.defined()) {
+        out = empty(result_shape, self.options());
+    } else {
+        check_same_device("index_select", self, out);
+        RAXIS_CHECK(out.dtype() == self.dtype(),
+            "index_select(): self and result must have the same scalar type");
+        assert_no_internal_overlap(out);
+        assert_no_overlap(out, self);
+        assert_no_overlap(out, index);
+        resize_output(out, result_shape);
+    }
+    if (out.is_cpu() || out.is_contiguous()) {
+        index_select_stub(self.device().type(), out, self, dim, index_contig);
+    } else {
+        // The CUDA kernel writes a contiguous result
+        Tensor result = empty(result_shape, self.options());
+        index_select_stub(self.device().type(), result, self, dim, index_contig);
+        copy(result, out);
+    }
+    return out;
+}
+
+Tensor index_select(const Tensor& self, int64_t dim, const Tensor& index) {
+    Tensor result;
+    return ops::index_select_out(self, dim, index, result);
 }
 
 namespace {

@@ -51,6 +51,7 @@ RAXIS_API Tensor scatter(const Tensor& self, int64_t dim, const Tensor& index, S
 RAXIS_API Tensor scatter_add(const Tensor& self, int64_t dim, const Tensor& index, const Tensor& src);
 
 RAXIS_API Tensor index_select(const Tensor& self, int64_t dim, const Tensor& index);
+RAXIS_API Tensor& index_select_out(const Tensor& self, int64_t dim, const Tensor& index, Tensor& out);
 RAXIS_API Tensor& index_add_(Tensor& self, int64_t dim, const Tensor& index, const Tensor& source);
 RAXIS_API Tensor index_add(const Tensor& self, int64_t dim, const Tensor& index, const Tensor& source);
 
@@ -79,6 +80,7 @@ RAXIS_API Tensor scatter(const Tensor& self, int64_t dim, const Tensor& index, S
 RAXIS_API Tensor scatter_add(const Tensor& self, int64_t dim, const Tensor& index, const Tensor& src);
 
 RAXIS_API Tensor index_select(const Tensor& self, int64_t dim, const Tensor& index);
+RAXIS_API Tensor& index_select_out(const Tensor& self, int64_t dim, const Tensor& index, Tensor& out);
 RAXIS_API Tensor& index_add_(Tensor& self, int64_t dim, const Tensor& index, const Tensor& source);
 RAXIS_API Tensor index_add(const Tensor& self, int64_t dim, const Tensor& index, const Tensor& source);
 

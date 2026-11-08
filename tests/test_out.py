@@ -96,6 +96,46 @@ def test_bitwise(name, device):
         check_match(r_out, t_out, atol=0)
 
 
+@pytest.mark.parametrize("shape, dim", [((5,), 0), ((4, 6), 0), ((4, 6), 1), ((3, 4, 5), 1)])
+def test_index_select(shape, dim, device):
+    r, t = make_pair(randf(*shape), device)
+    r_i, t_i = make_pair(np.array([2, 0, 2, 1]), device)
+    out_shape = list(shape)
+    out_shape[dim] = 4
+    r_out, t_out = empty_pair(tuple(out_shape), "float32", device)
+    assert raxis.index_select(r, dim, r_i, out=r_out) is r_out
+    torch.index_select(t, dim, t_i, out=t_out)
+    check_match(r_out, t_out, atol=0)
+
+
+def test_index_select_strided_and_resized(device):
+    r, t = make_pair(randf(4, 6), device)
+    r_i, t_i = make_pair(np.array([3, 1]), device)
+    # A transposed out keeps its strides
+    r_out = raxis.empty(6, 2, device=device).t()
+    t_out = torch.empty(6, 2, device=device).t()
+    raxis.index_select(r, 0, r_i, out=r_out)
+    torch.index_select(t, 0, t_i, out=t_out)
+    check_match(r_out, t_out, atol=0)
+    assert r_out.stride() == t_out.stride()
+    # A zero-element out is resized
+    r_out, t_out = empty_pair((0,), "float32", device)
+    raxis.index_select(r, 1, r_i, out=r_out)
+    torch.index_select(t, 1, t_i, out=t_out)
+    check_match(r_out, t_out, atol=0)
+
+
+def test_index_select_errors():
+    x = raxis.randn(4, 6)
+    i = raxis.tensor([0, 1])
+    with pytest.raises(RuntimeError, match="must have the same scalar type"):
+        raxis.index_select(x, 0, i, out=raxis.empty(2, 6, dtype=raxis.float64))
+    with pytest.raises(RuntimeError, match="unsupported operation"):
+        raxis.index_select(x, 0, i, out=x[:2])
+    with pytest.raises(RuntimeError, match="out=... arguments don't support automatic differentiation"):
+        raxis.index_select(raxis.randn(4, 6, requires_grad=True), 0, i, out=raxis.empty(2, 6))
+
+
 @pytest.mark.parametrize("name", ["eq", "logical_and"])
 def test_comparison_into_float(name, device):
     r, t = make_pair(np.array([0.0, 1.0, 2.0], dtype=np.float32), device)

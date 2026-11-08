@@ -2193,6 +2193,9 @@ PYBIND11_MODULE(_C, c) {
     c.def("tril", &raxis::tril, py::arg("input"), py::arg("diagonal") = 0);
     c.def("triu", &raxis::triu, py::arg("input"), py::arg("diagonal") = 0);
     c.def("index_select", &raxis::index_select, py::arg("input"), py::arg("dim"), py::arg("index"));
+    c.def("index_select", [](const raxis::Tensor& input, int64_t dim, const raxis::Tensor& index, raxis::Tensor& out) {
+        return raxis::index_select_out(input, dim, index, out);
+    }, py::arg("input"), py::arg("dim"), py::arg("index"), py::kw_only(), py::arg("out"));
     c.def("index_add", &raxis::index_add, py::arg("input"), py::arg("dim"), py::arg("index"), py::arg("source"));
     c.def("index_put", [](const raxis::Tensor& input, const std::vector<std::optional<raxis::Tensor>>& indices,
            const raxis::Tensor& values, bool accumulate) {

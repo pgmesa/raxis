@@ -409,6 +409,13 @@ Tensor index_select(const Tensor& self, int64_t dim, const Tensor& index) {
     return result;
 }
 
+Tensor& index_select_out(const Tensor& self, int64_t dim, const Tensor& index, Tensor& out) {
+    autograd::check_out_no_grad("index_select", {&self, &out});
+    ops::index_select_out(self, dim, index, out);
+    autograd::bump_version(out);
+    return out;
+}
+
 Tensor index_add(const Tensor& self, int64_t dim, const Tensor& index, const Tensor& source) {
     Tensor result = ops::index_add(self, dim, index, source);
     if (autograd::requires_autograd(self, source)) {

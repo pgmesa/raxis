@@ -196,7 +196,7 @@ def _return_out(fn):
     return wrapper
 
 
-# The functions with out= (the elementwise ones for now)
+# The functions with out= (the elementwise ones and index_select for now)
 _OUT_FUNCTIONS = (
     "add", "sub", "mul", "div", "maximum", "minimum", "pow",
     "gt", "ge", "lt", "le", "eq", "ne", "logical_and", "logical_or", "logical_not",
@@ -204,7 +204,7 @@ _OUT_FUNCTIONS = (
     "log10", "log1p", "sqrt", "rsqrt", "reciprocal", "sigmoid", "sin", "cos", "tan",
     "asin", "acos", "atan", "sinh", "cosh", "tanh", "erf", "erfc",
     "remainder", "fmod", "floor_divide", "trunc", "frac", "bitwise_and", "bitwise_or", "bitwise_xor",
-    "bitwise_left_shift", "bitwise_right_shift", "bitwise_not",
+    "bitwise_left_shift", "bitwise_right_shift", "bitwise_not", "index_select",
 )
 for _name in _OUT_FUNCTIONS:
     globals()[_name] = _return_out(globals()[_name])
