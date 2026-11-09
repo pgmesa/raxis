@@ -18,7 +18,10 @@ memory article).
    branch and without one, for 0% to 100% kept in a random order and for
    sorted data, and how much of a repeated random array the branch predictor
    learns.
-5. Integer // and % on a million int64, with positive dividends and with
+5. a + b into a new tensor and into an existing one (out=), for 4 MB and
+   64 MB results: a new tensor costs a page fault per page the first time
+   it is written, unless the allocator reuses memory it already has.
+6. Integer // and % on a million int64, with positive dividends and with
    mixed signs, in NumPy, PyTorch and Raxis (Raxis computes them without a
    branch).
 
@@ -105,6 +108,23 @@ def independent_loads():
         print(f"{name:>22s}{t_np / k:8.2f}{t_t / k:9.2f}{t_r / k:8.2f}")
 
 
+def fresh_output():
+    torch.set_num_threads(1)
+    raxis.set_num_threads(1)
+    print("\na + b into a new tensor and into an existing one (out=), ms")
+    print(f"{'n x n':>12s}{'':>6s}{'NumPy':>8s}{'PyTorch':>9s}{'Raxis':>8s}")
+    for n in (1000, 4000):
+        a = np.random.rand(n, n).astype(np.float32)
+        b = np.random.rand(n, n).astype(np.float32)
+        out = np.empty_like(a)
+        ta, tb, to = torch.from_numpy(a), torch.from_numpy(b), torch.from_numpy(out)
+        ra, rb, ro = raxis.from_numpy(a), raxis.from_numpy(b), raxis.from_numpy(out.copy())
+        new = [ms(lambda: a + b), ms(lambda: ta + tb), ms(lambda: ra + rb)]
+        old = [ms(lambda: np.add(a, b, out=out)), ms(lambda: torch.add(ta, tb, out=to)), ms(lambda: raxis.add(ra, rb, out=ro))]
+        for name, t in [("new", new), ("out=", old)]:
+            print(f"{n:>5d} x {n:<5d}{name:>6s}{t[0]:8.2f}{t[1]:9.2f}{t[2]:8.2f}")
+
+
 def branches():
     output = run("branches")
     print("\nFilter x[x < t], ns per element")
@@ -179,6 +199,7 @@ def main():
     levels()
     independent_loads()
     branches()
+    fresh_output()
     integer_division()
     for name, env in PLACEMENTS.items():
         print(f"\nThreads, {name}", flush=True)
