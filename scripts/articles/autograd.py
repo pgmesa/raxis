@@ -29,15 +29,18 @@ import raxis
 LIBRARIES = [("PyTorch", torch), ("Raxis", raxis)]
 
 
-def us(f, repeat=2000):
+def us(f, repeat=200, batch=100):
+    # Batches of calls: on Windows perf_counter ticks every 100 ns, as long
+    # as one call
     for _ in range(50):
         f()
     times = []
     for _ in range(repeat):
         t = time.perf_counter()
-        f()
+        for _ in range(batch):
+            f()
         times.append(time.perf_counter() - t)
-    return statistics.median(times) * 1e6
+    return statistics.median(times) / batch * 1e6
 
 
 class Value:
