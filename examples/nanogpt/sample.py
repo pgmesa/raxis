@@ -9,6 +9,12 @@ trained with one backend can be sampled with the other:
     python sample.py --backend raxis --out_dir out-torch   # trained with torch
     python sample.py --start "ROMEO:" --num_samples 3 --max_new_tokens 300
     python sample.py --out_dir out-raxis-full --device cuda
+
+GPT-2 (after python prepare_gpt2.py), and GPT-2 fine-tuned on Shakespeare
+(after python train.py --finetune), with GPT-2's BPE tokenizer:
+
+    python sample.py --out_dir out-gpt2 --device cuda --start "Hello, I'm a language model,"
+    python sample.py --out_dir out-raxis-gpt2 --device cuda --start "ROMEO:"
 """
 
 import argparse
@@ -57,18 +63,25 @@ model.eval()
 model.to(args.device)
 print(f"loaded {ckpt_path} (iter {checkpoint['iter_num']}, val loss {checkpoint['best_val_loss']:.4f})")
 
-meta_path = os.path.join(here, "data", checkpoint["config"]["dataset"], "meta.pkl")
-with open(meta_path, "rb") as f:
-    meta = pickle.load(f)
-stoi, itos = meta["stoi"], meta["itos"]
+if checkpoint["config"].get("tokenizer") == "gpt2":
+    import tiktoken
+    enc = tiktoken.get_encoding("gpt2")
 
+    def encode(s):
+        return enc.encode(s, allowed_special={"<|endoftext|>"})
 
-def encode(s):
-    return [stoi[c] for c in s]
+    decode = enc.decode
+else:
+    meta_path = os.path.join(here, "data", checkpoint["config"]["dataset"], "meta.pkl")
+    with open(meta_path, "rb") as f:
+        meta = pickle.load(f)
+    stoi, itos = meta["stoi"], meta["itos"]
 
+    def encode(s):
+        return [stoi[c] for c in s]
 
-def decode(ids):
-    return "".join(itos[i] for i in ids)
+    def decode(ids):
+        return "".join(itos[i] for i in ids)
 
 
 x = lib.tensor(encode(args.start), dtype=lib.long, device=args.device)[None, ...]

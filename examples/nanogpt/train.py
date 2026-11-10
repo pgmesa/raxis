@@ -19,6 +19,13 @@ Usage (after python prepare.py):
     python train.py --backend raxis --full    # the full shakespeare_char config
     python train.py --backend raxis --full --device cuda
 
+Fine-tuning GPT-2 (124M) on Shakespeare, as nanoGPT's
+config/finetune_shakespeare.py with gpt2 instead of gpt2-xl (after python
+prepare_gpt2.py; 20 iterations of 32 sequences of 1024 tokens, here as 4
+micro-batches of 8):
+
+    python train.py --backend raxis --finetune --device cuda
+
 As nanoGPT, the model is saved to <out_dir>/ckpt.pt whenever the val loss
 improves (out-raxis or out-torch by default), for sample.py. Both backends
 write torch's checkpoint format, so either one can sample from the other's.
@@ -39,8 +46,10 @@ parser.add_argument("--backend", choices=["raxis", "torch"], default="raxis")
 parser.add_argument("--device", default="cpu", help="cpu or cuda")
 parser.add_argument("--full", action="store_true",
                     help="6 layers, n_embd 384, block 256, batch 64, dropout 0.2, 5000 iters")
+parser.add_argument("--finetune", action="store_true",
+                    help="fine-tune GPT-2 (out-gpt2, from prepare_gpt2.py) on BPE Shakespeare")
 parser.add_argument("--max_iters", type=int)
-parser.add_argument("--eval_interval", type=int, default=250)
+parser.add_argument("--eval_interval", type=int)
 parser.add_argument("--eval_iters", type=int)
 parser.add_argument("--log_interval", type=int, default=10)
 parser.add_argument("--threads", type=int, help="number of threads (default: the library's)")
@@ -63,14 +72,24 @@ config = dict(
     batch_size=12, block_size=64, n_layer=4, n_head=4, n_embd=128, dropout=0.0, bias=False,
     learning_rate=1e-3, max_iters=2000, lr_decay_iters=2000, min_lr=1e-4, warmup_iters=100,
     weight_decay=1e-1, beta1=0.9, beta2=0.99, grad_clip=1.0, eval_iters=20,
+    gradient_accumulation_steps=1, decay_lr=True, eval_interval=250, dataset="shakespeare_char",
 )
 if args.full:
     config.update(batch_size=64, block_size=256, n_layer=6, n_head=6, n_embd=384, dropout=0.2,
                   max_iters=5000, lr_decay_iters=5000, eval_iters=200)
+if args.finetune:
+    # config/finetune_shakespeare.py (batch 1 x 32 there; 8 x 4 here, the same
+    # 32 sequences per iteration) on train.py's defaults (beta2 0.95); the
+    # architecture comes from the GPT-2 checkpoint
+    config.update(batch_size=8, gradient_accumulation_steps=4, block_size=1024, learning_rate=3e-5,
+                  decay_lr=False, max_iters=20, eval_interval=5, eval_iters=5, beta2=0.95,
+                  dataset="shakespeare")
 if args.max_iters is not None:
     config.update(max_iters=args.max_iters)
 if args.eval_iters is not None:
     config.update(eval_iters=args.eval_iters)
+if args.eval_interval is not None:
+    config.update(eval_interval=args.eval_interval)
 globals().update(config)
 
 if args.threads:
@@ -82,13 +101,15 @@ if device.startswith("cuda"):
     lib.backends.cuda.matmul.allow_tf32 = True
     lib.backends.cudnn.allow_tf32 = True
 print(f"backend {args.backend}, device {device}, {lib.get_num_threads()} threads")
-print(f"tokens per iteration will be: {batch_size * block_size:,}")
+print(f"tokens per iteration will be: {gradient_accumulation_steps * batch_size * block_size:,}")
 
-data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "shakespeare_char")
+here = os.path.dirname(os.path.abspath(__file__))
+data_dir = os.path.join(here, "data", dataset)
 if not os.path.exists(os.path.join(data_dir, "train.bin")):
-    sys.exit("run python prepare.py first")
+    sys.exit("run python prepare_gpt2.py first" if args.finetune else "run python prepare.py first")
 with open(os.path.join(data_dir, "meta.pkl"), "rb") as f:
-    vocab_size = pickle.load(f)["vocab_size"]
+    meta = pickle.load(f)
+vocab_size = meta["vocab_size"]
 
 # The batches are drawn with numpy so that both backends see the same data
 batch_rng = np.random.default_rng(args.seed)
@@ -107,9 +128,16 @@ def get_batch(split):
     return x.to(device), y.to(device)
 
 
-model_args = dict(n_layer=n_layer, n_head=n_head, n_embd=n_embd, block_size=block_size,
-                  bias=bias, vocab_size=vocab_size, dropout=dropout)
-model = GPT(GPTConfig(**model_args))
+if args.finetune:
+    pretrained = lib.load(os.path.join(here, "out-gpt2", "ckpt.pt"), map_location="cpu")
+    model_args = pretrained["model_args"]
+    model = GPT(GPTConfig(**model_args))
+    model.load_state_dict(pretrained["model"])
+    del pretrained
+else:
+    model_args = dict(n_layer=n_layer, n_head=n_head, n_embd=n_embd, block_size=block_size,
+                      bias=bias, vocab_size=vocab_size, dropout=dropout)
+    model = GPT(GPTConfig(**model_args))
 model.to(device)
 optimizer = model.configure_optimizers(weight_decay, learning_rate, (beta1, beta2), device.split(":")[0])
 
@@ -131,6 +159,8 @@ def estimate_loss():
 
 # Linear warmup, then cosine decay down to min_lr
 def get_lr(it):
+    if not decay_lr:
+        return learning_rate
     if it < warmup_iters:
         return learning_rate * (it + 1) / (warmup_iters + 1)
     if it > lr_decay_iters:
@@ -140,7 +170,7 @@ def get_lr(it):
     return min_lr + coeff * (learning_rate - min_lr)
 
 
-out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), args.out_dir or f"out-{args.backend}")
+out_dir = os.path.join(here, args.out_dir or f"out-{args.backend}" + ("-gpt2" if args.finetune else ""))
 os.makedirs(out_dir, exist_ok=True)
 best_val_loss = 1e9
 
@@ -153,7 +183,7 @@ for iter_num in range(max_iters + 1):
     for param_group in optimizer.param_groups:
         param_group["lr"] = lr
 
-    if iter_num % args.eval_interval == 0 or iter_num == max_iters:
+    if iter_num % eval_interval == 0 or iter_num == max_iters:
         losses = estimate_loss()
         print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
         history["eval"].append({"iter": iter_num, **losses})
@@ -161,20 +191,24 @@ for iter_num in range(max_iters + 1):
             best_val_loss = losses["val"]
             checkpoint = {"model": model.state_dict(), "optimizer": optimizer.state_dict(),
                           "model_args": model_args, "iter_num": iter_num, "best_val_loss": best_val_loss,
-                          "config": {**config, "dataset": "shakespeare_char"}}
+                          "config": {**config, "tokenizer": meta.get("tokenizer")}}
             print(f"saving checkpoint to {out_dir}")
             lib.save(checkpoint, os.path.join(out_dir, "ckpt.pt"))
     if iter_num == max_iters:
         break
 
     t0 = time.perf_counter()
-    _, loss = model(X, Y)
-    X, Y = get_batch("train")
-    loss.backward()
+    # Gradient accumulation: the micro-batches add their gradients, each
+    # loss scaled so that the sum is the mean over all of them
+    for micro_step in range(gradient_accumulation_steps):
+        _, loss = model(X, Y)
+        loss = loss / gradient_accumulation_steps
+        X, Y = get_batch("train")
+        loss.backward()
     lib.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
     optimizer.step()
     optimizer.zero_grad(set_to_none=True)
-    lossf = loss.item()
+    lossf = loss.item() * gradient_accumulation_steps
     dt = time.perf_counter() - t0
 
     history["train_loss"].append(lossf)
