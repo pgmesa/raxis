@@ -72,8 +72,8 @@ The models reach the same accuracy with every library (MNIST: ~97.6% val with
 the MLP, ~98.6% with the CNN). Most of PyTorch's time in the CNN is Dropout:
 its CPU random numbers come from a serial mt19937, Raxis draws them from
 Philox in parallel. SynapX's Conv2d is SynapGrad's algorithm on libtorch
-(sliding windows and tensordot), not PyTorch's convolution. SynapX supports up
-to PyTorch 2.7, so its column runs in an environment of its own.
+(sliding windows and tensordot), not PyTorch's convolution. SynapX 0.4.0
+runs on the same PyTorch 2.14.
 
 **nanoGPT.** [nanoGPT](https://github.com/karpathy/nanoGPT)'s
 character-level Shakespeare model, trained with `examples/nanogpt/train.py`
@@ -107,12 +107,12 @@ val loss 1.4668 and 1.4612 (both at iteration 1750). PyTorch convolves
 with cuDNN; Raxis does not link it (a closed library of several hundred MB
 that would hide the most interesting kernels) and runs im2col plus cuBLAS.
 Its attention is its own FlashAttention-2 style kernel, against PyTorch's
-memory-efficient one. At batch 64 the MLP is bound by kernel launches on
-any GPU.
+memory-efficient one. At batch 64 the MLP is small enough that its step is
+bound by the kernel launches, not by the GPU.
 
 **Ops.** A selection of `scripts/bench_ops.py` (float32, forward only unless
-noted). Over its 388 cases the median ratio Raxis/PyTorch is 0.85x; the only
-case beyond 2x is the large 3x3 convolution, where PyTorch uses oneDNN's
+noted). Over its 388 cases the median ratio Raxis/PyTorch is 0.85x; in that
+run the only case beyond 2x was the large 3x3 convolution, where PyTorch uses oneDNN's
 direct convolution and Raxis im2col plus an MKL gemm.
 
 | Op | Shape | Raxis (ms) | PyTorch (ms) |
@@ -138,11 +138,14 @@ so no table) the median ratio Raxis/PyTorch over the same cases is 0.79x to
 
 **Against NumPy.** Raxis wheels are 8-10 MB, smaller than NumPy's (13-17 MB),
 while PyTorch's CPU wheels take 110-180 MB. On 1000 x 1000 elementwise ops
-Raxis and PyTorch both run 3 to 30x faster than NumPy (`add` 0.017 vs 0.565
-ms, `exp` 0.123 vs 0.944 ms), mostly because they split the work between
-threads: NumPy's own functions are
+Raxis and PyTorch both run 3 to 30x faster than NumPy here (`add` 0.017 vs
+0.565 ms, `exp` 0.123 vs 0.944 ms). Part of it is threads: NumPy's own
+functions are
 [single-threaded by design](https://numpy.org/doc/stable/reference/global_state.html),
-only its BLAS calls use several. On 100 x 100 arrays the three are on par.
+only its BLAS calls use several. The rest, for the cheapest ops, is memory:
+on Windows each new NumPy output comes fresh from the system and pays its page
+faults, while Raxis and PyTorch reuse memory through mimalloc. On 100 x 100
+arrays the three are on par.
 
 ## Inside
 
