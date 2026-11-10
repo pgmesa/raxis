@@ -48,13 +48,14 @@ class CrossEntropyLoss(_WeightedLoss):
     """NLLLoss(LogSoftmax(dim=1)(input), target): takes raw logits."""
 
     def __init__(self, weight: Tensor | None = None, ignore_index: int = -100,
-                 reduction: str = "mean") -> None:
+                 reduction: str = "mean", label_smoothing: float = 0.0) -> None:
         super().__init__(weight, reduction)
         self.ignore_index = ignore_index
+        self.label_smoothing = label_smoothing
 
     def forward(self, input: Tensor, target: Tensor) -> Tensor:
         return F.cross_entropy(input, target, self.weight, ignore_index=self.ignore_index,
-                               reduction=self.reduction)
+                               reduction=self.reduction, label_smoothing=self.label_smoothing)
 
 
 class BCELoss(_Loss):

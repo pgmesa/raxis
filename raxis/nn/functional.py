@@ -351,8 +351,9 @@ def nll_loss(input: Tensor, target: Tensor, weight: Tensor | None = None, *,
 
 
 def cross_entropy(input: Tensor, target: Tensor, weight: Tensor | None = None, *,
-                  ignore_index: int = -100, reduction: str = "mean") -> Tensor:
-    return _nn.cross_entropy(input, target, weight, reduction, ignore_index)
+                  ignore_index: int = -100, reduction: str = "mean",
+                  label_smoothing: float = 0.0) -> Tensor:
+    return _nn.cross_entropy(input, target, weight, reduction, ignore_index, label_smoothing)
 
 
 def binary_cross_entropy(input: Tensor, target: Tensor, reduction: str = "mean") -> Tensor:

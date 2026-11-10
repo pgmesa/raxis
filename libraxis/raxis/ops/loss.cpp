@@ -7,6 +7,7 @@
 #include <limits>
 #include <numeric>
 #include <string>
+#include <vector>
 
 #include <raxis/util/exception.h>
 #include <raxis/util/parallel.h>
@@ -17,6 +18,7 @@
 #include <raxis/ops/reduce_ops.h>
 #include <raxis/ops/scalar_ops.h>
 #include <raxis/ops/softmax.h>
+#include <raxis/ops/tensor_advanced_indexing.h>
 #include <raxis/ops/unary_ops.h>
 
 
@@ -231,11 +233,55 @@ Tensor mse_loss(const Tensor& self, const Tensor& target, Reduction reduction) {
     return apply_reduction(diff * diff, reduction);
 }
 
+// With label smoothing the target class gets 1 - ls + ls / C of the
+// probability and every other class ls / C, so the loss is
+// (1 - ls) * nll + ls / C * (sum over the classes of -log p), with the
+// classes weighted and the ignored targets left out as in nll_loss.
+// From: aten/src/ATen/native/LossNLL.cpp (cross_entropy_loss_label_smoothing)
 Tensor cross_entropy(
-    const Tensor& self, const Tensor& target, const Tensor& weight, Reduction reduction, int64_t ignore_index
+    const Tensor& self, const Tensor& target, const Tensor& weight, Reduction reduction, int64_t ignore_index,
+    double label_smoothing
 ) {
+    RAXIS_CHECK(label_smoothing >= 0.0 && label_smoothing <= 1.0,
+                "label_smoothing must be between 0.0 and 1.0. Got: ", label_smoothing);
     int64_t class_dim = self.ndim() == 1 ? 0 : 1;
-    return nll_loss(log_softmax(self, class_dim), target, weight, reduction, ignore_index);
+    Tensor input = log_softmax(self, class_dim);
+    Tensor nll = nll_loss(input, target, weight, reduction, ignore_index);
+    if (label_smoothing == 0.0) {
+        return nll;
+    }
+    int64_t n_classes = input.shape()[class_dim];
+    Tensor smooth_loss;
+    if (weight.defined()) {
+        std::vector<int64_t> weight_shape(input.ndim(), 1);
+        weight_shape[class_dim] = weight.shape()[0];
+        smooth_loss = -(input * weight.view(weight_shape)).sum({class_dim});
+    } else {
+        smooth_loss = -input.sum({class_dim});
+    }
+    Tensor ignore_mask = eq(target, Scalar(ignore_index));
+    smooth_loss = masked_fill(smooth_loss, ignore_mask, 0.0);
+
+    Tensor ret;
+    switch (reduction) {
+        case Reduction::Mean:
+            if (weight.defined()) {
+                // Normalized by the weights of the kept targets, as nll_loss
+                Tensor kept_target = masked_fill(target, ignore_mask, 0);
+                Tensor target_weights = masked_fill(index_select(weight, 0, kept_target.flatten()), ignore_mask.flatten(), 0.0);
+                ret = smooth_loss.sum() / target_weights.sum();
+            } else {
+                ret = smooth_loss.sum() / logical_not(ignore_mask).sum();
+            }
+            break;
+        case Reduction::Sum:
+            ret = smooth_loss.sum();
+            break;
+        case Reduction::None:
+            ret = smooth_loss;
+            break;
+    }
+    return nll * (1.0 - label_smoothing) + ret * (label_smoothing / static_cast<double>(n_classes));
 }
 
 // -(t * log(x) + (1 - t) * log(1 - x)), with the logs clamped to >= -100 so

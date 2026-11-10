@@ -269,6 +269,27 @@ class TestCompositeLosses:
         check_match(r.grad, t.grad, context="cross_entropy grad")
 
     @pytest.mark.parametrize("reduction", REDUCTIONS)
+    @pytest.mark.parametrize("weighted", [False, True])
+    @pytest.mark.parametrize("shape", [(8, 5), (5,)])
+    def test_cross_entropy_label_smoothing(self, shape, weighted, reduction, device):
+        target = class_targets(shape[0], 5) if len(shape) == 2 else np.array(3, dtype=np.int64)
+        if len(shape) == 2:
+            target[[1, 4]] = -100
+        weight = np.array([0.5, 2.0, 1.0, 3.0, 0.25], dtype=np.float32) if weighted else None
+        r, t = make_grad_pair(randf_centered(*shape), device)
+        r_y, t_y = make_pair(target, device)
+        r_w, t_w = make_pair(weight, device) if weighted else (None, None)
+        r_out = raxis.nn.functional.cross_entropy(r, r_y, r_w, reduction=reduction, label_smoothing=0.1)
+        t_out = F.cross_entropy(t, t_y, t_w, reduction=reduction, label_smoothing=0.1)
+        check_match(r_out, t_out, atol=1e-5, context="cross_entropy label_smoothing")
+        backward_both(r_out, t_out)
+        check_match(r.grad, t.grad, atol=1e-5, context="cross_entropy label_smoothing grad")
+
+    def test_cross_entropy_label_smoothing_out_of_range_raises(self):
+        with pytest.raises(RuntimeError):
+            raxis.nn.functional.cross_entropy(raxis.zeros((2, 3)), raxis.tensor([0, 1]), label_smoothing=1.5)
+
+    @pytest.mark.parametrize("reduction", REDUCTIONS)
     def test_mse(self, reduction, device):
         r, t = make_grad_pair(randf_centered(6, 4), device)
         r_y, t_y = make_pair(randf_centered(6, 4, seed=9), device)

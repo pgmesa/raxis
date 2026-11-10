@@ -2327,11 +2327,11 @@ PYBIND11_MODULE(_C, c) {
 
     nn.def("cross_entropy", [](const raxis::Tensor& input, const raxis::Tensor& target,
                                std::optional<raxis::Tensor> weight, const std::string& reduction,
-                               int64_t ignore_index) {
+                               int64_t ignore_index, double label_smoothing) {
         return raxis::cross_entropy(input, target, weight.value_or(raxis::Tensor{}),
-                                    raxis::parse_reduction(reduction), ignore_index);
+                                    raxis::parse_reduction(reduction), ignore_index, label_smoothing);
     }, py::arg("input"), py::arg("target"), py::arg("weight") = py::none(),
-       py::arg("reduction") = "mean", py::arg("ignore_index") = -100);
+       py::arg("reduction") = "mean", py::arg("ignore_index") = -100, py::arg("label_smoothing") = 0.0);
 
     nn.def("mse_loss", [](const raxis::Tensor& input, const raxis::Tensor& target,
                           const std::string& reduction) {

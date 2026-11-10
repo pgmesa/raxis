@@ -35,7 +35,8 @@ RAXIS_API Tensor cross_entropy(
     const Tensor& target,
     const Tensor& weight = {},
     Reduction reduction = Reduction::Mean,
-    int64_t ignore_index = -100);
+    int64_t ignore_index = -100,
+    double label_smoothing = 0.0);
 RAXIS_API Tensor binary_cross_entropy(const Tensor& self, const Tensor& target, Reduction reduction = Reduction::Mean);
 RAXIS_API Tensor binary_cross_entropy_with_logits(
     const Tensor& self, const Tensor& target, Reduction reduction = Reduction::Mean);
