@@ -89,3 +89,5 @@ examples/autograd_graph_out/
 # Copied into the raxis-cuda* wheel by build_libraxis.py --cuda-plugin
 plugins/cuda/LICENSE
 plugins/cuda/THIRD_PARTY_NOTICES.txt
+examples/cifar10/data/
+examples/cifar10/out-*/

@@ -22,9 +22,9 @@ NVIDIA GPUs (without cuDNN).
 
 > **Status: alpha.** CPU and CUDA. Tensors with views and broadcasting, type
 > promotion, elementwise ops, reductions, matmul, autograd, and an `nn`/`optim`
-> package with enough to train MLPs, CNNs (Conv1d/2d, pooling, BatchNorm) and a
-> small GPT (Embedding, LayerNorm, GELU, scaled dot product attention), on the
-> CPU or on an NVIDIA GPU.
+> package with enough to train MLPs, CNNs (Conv1d/2d, pooling, BatchNorm),
+> vision transformers and GPT-2 (Embedding, LayerNorm, GELU, scaled dot product
+> attention), on the CPU or on an NVIDIA GPU.
 
 ## Install
 
@@ -147,6 +147,45 @@ on Windows each new NumPy output comes fresh from the system and pays its page
 faults, while Raxis and PyTorch reuse memory through mimalloc. On 100 x 100
 arrays the three are on par.
 
+## Examples
+
+Each example runs the same code with Raxis or with PyTorch (`--backend raxis`
+or `--backend torch`), saves its model in PyTorch's checkpoint format, and has
+a script that uses the trained model. On the RTX 5070 Ti, float32 with TF32
+matmuls and convolutions in both libraries:
+
+| Example | Raxis | PyTorch |
+|---|--:|--:|
+| [ResNet-9](examples/cifar10) from scratch on CIFAR-10, 24 epochs | 94.1%, 3.6 min | 93.9%, 2.0 min |
+| [ViT-B/16](examples/cifar10) pretrained on ImageNet, fine-tuned on CIFAR-10, 3 epochs | 98.85%, 10.8 min | 98.85%, 9.8 min |
+| [GPT-2 124M](examples/nanogpt) fine-tuned on Shakespeare, 20 iterations | val loss 3.273, 29 s | 3.273, 27 s |
+
+The ResNet is convolutions and batch norm, where PyTorch's cuDNN pays: 4.6 s
+per epoch against 8.3 s for Raxis's im2col and cuBLAS. The ViT and GPT-2 are
+matrix multiplications, layer norm and attention, and there Raxis is within
+10%. GPT-2's losses agree to four decimals: the same weights and batches give
+the same training. Test accuracy for CIFAR-10; the times are whole runs.
+
+```bash
+cd examples/cifar10
+python train.py --model resnet9 --backend raxis    # downloads CIFAR-10
+python prepare_vit.py                              # timm's ViT-B/16 weights
+python train.py --model vit --backend raxis
+python infer.py out-raxis-vit --show 16 --grid predictions.png
+python infer.py out-raxis-vit my_cat.jpg
+
+cd ../nanogpt
+python prepare_gpt2.py                             # GPT-2's weights and BPE Shakespeare
+python sample.py --out_dir out-gpt2 --device cuda --start "Hello, I'm a language model,"
+python train.py --backend raxis --finetune --device cuda
+python sample.py --out_dir out-raxis-gpt2 --device cuda --start "ROMEO:"
+```
+
+The pretrained weights come from Hugging Face as safetensors files, read with
+numpy, so running them needs only Raxis, numpy and, for GPT-2's tokenizer,
+tiktoken (PyTorch only for `--backend torch`). Details and the
+recipes are in each example's directory.
+
 ## Inside
 
 | Path | What it holds |
@@ -190,10 +229,11 @@ has `debug` and `release` presets; `CMakeLists.txt` lists the build options
 `scripts/bench_training.py` times a training step of the example models,
 `scripts/lineage` measures what made my earlier projects slow, and
 `examples/` has notebooks that train MLPs on two moons and MNIST and a CNN on
-MNIST with either Raxis or PyTorch, and `examples/nanogpt` trains
+MNIST with either Raxis or PyTorch, `examples/nanogpt` trains
 [nanoGPT](https://github.com/karpathy/nanoGPT)'s character-level Shakespeare
-model, with its `model.py` unchanged except for the imports, and samples from
-it. `raxis.save` and `raxis.load` use PyTorch's checkpoint format, so a model
+model, with its `model.py` unchanged except for the imports, fine-tunes GPT-2
+and samples from both, and `examples/cifar10` trains a ResNet and fine-tunes a
+ViT (see [Examples](#examples)). `raxis.save` and `raxis.load` use PyTorch's checkpoint format, so a model
 trained with one library can be sampled with the other.
 
 ## Use from C++
