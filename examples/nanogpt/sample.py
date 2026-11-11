@@ -6,15 +6,15 @@ The checkpoint is in torch's format whichever backend wrote it, so a model
 trained with one backend can be sampled with the other:
 
     python sample.py --backend raxis                       # out-raxis/ckpt.pt
-    python sample.py --backend raxis --out_dir out-torch   # trained with torch
-    python sample.py --start "ROMEO:" --num_samples 3 --max_new_tokens 300
-    python sample.py --out_dir out-raxis-full --device cuda
+    python sample.py --backend raxis --out-dir out-torch   # trained with torch
+    python sample.py --start "ROMEO:" --num-samples 3 --max-new-tokens 300
+    python sample.py --out-dir out-raxis-full --device cuda
 
 GPT-2 (after python prepare_gpt2.py), and GPT-2 fine-tuned on Shakespeare
 (after python train.py --finetune), with GPT-2's BPE tokenizer:
 
-    python sample.py --out_dir out-gpt2 --device cuda --start "Hello, I'm a language model,"
-    python sample.py --out_dir out-raxis-gpt2 --device cuda --start "ROMEO:"
+    python sample.py --out-dir out-gpt2 --device cuda --start "Hello, I'm a language model,"
+    python sample.py --out-dir out-raxis-gpt2 --device cuda --start "ROMEO:"
 """
 
 import argparse
@@ -25,13 +25,13 @@ import time
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--backend", choices=["raxis", "torch"], default="raxis")
-parser.add_argument("--out_dir", help="checkpoint directory, relative to this file (default: out-<backend>)")
+parser.add_argument("--out-dir", help="checkpoint directory, relative to this file (default: out-<backend>)")
 parser.add_argument("--start", default="\n", help="prompt the samples continue")
-parser.add_argument("--num_samples", type=int, default=10)
-parser.add_argument("--max_new_tokens", type=int, default=500)
+parser.add_argument("--num-samples", type=int, default=10)
+parser.add_argument("--max-new-tokens", type=int, default=500)
 parser.add_argument("--temperature", type=float, default=0.8,
                     help="1.0 = no change, < 1.0 = less random, > 1.0 = more random")
-parser.add_argument("--top_k", type=int, default=200, help="keep only the top_k most likely tokens")
+parser.add_argument("--top-k", type=int, default=200, help="keep only the top_k most likely tokens")
 parser.add_argument("--seed", type=int, default=1337)
 parser.add_argument("--device", default="cpu", help="cpu or cuda")
 args = parser.parse_args()

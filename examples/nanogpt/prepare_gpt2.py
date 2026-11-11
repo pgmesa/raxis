@@ -15,7 +15,7 @@ and the raw data. The checkpoint is written with raxis in torch's format, so
 both backends load it.
 
     python prepare_gpt2.py
-    python sample.py --out_dir out-gpt2 --start "Hello, I'm a language model,"
+    python sample.py --out-dir out-gpt2 --start "Hello, I'm a language model,"
 """
 
 import json

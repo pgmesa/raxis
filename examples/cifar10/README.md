@@ -28,7 +28,7 @@ python prepare_vit.py                               # timm's ViT-B/16 weights (3
 python train.py --model vit --backend raxis
 ```
 
-`--device cpu` runs on the CPU (slowly), and `--epochs` / `--batch_size`
+`--device cpu` runs on the CPU (slowly), and `--epochs` / `--batch-size`
 change the recipe. Each run saves its model to `out-<backend>-<model>/ckpt.pt`,
 in PyTorch's checkpoint format, so either library loads it.
 

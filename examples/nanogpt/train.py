@@ -48,14 +48,14 @@ parser.add_argument("--full", action="store_true",
                     help="6 layers, n_embd 384, block 256, batch 64, dropout 0.2, 5000 iters")
 parser.add_argument("--finetune", action="store_true",
                     help="fine-tune GPT-2 (out-gpt2, from prepare_gpt2.py) on BPE Shakespeare")
-parser.add_argument("--max_iters", type=int)
-parser.add_argument("--eval_interval", type=int)
-parser.add_argument("--eval_iters", type=int)
-parser.add_argument("--log_interval", type=int, default=10)
+parser.add_argument("--max-iters", type=int)
+parser.add_argument("--eval-interval", type=int)
+parser.add_argument("--eval-iters", type=int)
+parser.add_argument("--log-interval", type=int, default=10)
 parser.add_argument("--threads", type=int, help="number of threads (default: the library's)")
 parser.add_argument("--seed", type=int, default=1337)
 parser.add_argument("--out", help="write the losses and timings to this json file")
-parser.add_argument("--out_dir", help="checkpoint directory, relative to this file (default: out-<backend>)")
+parser.add_argument("--out-dir", help="checkpoint directory, relative to this file (default: out-<backend>)")
 args = parser.parse_args()
 
 # The model module picks the library from this variable at import time
