@@ -104,8 +104,9 @@ two moons and MNIST and a CNN on MNIST, on the CPU (timed in
 
 ## Performance
 
-**On the GPU.** The same RTX 5070 Ti and flags as the examples (nanoGPT turns
-TF32 on for matmuls, as its train.py does). Median training step:
+**On the GPU.** The same RTX 5070 Ti, with the same TF32 flags in both
+libraries: their defaults in `bench_training.py` (TF32 for convolutions only),
+TF32 matmuls too in nanoGPT, as its train.py does. Median training step:
 
 | Model | Raxis | PyTorch |
 |---|--:|--:|
@@ -113,7 +114,7 @@ TF32 on for matmuls, as its train.py does). Median training step:
 | MNIST CNN, batch 128 (same) | 1.32 ms | 0.96 ms |
 | nanoGPT `train_shakespeare_char.py` | 47.3 ms | 45.7 ms |
 
-The CNN pays for cuDNN as the ResNet does. At batch 64 the MLP is small
+The CNN is where cuDNN pays off, as in the ResNet. At batch 64 the MLP is small
 enough that its step is bound by the kernel launches, not by the GPU.
 
 **On the CPU.** Measured on a Ryzen 7 9700X (Zen 5, 8 cores, AVX512) with
@@ -232,13 +233,9 @@ has `debug` and `release` presets; `CMakeLists.txt` lists the build options
 `scripts/bench_ops.py` benchmarks each op against PyTorch and NumPy,
 `scripts/bench_training.py` times a training step of the example models,
 `scripts/lineage` measures what made my earlier projects slow, and
-`examples/` has notebooks that train MLPs on two moons and MNIST and a CNN on
-MNIST with either Raxis or PyTorch, `examples/nanogpt` trains
-[nanoGPT](https://github.com/karpathy/nanoGPT)'s character-level Shakespeare
-model, with its `model.py` unchanged except for the imports, fine-tunes GPT-2
-and samples from both, and `examples/cifar10` trains a ResNet and fine-tunes a
-ViT (see [Examples](#examples)). `raxis.save` and `raxis.load` use PyTorch's checkpoint format, so a model
-trained with one library can be sampled with the other.
+`examples/` holds the notebooks and the [examples](#examples). `raxis.save`
+and `raxis.load` use PyTorch's checkpoint format, so a model trained with one
+library can be used with the other.
 
 ## Use from C++
 
@@ -273,7 +270,7 @@ The `nn` modules and the optimizers are Python only, as they were in PyTorch
 before libtorch's C++ frontend. They are thin layers over ops that C++ already
 has (convolution, layer norm, attention, the fused Adam kernel), so a C++
 `nn` in the style of libtorch's `torch::nn` would build on those. It has not been
-added for now; whether it is worth it will be seen later.
+added for now; it may be later, if it proves worth it.
 
 ## License
 
