@@ -50,34 +50,78 @@ pulls the raxis of its version and NVIDIA's cuBLAS wheel; the CUDA runtime is
 linked in, so only the driver is needed. `import raxis` loads it, and
 `raxis.cuda.is_available()` tells whether there is a GPU to use.
 
+## Examples
+
+Each example runs the same code with Raxis or with PyTorch (`--backend raxis`
+or `--backend torch`), saves its model in PyTorch's checkpoint format, and has
+a script that uses the trained model. On an RTX 5070 Ti (CUDA 13.0, driver
+610), float32 with TF32 matmuls and convolutions in both libraries, PyTorch
+2.14.1+cu130:
+
+| Example | Raxis | PyTorch |
+|---|--:|--:|
+| [ResNet-9](examples/cifar10) from scratch on CIFAR-10, 24 epochs | 94.1%, 3.6 min | 93.9%, 2.0 min |
+| [ViT-B/16](examples/cifar10) pretrained on ImageNet, fine-tuned on CIFAR-10, 3 epochs | 98.85%, 10.8 min | 98.85%, 9.8 min |
+| [GPT-2 124M](examples/nanogpt) fine-tuned on Shakespeare, 20 iterations | val loss 3.273, 29 s | 3.273, 27 s |
+| [nanoGPT](examples/nanogpt)'s character-level Shakespeare model from scratch, 5000 iterations | val loss 1.467, 6.0 min | 1.461, 5.8 min |
+
+Test accuracy for CIFAR-10, the best val loss for the GPTs; the times are
+whole runs. The ResNet is convolutions and batch norm: PyTorch runs them with
+cuDNN, 4.6 s per epoch, and Raxis with im2col and a cuBLAS gemm, 8.3 s. Raxis
+does not use cuDNN, so that the way a convolution becomes a matrix product
+stays readable in the repo. The ViT and the GPTs are matrix multiplications,
+layer norm and attention (Raxis's own FlashAttention-2 style kernel, against
+PyTorch's memory-efficient one), and there Raxis is within 10%. GPT-2's
+losses agree to four decimals: the same weights and batches give the same
+training. Random numbers differ between the libraries, so the other results
+do too.
+
+```bash
+cd examples/cifar10
+python train.py --model resnet9 --backend raxis    # downloads CIFAR-10
+python prepare_vit.py                              # timm's ViT-B/16 weights
+python train.py --model vit --backend raxis
+python infer.py out-raxis-vit --show 16 --grid predictions.png
+python infer.py out-raxis-vit my_cat.jpg
+
+cd ../nanogpt
+python prepare_gpt2.py                             # GPT-2's weights and BPE Shakespeare
+python sample.py --out-dir out-gpt2 --device cuda --start "Hello, I'm a language model,"
+python train.py --backend raxis --finetune --device cuda
+python sample.py --out-dir out-raxis-gpt2 --device cuda --start "ROMEO:"
+
+python prepare.py                                  # character-level Shakespeare
+python train.py --backend raxis --full --device cuda
+python sample.py --device cuda
+```
+
+The pretrained weights come from Hugging Face as safetensors files, read with
+numpy, so running them needs only Raxis, numpy and, for GPT-2's tokenizer,
+tiktoken (PyTorch only for `--backend torch`). Details and the recipes are in
+each example's directory. `examples/` also has notebooks that train MLPs on
+two moons and MNIST and a CNN on MNIST, on the CPU (timed in
+[Against my earlier projects](#performance)).
+
 ## Performance
 
-Measured on a Ryzen 7 9700X (Zen 5, 8 cores, AVX512) with Windows 11, 8
-threads, PyTorch 2.14.1 and Intel MKL in both libraries. The scripts and
-notebooks to reproduce them are in the repo (see [Build from source](#build-from-source)).
+**On the GPU.** The same RTX 5070 Ti and flags as the examples (nanoGPT turns
+TF32 on for matmuls, as its train.py does). Median training step:
 
-**Training the examples.** Time of `trainer.fit` in each notebook (training
-plus the validation pass of every epoch) with Raxis, PyTorch and my two
-earlier projects: [SynapX](https://github.com/pgmesa/synapx) (autograd in C++ on top of libtorch)
-and [SynapGrad](https://github.com/pgmesa/synapgrad) (autograd in pure Python
-on top of NumPy).
+| Model | Raxis | PyTorch |
+|---|--:|--:|
+| MNIST MLP, batch 64 (`scripts/bench_training.py --device cuda`) | 0.54 ms | 0.45 ms |
+| MNIST CNN, batch 128 (same) | 1.32 ms | 0.96 ms |
+| nanoGPT `train_shakespeare_char.py` | 47.3 ms | 45.7 ms |
 
-| Notebook | Raxis | PyTorch | SynapX | SynapGrad | Params | Train set | Batch | Epochs |
-|---|--:|--:|--:|--:|--:|--:|--:|--:|
-| basic_mlp.ipynb | 0.22 s | 0.50 s | 2.0 s | 0.33 s | 337 | 150 | 4 | 50 |
-| mnist_mlp.ipynb | 3.0 s | 4.6 s | 6.3 s | 9.4 s | 178,110 | 48,000 | 64 | 10 |
-| mnist_cnn.ipynb | 12.5 s | 47.2 s | 3 min 7 s | 5 min 6 s | 20,538 | 48,000 | 128 | 5 |
+The CNN pays for cuDNN as the ResNet does. At batch 64 the MLP is small
+enough that its step is bound by the kernel launches, not by the GPU.
 
-The models reach the same accuracy with every library (MNIST: ~97.6% val with
-the MLP, ~98.6% with the CNN). Most of PyTorch's time in the CNN is Dropout:
-its CPU random numbers come from a serial mt19937, Raxis draws them from
-Philox in parallel. SynapX's Conv2d is SynapGrad's algorithm on libtorch
-(sliding windows and tensordot), not PyTorch's convolution. SynapX 0.4.0
-runs on the same PyTorch 2.14.
-
-**nanoGPT.** [nanoGPT](https://github.com/karpathy/nanoGPT)'s
-character-level Shakespeare model, trained with `examples/nanogpt/train.py`
-(nanoGPT's `model.py` with only the imports changed):
+**On the CPU.** Measured on a Ryzen 7 9700X (Zen 5, 8 cores, AVX512) with
+Windows 11, 8 threads, PyTorch 2.14.1 and Intel MKL in both libraries. The
+scripts and notebooks to reproduce them are in the repo (see
+[Build from source](#build-from-source)). nanoGPT's character-level
+Shakespeare model, trained with `examples/nanogpt/train.py` (nanoGPT's
+`model.py` with only the imports changed):
 
 | Config | Raxis step | PyTorch step | Raxis val loss | PyTorch val loss |
 |---|--:|--:|--:|--:|
@@ -90,25 +134,6 @@ PyTorch on this CPU for its 5000 iterations, but the val loss stops
 improving around iteration 2000 and the model overfits afterwards, so both
 were stopped early: the table has the best val loss up to iteration 2000
 (1750 for Raxis, 2000 for PyTorch), against 1.4697 in nanoGPT's README.
-Random numbers differ between the libraries, so the losses do too.
-
-**On the GPU.** RTX 5070 Ti (CUDA 13.0, driver 610), float32, PyTorch
-2.14.1+cu130, the same TF32 flags in both libraries (nanoGPT turns TF32 on
-for matmuls, as its train.py does). Median training step:
-
-| Model | Raxis | PyTorch |
-|---|--:|--:|
-| MNIST MLP, batch 64 (`scripts/bench_training.py --device cuda`) | 0.54 ms | 0.45 ms |
-| MNIST CNN, batch 128 (same) | 1.32 ms | 0.96 ms |
-| nanoGPT `train_shakespeare_char.py`, 5000 iters | 47.3 ms | 45.7 ms |
-
-The full nanoGPT run takes 6.0 min with Raxis and 5.8 min with PyTorch, best
-val loss 1.4668 and 1.4612 (both at iteration 1750). PyTorch convolves
-with cuDNN; Raxis does not link it (a closed library of several hundred MB
-that would hide the most interesting kernels) and runs im2col plus cuBLAS.
-Its attention is its own FlashAttention-2 style kernel, against PyTorch's
-memory-efficient one. At batch 64 the MLP is small enough that its step is
-bound by the kernel launches, not by the GPU.
 
 **Ops.** A selection of `scripts/bench_ops.py` (float32, forward only unless
 noted). Over its 388 cases the median ratio Raxis/PyTorch is 0.85x; in that
@@ -147,44 +172,23 @@ on Windows each new NumPy output comes fresh from the system and pays its page
 faults, while Raxis and PyTorch reuse memory through mimalloc. On 100 x 100
 arrays the three are on par.
 
-## Examples
+**Against my earlier projects.** Time of `trainer.fit` in each notebook
+(training plus the validation pass of every epoch), on the same CPU, with
+Raxis, PyTorch and the two projects that came before Raxis:
+[SynapX](https://github.com/pgmesa/synapx) (autograd in C++ on top of libtorch)
+and [SynapGrad](https://github.com/pgmesa/synapgrad) (autograd in pure Python
+on top of NumPy).
 
-Each example runs the same code with Raxis or with PyTorch (`--backend raxis`
-or `--backend torch`), saves its model in PyTorch's checkpoint format, and has
-a script that uses the trained model. On the RTX 5070 Ti, float32 with TF32
-matmuls and convolutions in both libraries:
+| Notebook | Raxis | PyTorch | SynapX | SynapGrad | Params | Train set | Batch | Epochs |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|
+| basic_mlp.ipynb | 0.22 s | 0.50 s | 2.0 s | 0.33 s | 337 | 150 | 4 | 50 |
+| mnist_mlp.ipynb | 3.0 s | 4.6 s | 6.3 s | 9.4 s | 178,110 | 48,000 | 64 | 10 |
+| mnist_cnn.ipynb | 12.5 s | 47.2 s | 3 min 7 s | 5 min 6 s | 20,538 | 48,000 | 128 | 5 |
 
-| Example | Raxis | PyTorch |
-|---|--:|--:|
-| [ResNet-9](examples/cifar10) from scratch on CIFAR-10, 24 epochs | 94.1%, 3.6 min | 93.9%, 2.0 min |
-| [ViT-B/16](examples/cifar10) pretrained on ImageNet, fine-tuned on CIFAR-10, 3 epochs | 98.85%, 10.8 min | 98.85%, 9.8 min |
-| [GPT-2 124M](examples/nanogpt) fine-tuned on Shakespeare, 20 iterations | val loss 3.273, 29 s | 3.273, 27 s |
-
-The ResNet is convolutions and batch norm, where PyTorch's cuDNN pays: 4.6 s
-per epoch against 8.3 s for Raxis's im2col and cuBLAS. The ViT and GPT-2 are
-matrix multiplications, layer norm and attention, and there Raxis is within
-10%. GPT-2's losses agree to four decimals: the same weights and batches give
-the same training. Test accuracy for CIFAR-10; the times are whole runs.
-
-```bash
-cd examples/cifar10
-python train.py --model resnet9 --backend raxis    # downloads CIFAR-10
-python prepare_vit.py                              # timm's ViT-B/16 weights
-python train.py --model vit --backend raxis
-python infer.py out-raxis-vit --show 16 --grid predictions.png
-python infer.py out-raxis-vit my_cat.jpg
-
-cd ../nanogpt
-python prepare_gpt2.py                             # GPT-2's weights and BPE Shakespeare
-python sample.py --out_dir out-gpt2 --device cuda --start "Hello, I'm a language model,"
-python train.py --backend raxis --finetune --device cuda
-python sample.py --out_dir out-raxis-gpt2 --device cuda --start "ROMEO:"
-```
-
-The pretrained weights come from Hugging Face as safetensors files, read with
-numpy, so running them needs only Raxis, numpy and, for GPT-2's tokenizer,
-tiktoken (PyTorch only for `--backend torch`). Details and the
-recipes are in each example's directory.
+The models reach the same accuracy with every library (MNIST: ~97.6% val with
+the MLP, ~98.6% with the CNN). Most of PyTorch's time in the CNN is Dropout:
+its CPU random numbers come from a serial mt19937, Raxis draws them from
+Philox in parallel, the generator PyTorch itself uses on CUDA.
 
 ## Inside
 
@@ -264,6 +268,12 @@ themselves from static initializers that a linker would otherwise drop. The
 whole library with static MKL is about 30 MB, against more than 300 MB for
 libtorch's CPU library. The CUDA backend needs the shared build. The C++ API
 follows PyTorch's ATen, but it is not documented yet and may still change.
+
+The `nn` modules and the optimizers are Python only, as they were in PyTorch
+before libtorch's C++ frontend. They are thin layers over ops that C++ already
+has (convolution, layer norm, attention, the fused Adam kernel), so a C++
+`nn` in the style of libtorch's `torch::nn` would build on those. It has not been
+added for now; whether it is worth it will be seen later.
 
 ## License
 
