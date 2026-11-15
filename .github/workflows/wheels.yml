@@ -16,7 +16,7 @@ on:
     inputs:
       os:
         description: Runners to build on, as a JSON list (manual runs only)
-        default: '["windows-2022", "ubuntu-24.04", "ubuntu-24.04-arm", "macos-14"]'
+        default: '["windows-2022", "ubuntu-24.04", "ubuntu-24.04-arm", "macos-15"]'
       build:
         description: Wheels to build, as CIBW_BUILD (empty builds every Python version)
         default: ""
@@ -55,7 +55,7 @@ jobs:
     strategy:
       matrix:
         # A tag builds on every runner (inputs.os is empty on push)
-        os: ${{ fromJSON(inputs.os || '["windows-2022", "ubuntu-24.04", "ubuntu-24.04-arm", "macos-14"]') }}
+        os: ${{ fromJSON(inputs.os || '["windows-2022", "ubuntu-24.04", "ubuntu-24.04-arm", "macos-15"]') }}
 
     steps:
       - uses: actions/checkout@v7
