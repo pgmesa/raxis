@@ -20,6 +20,12 @@ The goal is a codebase that someone curious about how PyTorch works inside can
 read end to end, while running at PyTorch speed on CPU and close to it on
 NVIDIA GPUs (without cuDNN).
 
+Along the way I wrote [Rebuilding PyTorch](https://blog.pgmesa.com/series/rebuilding-pytorch/),
+a series of articles on my blog about the ideas that make PyTorch, and Raxis,
+fast and flexible: what a tensor is, iterating n dimensions, TensorIterator,
+SIMD kernels, reductions and threads, autograd and the GPU. Each one puts the
+PyTorch and Raxis code side by side, with numbers measured on both.
+
 > **Status: alpha.** CPU and CUDA. Tensors with views and broadcasting, type
 > promotion, elementwise ops, reductions, matmul, autograd, and an `nn`/`optim`
 > package with enough to train MLPs, CNNs (Conv1d/2d, pooling, BatchNorm),
