@@ -199,6 +199,20 @@ class TestPinnedMemory:
         for i, g in enumerate(results):
             assert g.min().item() == g.max().item() == float(i)
 
+    def test_non_blocking_to_cpu_is_pinned(self):
+        # As torch: a non_blocking copy from the GPU allocates its result in
+        # pinned memory, so the copy really is asynchronous (read it after a
+        # synchronize); a blocking one stays in pageable memory
+        n = 1 << 20
+        for lib in (raxis, torch):
+            g = lib.arange(n, dtype=lib.float32, device="cuda")
+            c = g.to("cpu", non_blocking=True)
+            assert c.is_pinned()
+            assert not g.to("cpu").is_pinned()
+            assert not g.to("cpu", dtype=lib.float64).is_pinned()
+            lib.cuda.synchronize()
+            assert c[-1].item() == n - 1
+
     def test_blocks_are_reused(self):
         raxis.cuda.synchronize()
         p = raxis.empty(1000).pin_memory()

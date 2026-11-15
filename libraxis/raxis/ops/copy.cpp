@@ -42,8 +42,13 @@ Tensor clone(const Tensor& self, MemoryFormat memory_format) {
     return out;
 }
 
+// From: aten/src/ATen/native/TensorConversions.cpp (_to_copy, pin_out): a
+// non_blocking copy from the GPU to the CPU lands in pinned memory, so it can
+// really run while the CPU goes on (into pageable memory the driver would
+// finish it before returning). The data are there only after a synchronize.
 Tensor to_copy(const Tensor& self, Dtype dtype, Device device, bool non_blocking) {
-    Tensor out = empty_like(self, TensorOptions().dtype(dtype).device(device));
+    const bool pin_out = non_blocking && self.is_cuda() && device.is_cpu();
+    Tensor out = empty_like(self, TensorOptions().dtype(dtype).device(device).pinned_memory(pin_out));
     copy(self, out, non_blocking);
     return out;
 }
