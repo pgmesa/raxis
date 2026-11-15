@@ -2,16 +2,21 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <deque>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include <cuda_runtime.h>
 
 #include <raxis/core/allocator.h>
+#include <raxis/core/device_guard.h>
 #include <raxis/cuda/cuda_exception.h>
 #include <raxis/cuda/cuda_functions.h>
 #include <raxis/util/data_ptr.h>
@@ -38,10 +43,16 @@
 //   tensors (weights) do not fragment the segments the many short-lived
 //   small ones cycle through.
 //
-// Left out from PyTorch's: streams (with one stream per device a freed block
-// can be reused at once, see current_stream()), record_stream and its
-// events, expandable segments, CUDA graph pools, the allocator config
-// (max_split_size, garbage collection), memory snapshots.
+// - Every block belongs to the stream it was allocated on, and a freed
+//   block is only reused on that stream: anything queued there later runs
+//   after everything that used the block, so the reuse is safe without
+//   waiting for the GPU. A tensor used on another stream must say so with
+//   record_stream(); when it is freed, the allocator records an event on
+//   each of those streams, and the block waits until they complete.
+//
+// Left out from PyTorch's: expandable segments, CUDA graph pools, the
+// allocator config (max_split_size, garbage collection), memory snapshots,
+// the event pool (events are created per use).
 
 namespace raxis::cuda {
 namespace {
@@ -58,6 +69,7 @@ struct BlockPool;
 
 struct Block {
     DeviceIndex device;
+    cudaStream_t stream;        // the stream of its segment, where it is reused
     BlockPool* pool;
     void* ptr;
     size_t size;                // bytes of the block (rounded)
@@ -65,21 +77,26 @@ struct Block {
     bool allocated = false;
     Block* prev = nullptr;      // neighbours in the same segment
     Block* next = nullptr;
+    std::unordered_set<cudaStream_t> stream_uses;  // other streams that used it (record_stream)
+    int event_count = 0;        // events still pending since it was freed
 
-    Block(DeviceIndex device, BlockPool* pool, void* ptr, size_t size)
-        : device(device), pool(pool), ptr(ptr), size(size) {}
+    Block(DeviceIndex device, cudaStream_t stream, BlockPool* pool, void* ptr, size_t size)
+        : device(device), stream(stream), pool(pool), ptr(ptr), size(size) {}
 
     bool is_split() const {
         return prev != nullptr || next != nullptr;
     }
 };
 
-// Ordered by size, then address: lower_bound(size) is the smallest block
-// that fits, and among equal sizes the lowest address, which keeps
-// allocations packed at the start of the segments. (PyTorch orders by
-// stream first: a block is only reused on the stream that freed it.)
+// Ordered by stream, then size, then address: lower_bound(stream, size) is
+// the smallest block of that stream that fits, and among equal sizes the
+// lowest address, which keeps allocations packed at the start of the
+// segments
 struct BlockComparator {
     bool operator()(const Block* a, const Block* b) const {
+        if (a->stream != b->stream) {
+            return reinterpret_cast<uintptr_t>(a->stream) < reinterpret_cast<uintptr_t>(b->stream);
+        }
         if (a->size != b->size) {
             return a->size < b->size;
         }
@@ -145,14 +162,16 @@ class DeviceCachingAllocator {
 public:
     explicit DeviceCachingAllocator(DeviceIndex device) : device_(device) {}
 
-    Block* malloc(size_t orig_size) {
+    Block* malloc(size_t orig_size, cudaStream_t stream) {
         std::lock_guard<std::mutex> lock(mutex_);
+        // Blocks whose events completed go back to the pools first
+        process_events();
         size_t size = round_size(orig_size);
         BlockPool& pool = size <= kSmallSize ? small_blocks_ : large_blocks_;
 
-        Block* block = get_free_block(pool, size);
+        Block* block = get_free_block(pool, stream, size);
         if (block == nullptr) {
-            block = alloc_block(pool, get_allocation_size(size), orig_size);
+            block = alloc_block(pool, stream, get_allocation_size(size), orig_size);
         }
 
         // From: DeviceCachingAllocator::alloc_found_block
@@ -164,7 +183,7 @@ public:
                                           : remaining_size > kSmallSize;
         if (should_split) {
             Block* remaining = block;
-            block = new Block(device_, &pool, remaining->ptr, size);
+            block = new Block(device_, stream, &pool, remaining->ptr, size);
             block->prev = remaining->prev;
             if (block->prev) {
                 block->prev->next = block;
@@ -186,13 +205,22 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         block->allocated = false;
         allocated_bytes_.decrease(static_cast<int64_t>(block->size));
-
-        // From: DeviceCachingAllocator::free_block
-        BlockPool& pool = *block->pool;
-        for (Block* neighbour : {block->prev, block->next}) {
-            try_merge_blocks(block, neighbour, pool);
+        if (block->stream_uses.empty()) {
+            free_block(block);
+        } else {
+            insert_events(block);
         }
-        pool.blocks.insert(block);
+    }
+
+    /// Notes that work queued on `stream` uses the block, so that freeing it
+    /// waits for that work. Its own stream needs no note: work queued there
+    /// later runs after it anyway
+    /// From: DeviceCachingAllocator::recordStream
+    void record_stream(Block* block, cudaStream_t stream) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (stream != block->stream) {
+            block->stream_uses.insert(stream);
+        }
     }
 
     /// Returns every whole cached segment to CUDA
@@ -218,10 +246,10 @@ public:
     }
 
 private:
-    Block* get_free_block(BlockPool& pool, size_t size) {
-        Block key(device_, &pool, nullptr, size);
+    Block* get_free_block(BlockPool& pool, cudaStream_t stream, size_t size) {
+        Block key(device_, stream, &pool, nullptr, size);
         auto it = pool.blocks.lower_bound(&key);
-        if (it == pool.blocks.end()) {
+        if (it == pool.blocks.end() || (*it)->stream != stream) {
             return nullptr;
         }
         Block* block = *it;
@@ -231,7 +259,7 @@ private:
 
     /// A new segment from cudaMalloc. On failure, frees the cached segments
     /// and tries once more before raising out of memory
-    Block* alloc_block(BlockPool& pool, size_t alloc_size, size_t orig_size) {
+    Block* alloc_block(BlockPool& pool, cudaStream_t stream, size_t alloc_size, size_t orig_size) {
         void* ptr = nullptr;
         cudaError_t err = cudaMalloc(&ptr, alloc_size);
         if (err == cudaErrorMemoryAllocation) {
@@ -254,12 +282,78 @@ private:
         }
         RAXIS_CUDA_CHECK(err);
         reserved_bytes_.increase(static_cast<int64_t>(alloc_size));
-        return new Block(device_, &pool, ptr, alloc_size);
+        return new Block(device_, stream, &pool, ptr, alloc_size);
+    }
+
+    // From: DeviceCachingAllocator::free_block
+    void free_block(Block* block) {
+        BlockPool& pool = *block->pool;
+        for (Block* neighbour : {block->prev, block->next}) {
+            try_merge_blocks(block, neighbour, pool);
+        }
+        pool.blocks.insert(block);
+    }
+
+    /// An event on every stream that used the block; it is freed when they
+    /// all complete. The events are recorded now, after everything already
+    /// queued there, so they complete when that work is done
+    /// From: DeviceCachingAllocator::insert_events
+    void insert_events(Block* block) {
+        DeviceGuard guard(Device(DeviceType::CUDA, device_));
+        for (cudaStream_t stream : block->stream_uses) {
+            cudaEvent_t event;
+            RAXIS_CUDA_CHECK(cudaEventCreateWithFlags(&event, cudaEventDisableTiming));
+            RAXIS_CUDA_CHECK(cudaEventRecord(event, stream));
+            block->event_count++;
+            events_[stream].emplace_back(event, block);
+        }
+        block->stream_uses.clear();
+    }
+
+    /// Frees the blocks whose events completed. One queue per stream, so a
+    /// long kernel on one stream does not hold back the blocks of another
+    /// From: DeviceCachingAllocator::process_events
+    void process_events() {
+        for (auto it = events_.begin(); it != events_.end();) {
+            auto& queue = it->second;
+            while (!queue.empty()) {
+                auto [event, block] = queue.front();
+                const cudaError_t status = cudaEventQuery(event);
+                if (status == cudaErrorNotReady) {
+                    (void)cudaGetLastError();   // clear the "error" the query left
+                    break;
+                }
+                RAXIS_CUDA_CHECK(status);
+                RAXIS_CUDA_CHECK(cudaEventDestroy(event));
+                queue.pop_front();
+                if (--block->event_count == 0) {
+                    free_block(block);
+                }
+            }
+            it = queue.empty() ? events_.erase(it) : std::next(it);
+        }
+    }
+
+    /// Waits for every pending event and frees its block, before the cache
+    /// is released
+    /// From: DeviceCachingAllocator::synchronize_and_free_events
+    void synchronize_and_free_events() {
+        for (auto& [stream, queue] : events_) {
+            for (auto [event, block] : queue) {
+                RAXIS_CUDA_CHECK(cudaEventSynchronize(event));
+                RAXIS_CUDA_CHECK(cudaEventDestroy(event));
+                if (--block->event_count == 0) {
+                    free_block(block);
+                }
+            }
+        }
+        events_.clear();
     }
 
     /// Merges `src` into `dst` when `src` is a free neighbour in the segment
+    /// (not one still waiting for its events)
     void try_merge_blocks(Block* dst, Block* src, BlockPool& pool) {
-        if (src == nullptr || src->allocated) {
+        if (src == nullptr || src->allocated || src->event_count > 0) {
             return;
         }
         if (dst->prev == src) {  // [src dst]
@@ -282,6 +376,7 @@ private:
     /// cudaFree of every cached block that is a whole segment (a split
     /// segment still holds a tensor in one of its blocks)
     void release_cached_blocks() {
+        synchronize_and_free_events();
         for (BlockPool* pool : {&small_blocks_, &large_blocks_}) {
             for (auto it = pool->blocks.begin(); it != pool->blocks.end();) {
                 Block* block = *it;
@@ -305,6 +400,8 @@ private:
     BlockPool large_blocks_{false};
     Stat allocated_bytes_;  // in blocks handed to tensors
     Stat reserved_bytes_;   // in segments from cudaMalloc
+    // Events of freed blocks, per stream they were recorded on
+    std::map<cudaStream_t, std::deque<std::pair<cudaEvent_t, Block*>>> events_;
 };
 
 
@@ -315,7 +412,7 @@ public:
         if (nbytes == 0) {
             return DataPtr(nullptr, Device(DeviceType::CUDA, device));
         }
-        Block* block = device_allocator(device).malloc(nbytes);
+        Block* block = device_allocator(device).malloc(nbytes, current_stream(device));
         {
             std::lock_guard<std::mutex> lock(blocks_mutex_);
             allocated_blocks_[block->ptr] = block;
@@ -333,6 +430,20 @@ public:
             allocated_blocks_.erase(it);
         }
         device_allocator(block->device).free(block);
+    }
+
+    void record_stream(const DataPtr& data_ptr, cudaStream_t stream) {
+        if (data_ptr.get_deleter() != &raw_delete || data_ptr.get_context() == nullptr) {
+            return;
+        }
+        Block* block = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(blocks_mutex_);
+            auto it = allocated_blocks_.find(data_ptr.get_context());
+            RAXIS_INTERNAL_ASSERT(it != allocated_blocks_.end(), "record_stream on a pointer the CUDA allocator does not own");
+            block = it->second;
+        }
+        device_allocator(block->device).record_stream(block, stream);
     }
 
     DeviceCachingAllocator& device_allocator(DeviceIndex device) {
@@ -379,6 +490,10 @@ CUDAMemoryStats memory_stats(DeviceIndex device) {
 
 void reset_peak_memory_stats(DeviceIndex device) {
     g_allocator->device_allocator(device).reset_peak_stats();
+}
+
+void record_stream(const DataPtr& data_ptr, cudaStream_t stream) {
+    g_allocator->record_stream(data_ptr, stream);
 }
 
 void empty_cache() {
