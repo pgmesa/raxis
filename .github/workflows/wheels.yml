@@ -78,6 +78,8 @@ jobs:
         with:
           name: wheels-${{ matrix.os }}
           path: wheelhouse/*.whl
+          # Only the publish job of the same run needs them
+          retention-days: 7
 
   # The CUDA backend for one CUDA major version. libraxis_cuda does not link
   # Python, so it is one py3-none wheel per platform, built against (and
@@ -132,6 +134,8 @@ jobs:
         with:
           name: wheels-cuda${{ matrix.cuda }}-${{ matrix.os }}
           path: wheelhouse/*.whl
+          # Only the publish job of the same run needs them
+          retention-days: 7
 
   publish:
     name: Publish
