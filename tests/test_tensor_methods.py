@@ -10,10 +10,22 @@ CONVERSIONS = ["float", "double", "int", "long", "bool", "byte"]
 
 @pytest.mark.parametrize("name", CONVERSIONS)
 def test_dtype_conversions(name, device):
-    r, t = make_pair(randf(3, 4, lo=-3, hi=3), device)
+    # byte() of a negative float is where platforms disagree: PyTorch's rule
+    # wraps through int64, but its macOS arm64 wheel gives 0. Non-negative
+    # values for byte here; test_byte_of_negative_floats_wraps pins the rule
+    lo = 0 if name == "byte" else -3
+    r, t = make_pair(randf(3, 4, lo=lo, hi=3), device)
     r_out, t_out = getattr(r, name)(), getattr(t, name)()
     check_match(r_out, t_out)
     assert str(r_out.dtype).split(".")[-1] == str(t_out.dtype).split(".")[-1]
+
+
+def test_byte_of_negative_floats_wraps(device):
+    # From: c10/util/TypeCast.h: float -> uint8 goes through int64, so the
+    # result wraps the same on every CPU and on the GPU (a direct cast of a
+    # negative float to an unsigned type is undefined behaviour in C++)
+    r = raxis.tensor([-1.5, -2.5, 300.7, 3.2], device=device)
+    assert r.byte().tolist() == [255, 254, 44, 3]
 
 
 def test_conversion_to_the_same_dtype_returns_self():
