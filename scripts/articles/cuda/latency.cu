@@ -79,6 +79,7 @@ int main() {
         const int64_t n = bytes / kLine;
         std::vector<int64_t> order(n);
         std::iota(order.begin(), order.end(), int64_t{0});
+
         for (const char* kind : {"in order", "random"}) {
             if (kind[0] == 'r') {
                 // Sattolo's shuffle: one random cycle through every line
@@ -87,6 +88,7 @@ int main() {
                     std::swap(order[k], order[pick(rng)]);
                 }
             }
+
             // Node order[k] points to node order[k + 1]; a node is the
             // first 4 bytes of its line, the index counts uint32 slots.
             // The walk starts at slot 0, which is in the cycle like every line
@@ -94,9 +96,11 @@ int main() {
             for (int64_t k = 0; k < n; k++) {
                 next[order[k] * kStride] = static_cast<uint32_t>(order[(k + 1) % n] * kStride);
             }
+
             uint32_t* d_next;
             CHECK(cudaMalloc(&d_next, bytes));
             CHECK(cudaMemcpy(d_next, next.data(), bytes, cudaMemcpyHostToDevice));
+
             const int64_t steps = 200'000;
             double best_cycles = 1e30;
             double best_ns = 1e30;
@@ -108,6 +112,7 @@ int main() {
                 best_cycles = std::min(best_cycles, static_cast<double>(result[0]) / steps);
                 best_ns = std::min(best_ns, static_cast<double>(result[1]) / steps);
             }
+
             CHECK(cudaFree(d_next));
             std::printf("latency,%lld,%s,%.1f,%.1f\n", static_cast<long long>(bytes), kind, best_cycles, best_ns);
             std::fflush(stdout);

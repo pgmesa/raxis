@@ -38,10 +38,12 @@ double chase_ns(std::vector<Line>& lines, const std::vector<size_t>& order, int6
     for (size_t k = 0; k < n; k++) {
         lines[order[k]].next = &lines[order[(k + 1) % n]];
     }
+
     Line* p = &lines[order[0]];
     for (size_t k = 0; k < n; k++) {
         p = p->next;
     }
+
     double best = 1e30;
     for (int rep = 0; rep < 3; rep++) {
         auto t0 = Clock::now();
@@ -51,6 +53,7 @@ double chase_ns(std::vector<Line>& lines, const std::vector<size_t>& order, int6
         auto t1 = Clock::now();
         best = std::min(best, std::chrono::duration<double, std::nano>(t1 - t0).count() / steps);
     }
+
     sink_line = p;
     return best;
 }
@@ -58,6 +61,7 @@ double chase_ns(std::vector<Line>& lines, const std::vector<size_t>& order, int6
 double add_ns(int64_t n) {
     std::vector<float> a(n, 1.0f), b(n, 2.0f), out(n);
     const int64_t reps = std::max<int64_t>(3, 200'000'000 / n);
+
     double best = 1e30;
     for (int rep = 0; rep < 5; rep++) {
         auto t0 = Clock::now();
@@ -73,6 +77,7 @@ double add_ns(int64_t n) {
         auto t1 = Clock::now();
         best = std::min(best, std::chrono::duration<double, std::nano>(t1 - t0).count() / (reps * n));
     }
+
     return best;
 }
 
@@ -85,6 +90,7 @@ int main() {
         std::iota(order.begin(), order.end(), size_t{0});
         const int64_t steps = 20'000'000;
         std::printf("latency,%lld,in order,%.2f\n", static_cast<long long>(kb) * 1024, chase_ns(lines, order, steps));
+
         // Sattolo's shuffle: one random cycle through every line
         for (size_t k = n - 1; k > 0; k--) {
             std::uniform_int_distribution<size_t> pick(0, k - 1);
@@ -93,6 +99,7 @@ int main() {
         std::printf("latency,%lld,random,%.2f\n", static_cast<long long>(kb) * 1024, chase_ns(lines, order, steps));
         std::fflush(stdout);
     }
+
     for (int64_t n : {1000, 4000, 16000, 64000, 250000, 1000000, 4000000, 16000000}) {
         std::printf("add,%lld,%lld,%.3f\n", static_cast<long long>(n), static_cast<long long>(12 * n), add_ns(n));
         std::fflush(stdout);

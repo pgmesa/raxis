@@ -76,15 +76,19 @@ def library_error():
     m = x.reshape(-1, 8)
     exact_x = x.astype(np.float64).sum()
     exact_m = m.astype(np.float64).sum(0)
+
     tx, rx = torch.from_numpy(x), raxis.from_numpy(x)
     tm, rm = torch.from_numpy(m), raxis.from_numpy(m)
+
     print("\nRelative error of sum(), 16M float32 from [0, 1), one thread")
     print(f"{'':>26s}{'NumPy':>10s}{'PyTorch':>10s}{'Raxis':>10s}")
     row = [abs(float(s) - exact_x) / exact_x for s in (x.sum(), tx.sum().item(), rx.sum().item())]
     print(f"{'16M in a row':>26s}" + "".join(f"{e:10.1e}" for e in row))
+
     cols = [m.sum(0), tm.sum(0).numpy(), np.asarray(rm.sum(0).numpy())]
     row = [float(np.max(np.abs(c.astype(np.float64) - exact_m) / exact_m)) for c in cols]
     print(f"{'2M x 8, sum(0), worst col':>26s}" + "".join(f"{e:10.1e}" for e in row))
+
     ones = np.ones(2**25, dtype=np.float32)
     print(f"{'2^25 ones':>26s}" + "".join(f"{float(s):>10.0f}" for s in (ones.sum(), torch.from_numpy(ones).sum().item(), raxis.from_numpy(ones).sum().item())))
 
@@ -110,8 +114,10 @@ def thread_bits():
     exact = x.astype(np.float64).sum()
     tx, rx = torch.from_numpy(x), raxis.from_numpy(x)
     tm, rm = torch.from_numpy(m), raxis.from_numpy(m)
+
     print(f"\nsum() of 10M float32 from a normal distribution, by thread count (exact {exact:.4f})")
     print(f"{'threads':>8s}{'PyTorch':>14s}{'Raxis':>14s}{'sum(0) same':>13s}{'sum(1) same':>13s}")
+
     first = None
     for t in (1, 2, 3, 4, 6, 8, 16):
         set_threads(t)
@@ -130,12 +136,14 @@ def grain_size(library):
     for n in (16_384, 32_768, 32_769, 65_536, 131_072, 1_048_576):
         a = np.random.rand(n).astype(np.float32)
         b = np.random.rand(n).astype(np.float32)
+
         if library == "torch":
             ta, tb, to = torch.from_numpy(a), torch.from_numpy(b), torch.empty(n)
             f = lambda: torch.add(ta, tb, out=to)
         else:
             ra, rb, ro = raxis.from_numpy(a), raxis.from_numpy(b), raxis.empty([n])
             f = lambda: raxis.add(ra, rb, out=ro)
+
         cells = []
         for t in (1, 8):
             set_threads(t)

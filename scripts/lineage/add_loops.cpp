@@ -180,6 +180,7 @@ static void report(const char* shape, const char* loop_name, Loop loop, const Op
     std::vector<double> samples;
     samples.reserve(runs);
     volatile float sink = 0.0f;
+
     for (int run = 0; run < runs; ++run) {
         const auto t0 = std::chrono::steady_clock::now();
         loop(op);
@@ -187,6 +188,7 @@ static void report(const char* shape, const char* loop_name, Loop loop, const Op
         sink = op.out[run % op.numel];
         samples.push_back(std::chrono::duration<double, std::milli>(t1 - t0).count());
     }
+
     std::nth_element(samples.begin(), samples.begin() + runs / 2, samples.end());
     std::printf("%s,%s,%.4f\n", shape, loop_name, samples[runs / 2]);
     (void)sink;

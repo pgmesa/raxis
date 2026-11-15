@@ -90,6 +90,7 @@ NOINLINE float four_vectors(const float* x, int64_t n) {
     __m256 acc1 = _mm256_setzero_ps();
     __m256 acc2 = _mm256_setzero_ps();
     __m256 acc3 = _mm256_setzero_ps();
+
     int64_t i = 0;
     for (; i + 32 <= n; i += 32) {
         acc0 = _mm256_add_ps(acc0, _mm256_loadu_ps(x + i));
@@ -97,6 +98,7 @@ NOINLINE float four_vectors(const float* x, int64_t n) {
         acc2 = _mm256_add_ps(acc2, _mm256_loadu_ps(x + i + 16));
         acc3 = _mm256_add_ps(acc3, _mm256_loadu_ps(x + i + 24));
     }
+
     float s = horizontal_sum(_mm256_add_ps(_mm256_add_ps(acc0, acc1), _mm256_add_ps(acc2, acc3)));
     for (; i < n; i++) {
         s += x[i];
@@ -148,6 +150,7 @@ int main() {
     for (auto& v : small) {
         v = dist(gen);
     }
+
     const int reps = 2000;
     for (const Variant& v : variants) {
         double best = 1e30;

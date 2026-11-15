@@ -83,6 +83,7 @@ def graph():
         a = lib.tensor([2.0, 3.0], requires_grad=True)
         b = lib.tensor([4.0, 5.0], requires_grad=True)
         loss = (a * b + a).sum()
+
         print(f"\n{name}")
         stack, seen = [(loss.grad_fn, 0)], set()
         while stack:
@@ -97,6 +98,7 @@ def graph():
             for n, _ in reversed(node.next_functions):
                 if n is not None and type(n).__name__ != "AccumulateGrad" and "AccumulateGrad" not in repr(n):
                     stack.append((n, depth + 1))
+
         loss.backward()
         print(f"a.grad {a.grad.tolist()}  b.grad {b.grad.tolist()}")
 
@@ -189,28 +191,34 @@ def gpu_memory():
     if not (torch.cuda.is_available() and raxis.cuda.is_available()):
         print("\nNo GPU: skipping the memory experiment")
         return
+
     torch.cuda.init()
     mb = 2**20
     print("\nGPU memory of x -> sin -> ... -> sin (8 times) -> sum, x of 64 MB, MB")
     print(f"{'':>10s}{'':>16s}{'forward':>9s}{'peak':>9s}{'after':>9s}")
+
     for name, lib in LIBRARIES:
         for retain in (False, True):
             gc.collect()
             lib.cuda.synchronize()
             base = lib.cuda.memory_allocated()
+
             x = lib.randn(4096, 4096, device="cuda").requires_grad_()
             y = x
             for _ in range(8):
                 y = y.sin()
             s = y.sum()
             del y
+
             lib.cuda.synchronize()
             forward = lib.cuda.memory_allocated() - base
+
             lib.cuda.reset_peak_memory_stats()
             s.backward(retain_graph=retain)
             lib.cuda.synchronize()
             peak = lib.cuda.max_memory_allocated() - base
             after = lib.cuda.memory_allocated() - base
+
             label = "retain_graph" if retain else "default"
             print(f"{name:>10s}{label:>16s}{forward / mb:9.0f}{peak / mb:9.0f}{after / mb:9.0f}")
             del x, s

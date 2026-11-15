@@ -153,6 +153,7 @@ def full_step(name, kind):
     else:
         import synapgrad as lib
         tensor = lambda a, long=False: lib.Tensor(a.astype(np.int64) if long else a)
+
     nn = lib.nn
     if kind == "tiny":
         model = nn.Sequential(nn.Linear(2, 16), nn.ReLU(), nn.Linear(16, 16), nn.ReLU(), nn.Linear(16, 1))
@@ -181,21 +182,17 @@ def full_step(name, kind):
     return step
 
 
-what = sys.argv[1]
-if what == "check":
-    check_manual_backward()
-elif what == "numpy_ops":
-    print(f"{what}: {median_ms(numpy_ops(), 20, 500):.3f} ms")
-elif what == "torch_ops":
-    print(f"{what}: {median_ms(torch_ops(), 20, 500):.3f} ms")
-elif what == "profile":
+def profile_synapgrad_cnn():
+    """Where SynapGrad's CNN step spends its time: NumPy, its own kernels or the rest."""
     step = full_step("synapgrad", "cnn")
     step()
+
     profiler = cProfile.Profile()
     profiler.enable()
     for _ in range(5):
         step()
     profiler.disable()
+
     stats = pstats.Stats(profiler)
     groups = {}
     for (path, _, func), (_, _, tottime, _, _) in stats.stats.items():
@@ -209,10 +206,22 @@ elif what == "profile":
         else:
             group = "other"
         groups[group] = groups.get(group, 0.0) + tottime
+
     total = sum(groups.values())
     for group, seconds in sorted(groups.items(), key=lambda kv: -kv[1]):
         print(f"{group}: {1e3 * seconds / 5:.1f} ms per step ({100 * seconds / total:.0f}%)")
     print(f"primitive calls per step: {stats.prim_calls // 5}")
+
+
+what = sys.argv[1]
+if what == "check":
+    check_manual_backward()
+elif what == "numpy_ops":
+    print(f"{what}: {median_ms(numpy_ops(), 20, 500):.3f} ms")
+elif what == "torch_ops":
+    print(f"{what}: {median_ms(torch_ops(), 20, 500):.3f} ms")
+elif what == "profile":
+    profile_synapgrad_cnn()
 else:
     name, kind = what.split(":")
     warmup, n = (3, 30) if kind == "cnn" else (20, 500)

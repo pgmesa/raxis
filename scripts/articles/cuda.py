@@ -109,6 +109,7 @@ def allocator():
 def kernels():
     n = 4096
     mb = n * n * 4 / 1e6
+
     print(f"\na + b, {n} x {n} float32 (out of place), ms and GB/s")
     print(f"{'':>22s}{'PyTorch':>18s}{'Raxis':>18s}")
     rows = {}
@@ -118,6 +119,7 @@ def kernels():
         flat_a = lib.rand(n * n + 1, device="cuda")
         flat_b = lib.rand(n * n + 1, device="cuda")
         row = lib.rand(n, device="cuda")
+
         cases = [
             ("contiguous", lambda: a + b, 3 * mb),
             ("one element off", lambda: flat_a[1:] + flat_b[1:], 3 * mb),
@@ -127,6 +129,7 @@ def kernels():
         for label, f, moved in cases:
             for _ in range(10):
                 f()
+
             samples = []
             for _ in range(20):
                 lib.cuda.synchronize()
@@ -136,6 +139,7 @@ def kernels():
                 lib.cuda.synchronize()
                 samples.append((time.perf_counter() - t) / 20)
             seconds = min(samples)
+
             rows.setdefault(label, []).append(f"{seconds * 1e3:6.3f} {moved / 1e3 / seconds:5.0f}")
     for label, cells in rows.items():
         print(f"{label:>22s}" + "".join(f"{c:>18s}" for c in cells))
@@ -144,6 +148,7 @@ def kernels():
 def int_divider():
     print("\nIntDivider: n / d == (umulhi(n, m) + n) >> s")
     print(f"{'d':>8s}{'s':>4s}{'m':>12s}{'n':>12s}{'umulhi':>12s}{'quotient':>10s}{'n // d':>10s}")
+
     for d, n in ((3, 100), (1000, 123_456), (4096, 10_000_000), (4097, 10_000_000)):
         s = next(s for s in range(33) if (1 << s) >= d)
         m = ((1 << 32) * ((1 << s) - d)) // d + 1
@@ -151,6 +156,7 @@ def int_divider():
         hi = (n * m) >> 32
         q = (hi + n) >> s
         print(f"{d:>8d}{s:>4d}{m:>12d}{n:>12d}{hi:>12d}{q:>10d}{n // d:>10d}")
+
     # Every n below 2^31 for some divisors, in chunks
     import numpy as np
     n = np.arange(0, 2**31, 7919, dtype=np.uint64)
@@ -172,6 +178,7 @@ def copies():
         pageable = lib.rand(nbytes // 4)
         pinned = pageable.pin_memory()
         dst = lib.empty(nbytes // 4, device="cuda")
+
         cases = [
             ("pageable, blocking", lambda: dst.copy_(pageable)),
             ("pinned, blocking", lambda: dst.copy_(pinned)),

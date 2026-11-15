@@ -84,13 +84,16 @@ def main():
     import numpy
     import torch
     import raxis
+
     print(f"numpy {numpy.__version__}, torch {torch.__version__}, raxis {raxis.__version__}, "
           f"{N} float32, one thread, ms (median)")
+
     columns = [("NumPy", run("numpy", "default"))]
     for lib in ("torch", "raxis"):
         for capability in CAPABILITIES:
             r = run(lib, capability)
             columns.append((f"{lib} {r['capability']}", r))
+
     labels = list(columns[0][1]["times"])
     print(f"{'':10s}" + "".join(f"{name:>16s}" for name, _ in columns))
     for label in labels:

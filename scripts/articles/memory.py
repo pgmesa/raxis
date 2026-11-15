@@ -93,6 +93,7 @@ def independent_loads():
     raxis.set_num_threads(1)
     n = 64 * 1024 * 1024
     x = np.random.rand(n).astype(np.float32)
+
     print("\nx[idx], a million float32 from 256 MB, ns per element")
     print(f"{'idx':>22s}{'NumPy':>8s}{'PyTorch':>9s}{'Raxis':>8s}")
     rng = np.random.default_rng(0)
@@ -101,6 +102,7 @@ def independent_loads():
         out = np.empty(len(idx), dtype=np.float32)
         xt, it, ot = torch.from_numpy(x), torch.from_numpy(idx), torch.from_numpy(out)
         xr, ir, outr = raxis.from_numpy(x), raxis.from_numpy(idx), raxis.from_numpy(out.copy())
+
         t_np = ms(lambda: np.take(x, idx, out=out))
         t_t = ms(lambda: torch.index_select(xt, 0, it, out=ot))
         t_r = ms(lambda: raxis.index_select(xr, 0, ir, out=outr))
@@ -150,11 +152,13 @@ def integer_division():
     n = 1_000_000
     b = rng.integers(1, 50, n)
     out = np.empty(n, dtype=np.int64)
+
     print("\nInteger // and %, a million int64, ms")
     print(f"{'dividends':>12s}{'op':>4s}{'NumPy':>8s}{'PyTorch':>9s}{'Raxis':>8s}")
     for name, a in [("positive", rng.integers(0, 1000, n)), ("mixed signs", rng.integers(-1000, 1000, n))]:
         ta, tb, to = torch.from_numpy(a), torch.from_numpy(b), torch.from_numpy(out)
         ra, rb, ro = raxis.from_numpy(a), raxis.from_numpy(b), raxis.from_numpy(out.copy())
+
         for op in ["floor_divide", "remainder"]:
             t_np = ms(lambda: getattr(np, op)(a, b, out=out))
             t_t = ms(lambda: getattr(torch, op)(ta, tb, out=to))
@@ -173,11 +177,13 @@ def threads():
     default = torch.get_num_threads()
     print(f"default threads: torch {default}, raxis {raxis.get_num_threads()}; PyTorch / Raxis, ms")
     print(f"{'threads':21s}" + "".join(f"{t:>18d}" for t in THREADS))
+
     for n in (1000, 4000):
         a = torch.rand(n, n)
         c = torch.rand(n, n)
         out = torch.empty(n, n)
         ar, cr, outr = raxis.from_numpy(a.numpy()), raxis.from_numpy(c.numpy()), raxis.empty([n, n])
+
         for name, f_t, f_r in [
             ("a + c", lambda: torch.add(a, c, out=out), lambda: raxis.add(ar, cr, out=outr)),
             ("a + c.t()", lambda: torch.add(a, c.t(), out=out), lambda: raxis.add(ar, cr.t(), out=outr)),
@@ -188,6 +194,7 @@ def threads():
                 raxis.set_num_threads(t)
                 cells.append(f"{ms(f_t):.3f} / {ms(f_r):.3f}")
             print(f"{n} x {n} {name:10s}" + "".join(f"{c:>18s}" for c in cells))
+
     torch.set_num_threads(default)
 
 
