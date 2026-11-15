@@ -157,7 +157,7 @@ def int_divider():
 def copies():
     mb = 2**20
     nbytes = 64 * mb
-    print("\nCopying 64 MB of float32 from the CPU to the GPU, us until the call returns")
+    print("\nCopying 64 MB of float32 from the CPU to the GPU, ms until the call returns")
     print(f"{'':>34s}{'PyTorch':>10s}{'Raxis':>10s}")
     rows = {}
     for _, lib in LIBRARIES:
@@ -180,7 +180,7 @@ def copies():
             median_us(pin, repeat=10, setup=lambda: host_empty_cache(lib)))
         rows.setdefault("clone() on the CPU, for scale", []).append(median_us(lambda: pageable.clone(), repeat=30))
     for label, cells in rows.items():
-        print(f"{label:>34s}" + "".join(f"{c:10.0f}" for c in cells))
+        print(f"{label:>34s}" + "".join(f"{c / 1000:10.3f}" for c in cells))
 
 
 def main():
