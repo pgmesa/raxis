@@ -12,18 +12,26 @@
 5. Copies from the CPU: 64 MB from pageable and from pinned memory, blocking
    and non_blocking (how long the call takes to return), and pin_memory()
    with an empty host cache and with a cached block.
+6. cuda/latency.cu, built with CMake (needs the CUDA toolkit): the latency of
+   one load by one GPU thread for working sets from 16 KiB to 512 MiB, in a
+   random order and in order. Each step in the numbers is a level of the
+   GPU's memory: L1, L2, GDDR7.
 
     uv run python scripts/articles/cuda.py
 """
 
 import statistics
+import subprocess
 import time
+from pathlib import Path
 
 import torch
 
 import raxis
 
 LIBRARIES = [("PyTorch", torch), ("Raxis", raxis)]
+HERE = Path(__file__).resolve().parent
+BUILD = HERE / "cuda" / "build"
 
 
 def host_empty_cache(lib):
@@ -183,6 +191,23 @@ def copies():
         print(f"{label:>34s}" + "".join(f"{c / 1000:10.3f}" for c in cells))
 
 
+def latency():
+    subprocess.run(["cmake", "-S", HERE / "cuda", "-B", BUILD, "-DCMAKE_BUILD_TYPE=Release"], check=True, capture_output=True)
+    subprocess.run(["cmake", "--build", BUILD, "--config", "Release"], check=True, capture_output=True)
+    binary = next(p for p in [BUILD / "Release" / "latency.exe", BUILD / "latency"] if p.exists())
+    output = subprocess.run([binary], check=True, capture_output=True, text=True).stdout
+
+    print("\nLatency of one load by one GPU thread: cycles / ns")
+    print(f"{'working set':>12s}{'random':>16s}{'in order':>16s}")
+    rows = {}
+    for line in output.splitlines():
+        _, size, kind, cycles, ns = line.split(",")
+        rows.setdefault(int(size), {})[kind] = f"{float(cycles):.0f} / {float(ns):.0f}"
+    for size, r in rows.items():
+        label = f"{size // 1024} KiB" if size < 2**20 else f"{size // 2**20} MiB"
+        print(f"{label:>12s}{r['random']:>16s}{r['in order']:>16s}")
+
+
 def main():
     torch.cuda.init()
     print(torch.cuda.get_device_name(0))
@@ -191,6 +216,7 @@ def main():
     kernels()
     int_divider()
     copies()
+    latency()
 
 
 if __name__ == "__main__":
