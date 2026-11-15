@@ -1,11 +1,11 @@
 <div align="center">
-  <img src="docs/assets/raxis-header.svg" alt="Raxis" width="440">
+  <img src="https://raw.githubusercontent.com/pgmesa/raxis/main/docs/assets/raxis-header.svg" alt="Raxis" width="440">
   <br><br>
   <p><em>PyTorch's core, reforged one axis at a time.</em></p>
   <a href="https://pypi.org/project/raxis/"><img src="https://img.shields.io/pypi/v/raxis?label=pypi&labelColor=3e2731&color=f77622" alt="PyPI version"></a>
   <a href="https://pypi.org/project/raxis/"><img src="https://img.shields.io/pypi/pyversions/raxis?labelColor=3e2731&color=f77622" alt="Python versions"></a>
   <a href="https://pypi.org/project/raxis-cuda13/"><img src="https://img.shields.io/badge/backends-CPU%20%7C%20CUDA-f77622?labelColor=3e2731" alt="Backends: CPU and CUDA"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/pypi/l/raxis?labelColor=3e2731&color=f77622" alt="License"></a>
+  <a href="https://github.com/pgmesa/raxis/blob/main/LICENSE"><img src="https://img.shields.io/pypi/l/raxis?labelColor=3e2731&color=f77622" alt="License"></a>
 </div>
 
 ---
@@ -66,10 +66,10 @@ a script that uses the trained model. On an RTX 5070 Ti (CUDA 13.0, driver
 
 | Example | Raxis | PyTorch |
 |---|--:|--:|
-| [ResNet-9](examples/cifar10) from scratch on CIFAR-10, 24 epochs | 94.1%, 3.6 min | 93.9%, 2.0 min |
-| [ViT-B/16](examples/cifar10) pretrained on ImageNet, fine-tuned on CIFAR-10, 3 epochs | 98.85%, 10.8 min | 98.85%, 9.8 min |
-| [GPT-2 124M](examples/nanogpt) fine-tuned on Shakespeare, 20 iterations | val loss 3.273, 29 s | 3.273, 27 s |
-| [nanoGPT](examples/nanogpt)'s character-level Shakespeare model from scratch, 5000 iterations | val loss 1.467, 6.0 min | 1.461, 5.8 min |
+| [ResNet-9](https://github.com/pgmesa/raxis/tree/main/examples/cifar10) from scratch on CIFAR-10, 24 epochs | 94.1%, 3.6 min | 93.9%, 2.0 min |
+| [ViT-B/16](https://github.com/pgmesa/raxis/tree/main/examples/cifar10) pretrained on ImageNet, fine-tuned on CIFAR-10, 3 epochs | 98.85%, 10.8 min | 98.85%, 9.8 min |
+| [GPT-2 124M](https://github.com/pgmesa/raxis/tree/main/examples/nanogpt) fine-tuned on Shakespeare, 20 iterations | val loss 3.273, 29 s | 3.273, 27 s |
+| [nanoGPT](https://github.com/pgmesa/raxis/tree/main/examples/nanogpt)'s character-level Shakespeare model from scratch, 5000 iterations | val loss 1.467, 6.0 min | 1.461, 5.8 min |
 
 Test accuracy for CIFAR-10, the best val loss for the GPTs; the times are
 whole runs. The ResNet is convolutions and batch norm: PyTorch runs them with
@@ -283,4 +283,4 @@ added for now; it may be later, if it proves worth it.
 MIT. Raxis includes code derived from PyTorch (BSD-3-Clause) and links SLEEF,
 mimalloc, Intel MKL (x86-64), OpenBLAS (Linux aarch64) and, in the CUDA
 packages, the CUDA runtime and CUB: see
-[THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).
+[THIRD_PARTY_NOTICES.txt](https://github.com/pgmesa/raxis/blob/main/THIRD_PARTY_NOTICES.txt).
