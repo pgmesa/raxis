@@ -198,7 +198,7 @@ Philox in parallel, the generator PyTorch itself uses on CUDA.
 | `libraxis/raxis/tensor` | TensorImpl and storage, views and strides, type promotion, TensorIterator |
 | `libraxis/raxis/ops` | Operators and their CPU kernels, compiled once per ISA (AVX2, AVX512, NEON) and picked at runtime |
 | `libraxis/raxis/ops/cuda` | The CUDA kernels: elementwise loops, reductions, attention, convolutions, sort, indexing |
-| `libraxis/raxis/cuda` | CUDA runtime: caching allocator, pinned host memory, cuBLAS handles |
+| `libraxis/raxis/cuda` | CUDA runtime: streams and events, caching allocator, pinned host memory, cuBLAS handles |
 | `libraxis/raxis/autograd` | Graph, engine and backward functions |
 | `libraxis/bindings` | pybind11 module `raxis._C` |
 | `raxis/` | Python package: `nn`, `optim`, `cuda`, `autograd.graph`, tensor printing |

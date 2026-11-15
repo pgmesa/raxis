@@ -73,6 +73,66 @@ void CUDAHooksInterface::host_empty_cache() const {
     fail_no_cuda();
 }
 
+void* CUDAHooksInterface::current_stream(DeviceIndex) const {
+    fail_no_cuda();
+}
+
+void CUDAHooksInterface::set_current_stream(DeviceIndex, void*) const {
+    fail_no_cuda();
+}
+
+void* CUDAHooksInterface::default_stream(DeviceIndex) const {
+    fail_no_cuda();
+}
+
+void* CUDAHooksInterface::stream_from_pool(DeviceIndex, int) const {
+    fail_no_cuda();
+}
+
+bool CUDAHooksInterface::stream_query(DeviceIndex, void*) const {
+    fail_no_cuda();
+}
+
+void CUDAHooksInterface::stream_synchronize(DeviceIndex, void*) const {
+    fail_no_cuda();
+}
+
+void CUDAHooksInterface::stream_wait_event(DeviceIndex, void*, void*) const {
+    fail_no_cuda();
+}
+
+void* CUDAHooksInterface::event_create(DeviceIndex, bool, bool) const {
+    fail_no_cuda();
+}
+
+void CUDAHooksInterface::event_destroy(DeviceIndex, void*) const {
+    fail_no_cuda();
+}
+
+void CUDAHooksInterface::event_record(DeviceIndex, void*, void*) const {
+    fail_no_cuda();
+}
+
+bool CUDAHooksInterface::event_query(DeviceIndex, void*) const {
+    fail_no_cuda();
+}
+
+void CUDAHooksInterface::event_synchronize(DeviceIndex, void*) const {
+    fail_no_cuda();
+}
+
+float CUDAHooksInterface::event_elapsed_time(DeviceIndex, void*, void*) const {
+    fail_no_cuda();
+}
+
+void CUDAHooksInterface::record_stream(const DataPtr&, void*) const {
+    fail_no_cuda();
+}
+
+void CUDAHooksInterface::sleep(int64_t) const {
+    fail_no_cuda();
+}
+
 const CUDAHooksInterface& get_cuda_hooks() {
     return *g_hooks.load(std::memory_order_acquire);
 }

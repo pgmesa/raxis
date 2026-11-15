@@ -4,6 +4,8 @@
 #include <raxis/cuda/cuda_exception.h>
 #include <raxis/cuda/cuda_functions.h>
 #include <raxis/cuda/cuda_host_allocator.h>
+#include <raxis/cuda/cuda_sleep.h>
+#include <raxis/cuda/cuda_stream.h>
 #include <raxis/core/device_guard.h>
 
 
@@ -80,6 +82,108 @@ struct CUDAHooks final : public CUDAHooksInterface {
 
     void host_empty_cache() const override {
         cuda::host_empty_cache();
+    }
+
+    // From: torch/csrc/cuda/Stream.cpp and Event.cpp, through
+    // c10/cuda/impl/CUDAGuardImpl.h
+
+    void* current_stream(DeviceIndex device) const override {
+        return cuda::current_stream(device);
+    }
+
+    void set_current_stream(DeviceIndex device, void* stream) const override {
+        cuda::set_current_stream(device, static_cast<cudaStream_t>(stream));
+    }
+
+    void* default_stream(DeviceIndex) const override {
+        return cuda::default_stream();
+    }
+
+    void* stream_from_pool(DeviceIndex device, int priority) const override {
+        return cuda::stream_from_pool(device, priority);
+    }
+
+    bool stream_query(DeviceIndex device, void* stream) const override {
+        DeviceGuard guard(Device(DeviceType::CUDA, device));
+        const cudaError_t status = cudaStreamQuery(static_cast<cudaStream_t>(stream));
+        if (status == cudaErrorNotReady) {
+            (void)cudaGetLastError();
+            return false;
+        }
+        RAXIS_CUDA_CHECK(status);
+        return true;
+    }
+
+    void stream_synchronize(DeviceIndex device, void* stream) const override {
+        DeviceGuard guard(Device(DeviceType::CUDA, device));
+        RAXIS_CUDA_CHECK(cudaStreamSynchronize(static_cast<cudaStream_t>(stream)));
+    }
+
+    void stream_wait_event(DeviceIndex device, void* stream, void* event) const override {
+        DeviceGuard guard(Device(DeviceType::CUDA, device));
+        RAXIS_CUDA_CHECK(cudaStreamWaitEvent(static_cast<cudaStream_t>(stream), static_cast<cudaEvent_t>(event), 0));
+    }
+
+    // From: aten/src/ATen/cuda/CUDAEvent.h (createEvent): events without
+    // timing are cheaper to record, so timing is opt-in; a blocking event
+    // makes synchronize() sleep instead of spin
+    void* event_create(DeviceIndex device, bool enable_timing, bool blocking) const override {
+        DeviceGuard guard(Device(DeviceType::CUDA, device));
+        unsigned int flags = enable_timing ? cudaEventDefault : cudaEventDisableTiming;
+        if (blocking) {
+            flags |= cudaEventBlockingSync;
+        }
+        cudaEvent_t event;
+        RAXIS_CUDA_CHECK(cudaEventCreateWithFlags(&event, flags));
+        return event;
+    }
+
+    void event_destroy(DeviceIndex device, void* event) const override {
+        DeviceGuard guard(Device(DeviceType::CUDA, device));
+        RAXIS_CUDA_CHECK(cudaEventDestroy(static_cast<cudaEvent_t>(event)));
+    }
+
+    void event_record(DeviceIndex device, void* event, void* stream) const override {
+        DeviceGuard guard(Device(DeviceType::CUDA, device));
+        RAXIS_CUDA_CHECK(cudaEventRecord(static_cast<cudaEvent_t>(event), static_cast<cudaStream_t>(stream)));
+    }
+
+    bool event_query(DeviceIndex device, void* event) const override {
+        DeviceGuard guard(Device(DeviceType::CUDA, device));
+        const cudaError_t status = cudaEventQuery(static_cast<cudaEvent_t>(event));
+        if (status == cudaErrorNotReady) {
+            (void)cudaGetLastError();
+            return false;
+        }
+        RAXIS_CUDA_CHECK(status);
+        return true;
+    }
+
+    void event_synchronize(DeviceIndex device, void* event) const override {
+        DeviceGuard guard(Device(DeviceType::CUDA, device));
+        RAXIS_CUDA_CHECK(cudaEventSynchronize(static_cast<cudaEvent_t>(event)));
+    }
+
+    float event_elapsed_time(DeviceIndex device, void* start, void* end) const override {
+        DeviceGuard guard(Device(DeviceType::CUDA, device));
+        float ms = 0;
+        RAXIS_CUDA_CHECK(cudaEventElapsedTime(&ms, static_cast<cudaEvent_t>(start), static_cast<cudaEvent_t>(end)));
+        return ms;
+    }
+
+    // A CUDA tensor's block, or a pinned CPU tensor's (the host allocator
+    // needs the same note for asynchronous copies from it)
+    void record_stream(const DataPtr& data_ptr, void* stream) const override {
+        auto s = static_cast<cudaStream_t>(stream);
+        if (data_ptr.device().is_cuda()) {
+            cuda::record_stream(data_ptr, s);
+        } else {
+            cuda::host_allocator_record_stream(data_ptr, s);
+        }
+    }
+
+    void sleep(int64_t cycles) const override {
+        cuda::sleep(cycles);
     }
 };
 

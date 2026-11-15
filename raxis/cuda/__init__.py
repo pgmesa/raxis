@@ -14,6 +14,7 @@ __all__ = [
     "get_device_properties", "synchronize",
     "memory_allocated", "max_memory_allocated", "memory_reserved", "max_memory_reserved",
     "reset_peak_memory_stats", "empty_cache",
+    "Stream", "Event", "StreamContext", "stream", "current_stream", "default_stream", "set_stream",
 ]
 
 
@@ -104,3 +105,13 @@ def _device_index(device) -> int:
     if device.type != "cuda":
         raise ValueError(f"Expected a cuda device, but got: {device}")
     return device.index if device.index >= 0 else current_device()
+
+
+def _sleep(cycles: int) -> None:
+    """Keeps the current stream busy for about ``cycles`` GPU clock cycles (torch.cuda._sleep, for tests)."""
+    _C._cuda_sleep(cycles)
+
+
+from raxis.cuda.streams import (  # noqa: E402  (they use _device_index above)
+    Event, Stream, StreamContext, current_stream, default_stream, set_stream, stream,
+)

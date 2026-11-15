@@ -110,6 +110,54 @@ PYBIND11_MODULE(_C, c) {
     c.def("_cuda_empty_cache", [] { raxis::get_cuda_hooks().empty_cache(); });
     // torch._C._host_emptyCache: the cached pinned blocks
     c.def("_host_empty_cache", [] { raxis::get_cuda_hooks().host_empty_cache(); });
+    // raxis.cuda.Stream / Event (raxis/cuda/streams.py): streams and events
+    // are handles, their cudaStream_t / cudaEvent_t as an int, as torch's
+    // Stream.cuda_stream and Event.cuda_event
+    auto handle = [](void* p) { return reinterpret_cast<uintptr_t>(p); };
+    auto from_handle = [](uintptr_t h) { return reinterpret_cast<void*>(h); };
+    auto device_index = [](int index) { return static_cast<raxis::DeviceIndex>(index); };
+    c.def("_cuda_current_stream", [=](int device) {
+        return handle(raxis::get_cuda_hooks().current_stream(device_index(device)));
+    }, py::arg("device"));
+    c.def("_cuda_set_stream", [=](int device, uintptr_t stream) {
+        raxis::get_cuda_hooks().set_current_stream(device_index(device), from_handle(stream));
+    }, py::arg("device"), py::arg("stream"));
+    c.def("_cuda_default_stream", [=](int device) {
+        return handle(raxis::get_cuda_hooks().default_stream(device_index(device)));
+    }, py::arg("device"));
+    c.def("_cuda_stream_from_pool", [=](int device, int priority) {
+        return handle(raxis::get_cuda_hooks().stream_from_pool(device_index(device), priority));
+    }, py::arg("device"), py::arg("priority"));
+    c.def("_cuda_stream_query", [=](int device, uintptr_t stream) {
+        return raxis::get_cuda_hooks().stream_query(device_index(device), from_handle(stream));
+    }, py::arg("device"), py::arg("stream"));
+    c.def("_cuda_stream_synchronize", [=](int device, uintptr_t stream) {
+        py::gil_scoped_release no_gil;
+        raxis::get_cuda_hooks().stream_synchronize(device_index(device), from_handle(stream));
+    }, py::arg("device"), py::arg("stream"));
+    c.def("_cuda_stream_wait_event", [=](int device, uintptr_t stream, uintptr_t event) {
+        raxis::get_cuda_hooks().stream_wait_event(device_index(device), from_handle(stream), from_handle(event));
+    }, py::arg("device"), py::arg("stream"), py::arg("event"));
+    c.def("_cuda_event_create", [=](int device, bool enable_timing, bool blocking) {
+        return handle(raxis::get_cuda_hooks().event_create(device_index(device), enable_timing, blocking));
+    }, py::arg("device"), py::arg("enable_timing"), py::arg("blocking"));
+    c.def("_cuda_event_destroy", [=](int device, uintptr_t event) {
+        raxis::get_cuda_hooks().event_destroy(device_index(device), from_handle(event));
+    }, py::arg("device"), py::arg("event"));
+    c.def("_cuda_event_record", [=](int device, uintptr_t event, uintptr_t stream) {
+        raxis::get_cuda_hooks().event_record(device_index(device), from_handle(event), from_handle(stream));
+    }, py::arg("device"), py::arg("event"), py::arg("stream"));
+    c.def("_cuda_event_query", [=](int device, uintptr_t event) {
+        return raxis::get_cuda_hooks().event_query(device_index(device), from_handle(event));
+    }, py::arg("device"), py::arg("event"));
+    c.def("_cuda_event_synchronize", [=](int device, uintptr_t event) {
+        py::gil_scoped_release no_gil;
+        raxis::get_cuda_hooks().event_synchronize(device_index(device), from_handle(event));
+    }, py::arg("device"), py::arg("event"));
+    c.def("_cuda_event_elapsed_time", [=](int device, uintptr_t start, uintptr_t end) {
+        return raxis::get_cuda_hooks().event_elapsed_time(device_index(device), from_handle(start), from_handle(end));
+    }, py::arg("device"), py::arg("start"), py::arg("end"));
+    c.def("_cuda_sleep", [](int64_t cycles) { raxis::get_cuda_hooks().sleep(cycles); }, py::arg("cycles"));
     // raxis.backends: torch.backends.cuda.matmul.allow_tf32 and
     // torch.backends.cudnn.allow_tf32 (core/context.h)
     c.def("_get_allow_tf32_matmul", &raxis::allow_tf32_matmul);
@@ -755,6 +803,10 @@ PYBIND11_MODULE(_C, c) {
         .def("is_floating_point", [](const raxis::Tensor& self) { return self.dtype().is_floating(); })
         .def("pin_memory", &raxis::Tensor::pin_memory)
         .def("is_pinned", &raxis::Tensor::is_pinned)
+        // Tensor.record_stream(stream) in raxis/cuda/streams.py
+        .def("_record_stream", [](const raxis::Tensor& self, uintptr_t stream) {
+            raxis::get_cuda_hooks().record_stream(self.storage()->data_ptr(), reinterpret_cast<void*>(stream));
+        }, py::arg("stream"))
         .def("cpu", &raxis::Tensor::cpu)
         .def("cuda", [](const raxis::Tensor& self, std::optional<raxis::Device> device, bool non_blocking) {
             if (!device) return self.cuda(non_blocking);

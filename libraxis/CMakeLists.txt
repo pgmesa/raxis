@@ -325,6 +325,7 @@ if(RAXIS_USE_CUDA)
 
     file(GLOB_RECURSE RAXIS_CUDA_SOURCES CONFIGURE_DEPENDS
         "${RAXIS_LIB_DIR}/cuda/*.cpp"
+        "${RAXIS_LIB_DIR}/cuda/*.cu"
         "${RAXIS_LIB_DIR}/ops/cuda/*.cpp"
         "${RAXIS_LIB_DIR}/ops/cuda/*.cu"
     )
