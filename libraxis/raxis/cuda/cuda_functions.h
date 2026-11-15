@@ -5,6 +5,8 @@
 #include <cuda_runtime.h>
 
 #include <raxis/core/device.h>
+// current_stream(), which every launch reads, lives there
+#include <raxis/cuda/cuda_stream.h>
 
 
 namespace raxis::cuda {
@@ -23,20 +25,6 @@ void device_synchronize();
 /// once per device. From: aten/src/ATen/cuda/CUDAContext.h
 /// (getCurrentDeviceProperties)
 const cudaDeviceProp& current_device_properties();
-
-/// The stream every op enqueues its work on.
-///
-/// raxis has a single stream per device for now: the legacy default stream,
-/// which runs everything on the device in launch order. Two consequences: the
-/// host never waits for a kernel unless it reads the result (copy to the CPU,
-/// item(), synchronize()), and the caching allocator can hand a freed block
-/// to the next op at once, because that op runs after every op that used the
-/// block. PyTorch also starts on the default stream; user streams
-/// (torch.cuda.Stream) are what make record_stream necessary.
-/// From: c10/cuda/CUDAStream.h (getCurrentCUDAStream)
-inline cudaStream_t current_stream() {
-    return cudaStreamLegacy;
-}
 
 /// cudaMemcpyAsync on `stream`, then waits for it: a device to host copy
 /// must be complete before the CPU reads the data
