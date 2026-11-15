@@ -84,6 +84,16 @@ target_compile_definitions(raxis PRIVATE RAXIS_BUILD)
 if(NOT WIN32)
     target_compile_options(raxis PRIVATE -fvisibility=hidden)
     string(APPEND RAXIS_TARGET_CXX_FLAGS " -fvisibility=hidden")
+    # The static archives inside libraxis.so (MKL, OpenBLAS, sleef, mimalloc)
+    # were built with their symbols visible. Exported, they interpose on other
+    # copies in the process: torch's libtorch_cpu.so carries its own static
+    # MKL, and with raxis imported first its VML calls (vmsTrunc ->
+    # mkl_vml_serv_threader_s_1i_1o) resolved into ours and crashed. Keep them
+    # private. macOS needs nothing: its two-level namespace binds each
+    # library to the copy it linked
+    if(NOT APPLE AND NOT RAXIS_BUILD_STATIC)
+        target_link_options(raxis PRIVATE "LINKER:--exclude-libs,ALL")
+    endif()
     # Installed next to its runtime dependencies (libiomp5.so) in raxis/lib.
     # macOS spells $ORIGIN as @loader_path
     if(APPLE)
