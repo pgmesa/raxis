@@ -116,8 +116,8 @@ TF32 matmuls too in nanoGPT, as its train.py does. Median training step:
 
 | Model | Raxis | PyTorch |
 |---|--:|--:|
-| MNIST MLP, batch 64 (`scripts/bench_training.py --device cuda`) | 0.54 ms | 0.45 ms |
-| MNIST CNN, batch 128 (same) | 1.32 ms | 0.96 ms |
+| MNIST MLP, batch 64 (`scripts/bench_training.py --device cuda`) | 0.49 ms | 0.44 ms |
+| MNIST CNN, batch 128 (same) | 1.25 ms | 0.83 ms |
 | nanoGPT `train_shakespeare_char.py` | 47.3 ms | 45.7 ms |
 
 The CNN is where cuDNN pays off, as in the ResNet. At batch 64 the MLP is small
@@ -143,26 +143,27 @@ were stopped early: the table has the best val loss up to iteration 2000
 (1750 for Raxis, 2000 for PyTorch), against 1.4697 in nanoGPT's README.
 
 **Ops.** A selection of `scripts/bench_ops.py` (float32, forward only unless
-noted). Over its 388 cases the median ratio Raxis/PyTorch is 0.85x; in that
-run the only case beyond 2x was the large 3x3 convolution, where PyTorch uses oneDNN's
-direct convolution and Raxis im2col plus an MKL gemm.
+noted). Over its 388 cases the median ratio Raxis/PyTorch is 0.87x. The cases
+beyond 2x are the large 3x3 convolutions, where PyTorch uses oneDNN's direct
+convolution and Raxis im2col plus an MKL gemm, and GELU on 1024 x 4096, where
+PyTorch also calls oneDNN (1.9x to 3x between runs).
 
 | Op | Shape | Raxis (ms) | PyTorch (ms) |
 |---|---|--:|--:|
 | add | 1000 x 1000 | 0.017 | 0.017 |
-| exp | 1000 x 1000 | 0.123 | 0.130 |
-| sum(dim=1) | 1000 x 1000 | 0.010 | 0.018 |
-| mm | 512 x 512 @ 512 x 512 | 0.459 | 0.464 |
-| softmax | 16384 x 384 | 0.872 | 0.885 |
-| layer_norm | 16384 x 384 | 0.726 | 1.182 |
-| gelu | 16384 x 384 | 0.814 | 0.800 |
-| sdpa (causal) | 64 x 6 x 256 x 64 | 13.98 | 15.23 |
-| sort | 1000 x 1000 | 5.98 | 11.03 |
-| x[idx] backward | 1000 x 1000 | 0.050 | 0.317 |
-| normal_ | 1000 x 1000 | 0.548 | 3.111 |
-| dropout | 1000 x 1000 | 0.123 | 6.880 |
-| conv2d 3x3, 32 -> 64 ch | 64 x 32 x 26 x 26 | 2.98 | 1.49 |
-| conv2d 3x3, 64 -> 64 ch | 64 x 64 x 32 x 32 | 8.94 | 4.32 |
+| exp | 1000 x 1000 | 0.118 | 0.122 |
+| sum(dim=1) | 1000 x 1000 | 0.010 | 0.017 |
+| mm | 512 x 512 @ 512 x 512 | 0.269 | 0.277 |
+| softmax | 16384 x 384 | 0.772 | 0.783 |
+| layer_norm | 16384 x 384 | 0.488 | 0.992 |
+| gelu | 16384 x 384 | 0.701 | 0.556 |
+| sdpa (causal) | 64 x 6 x 256 x 64 | 11.05 | 12.73 |
+| sort | 1000 x 1000 | 5.37 | 9.28 |
+| x[idx] backward | 1000 x 1000 | 0.047 | 0.324 |
+| normal_ | 1000 x 1000 | 0.401 | 2.484 |
+| dropout | 1000 x 1000 | 0.122 | 4.915 |
+| conv2d 3x3, 32 -> 64 ch | 64 x 32 x 26 x 26 | 2.06 | 0.86 |
+| conv2d 3x3, 64 -> 64 ch | 64 x 64 x 32 x 32 | 6.77 | 2.65 |
 
 **ARM.** On GitHub's ARM runners (Apple M1 and Neoverse, shared machines,
 so no table) the median ratio Raxis/PyTorch over the same cases is 0.79x to
