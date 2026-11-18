@@ -180,21 +180,21 @@ on Windows each new NumPy output comes fresh from the system and pays its page
 faults, while Raxis and PyTorch reuse memory through mimalloc. On 100 x 100
 arrays the three are on par.
 
-**Against my earlier projects.** Time of `trainer.fit` in each notebook
-(training plus the validation pass of every epoch), on the same CPU, with
-Raxis, PyTorch and the two projects that came before Raxis:
-[SynapX](https://github.com/pgmesa/synapx) (autograd in C++ on top of libtorch)
-and [SynapGrad](https://github.com/pgmesa/synapgrad) (autograd in pure Python
-on top of NumPy).
+**Against my earlier projects.** Median training step of the notebooks'
+models, on the same CPU, with Raxis, PyTorch and the two projects that came
+before Raxis: [SynapX](https://github.com/pgmesa/synapx) 0.4.0 (autograd in
+C++ on top of libtorch) and [SynapGrad](https://github.com/pgmesa/synapgrad)
+(autograd in pure Python on top of NumPy). Measured with
+`scripts/lineage/training_split.py`:
 
-| Notebook | Raxis | PyTorch | SynapX | SynapGrad | Params | Train set | Batch | Epochs |
-|---|--:|--:|--:|--:|--:|--:|--:|--:|
-| basic_mlp.ipynb | 0.22 s | 0.50 s | 2.0 s | 0.33 s | 337 | 150 | 4 | 50 |
-| mnist_mlp.ipynb | 3.0 s | 4.6 s | 6.3 s | 9.4 s | 178,110 | 48,000 | 64 | 10 |
-| mnist_cnn.ipynb | 12.5 s | 47.2 s | 3 min 7 s | 5 min 6 s | 20,538 | 48,000 | 128 | 5 |
+| Training step | Raxis | PyTorch | SynapX | SynapGrad | Params |
+|---|--:|--:|--:|--:|--:|
+| Tiny MLP, batch 4 (basic_mlp.ipynb) | 0.06 ms | 0.12 ms | 0.14 ms | 0.10 ms | 337 |
+| MNIST MLP, batch 64 (mnist_mlp.ipynb) | 0.29 ms | 0.40 ms | 0.49 ms | 1.12 ms | 178,110 |
+| MNIST CNN, batch 128 (mnist_cnn.ipynb) | 5.5 ms | 20 ms | 81 ms | 150 ms | 20,538 |
 
-The models reach the same accuracy with every library (MNIST: ~97.6% val with
-the MLP, ~98.6% with the CNN). Most of PyTorch's time in the CNN is Dropout:
+The notebooks reach the same accuracy with every library (MNIST: ~97.6% val
+with the MLP, ~98.6% with the CNN). Most of PyTorch's time in the CNN is Dropout:
 its CPU random numbers come from a serial mt19937, Raxis draws them from
 Philox in parallel, the generator PyTorch itself uses on CUDA.
 
